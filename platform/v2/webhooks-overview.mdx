@@ -1,0 +1,284 @@
+---
+title: "Webhooks Overview"
+---
+
+<Info>
+
+**Example Application **
+
+If you’d like to build your own consumer for Frame.io Webhooks, feel free to grab and extend our [example app on Github](https://github.com/Frameio/webhooks-example-app).
+
+</Info>
+
+## Introduction
+
+Webhooks provide a way to leverage events that occur inside of Frame.io into notifications that can be sent to external systems for processing, API callbacks, and ultimately, workflow automation.
+
+## Setup
+
+Webhooks can be configured in the [Webhooks area of our developer site](https://developer.frame.io/app/webhooks). A Webhook requires:
+
+- Name — Will be shown on the developer site only.
+- URL — Where to deliver events.
+- Team — Which team this webhook will be added to.
+- Events — Which event, or events, should trigger the Webhook.
+
+## Supported events
+
+A single Webhook can subscribe to any number of the following events:
+
+### Projects
+
+| Event | Trigger |
+| --- | --- |
+| `project.created` | A new Project is created |
+| `project.updated` | A Project’s settings are updated |
+| `project.deleted` | A Project is deleted |
+
+### Assets
+
+| Event | Trigger |
+| --- | --- |
+| `asset.created` | An Asset is first added/created in Frame.io, but likely before the asset is fully uploaded |
+| `asset.copied` | An Asset has been copied |
+| `asset.updated` | An Asset’s description, name, or other file information is changed |
+| `asset.deleted` | An Asset is deleted (manually or otherwise) |
+| `asset.ready` | All transcodes have completed, after an Asset has been uploaded and processed |
+| `asset.label.updated` | An Asset’s status label is set, changed, or removed |
+| `asset.versioned` | An asset is versioned |
+
+<Warning>
+
+**Asset Versioning **
+
+When the `asset.versioned` event fires, you’re going to receive a payload with the id of the asset that was versioned, not the version stack itself. So if you expect to be able to pass that `id` along to another function thinking it’s the version stack’s id, you’re going to have to look-up and track down that particular ‘parent’ resource first.
+
+</Warning>
+
+<Warning>
+
+**Asset Label updates **
+
+The `asset.label.updated` event will not fire when the status label is changed via a `PUT` call to the `/v2/assets/:id` endpoint via the public API (`BES-408`). It will however fire when the status label is updated using any native Frame.io apps and integrations (Web, iOS, Premiere, After Effects, FCPX, etc).
+
+</Warning>
+
+### Comments
+
+| Event | Trigger |
+| --- | --- |
+| `comment.created` | A new Comment or Reply is created |
+| `comment.updated` | A Comment is edited |
+| `comment.deleted` | A Comment is deleted |
+| `comment.completed` | A Comment is completed |
+| `comment.uncompleted` | A Comment is uncompleted |
+
+### Review Links
+
+| Event | Trigger |
+| --- | --- |
+| `reviewlink.created` | A new Review Link is created |
+
+### Collaborators
+
+| Event | Trigger |
+| --- | --- |
+| `collaborator.created` | A Collaborator has been added to your Account |
+| `collaborator.deleted` | A Collaborator has been removed from your Account |
+
+### Team Members
+
+| Event | Trigger |
+| --- | --- |
+| `teammember.created` | A Team Member has been added to your Account |
+| `teammember.deleted` | A Team Member has been removed from your Account |
+
+## Payload
+
+Frame.io delivers a JSON payload to the specified webhook endpoint. Here’s an example payload for an *asset.created* event:
+
+```json
+{
+  "type": "asset.created",
+  "resource": {
+    "type": "asset",
+    "id": "<asset-id>"
+  },
+  "user": {
+    "id": "<user-id>"
+  },
+  "team": {
+    "id": "<team-id>"
+  }
+}
+```
+
+All payloads contain a `type` field, indicating the type of event occurring, as well as a `resource` object. The `resource` object specifies the `type` and `id` of the resource related to this event.
+
+In the above example of an *asset.created* event, this would be the `id` for the newly created Asset. Additionally, `user` and `team` objects are included. These reference the User who triggered the event, and the Team context for the resource.
+
+Aside from the immediate User and Team context, **we do not include any additional information about the subscribed resource**. If your application requires additional information or context, we recommend using our HTTP API to make follow-up requests.
+
+## Retries
+
+Should an error (non-200 status code response) or timeout occur while delivering the webhook to your service, the payload will be retried three times, for a total of four delivery attempts.
+
+## Security
+
+By default, all Webhooks are provided with a signing key. This is not configurable. This key can be used to verify that the request originates from Frame.io.
+
+### Verify Webhook Signatures
+
+To guard an integration against man-in-the-middle and replay attacks it is essential to verify webhook signatures. Verification ensures that webhook payloads were actually sent by Frame.io and payload content has not been modified in transport.
+
+Included in the `POST` request are the following headers:
+
+| Name | Description |
+| --- | --- |
+| `X-Frameio-Request-Timestamp` | The time of Webhook delivery |
+| `X-Frameio-Signature` | The computed signature |
+
+**The timestamp** is the time of delivery from Frame.io’s systems. This can be used to prevent replay attacks. We recommended verifying this time is within 5 minutes of local time.
+
+**The signature** is a HMAC SHA256 hash using the signing key provided when the Webhook is first created.
+
+Follow these steps to verify the signature:
+
+1. Extract the signature from the HTTP headers
+2. Create a message to sign by combining the version, delivery time, and request body: `v0:timestamp:body`
+3. Compute the HMAC SHA256 signature using your signing secret.  *Note: The provided signature is prefixed with `v0=`. Currently Frame.io only has this one version for signing requests. Be sure this prefix is prepended to your computed signature.*
+4. Compare!
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify Webhook signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the Frame.io API for the given request
+        body (str): Webhook body from the received POST
+        secret (str): The secret for this Webhook that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+```javascript
+const crypto = require('crypto');
+
+// Capture the signature, secret, timestamp and payload from a new webhook event:
+const 
+signature = 'v0=a77ce6856e609c884575c2fd211d07a9ad1c3f72e19c06ff710e8f086ffca883', 
+secret = 'yxSE59T0gtZOFZxw6UhLwTkhd2m8ntNSdSWnApQ0xOnMEzSoXbD8sGFP4bzb7MbS',
+timestamp = 1604004499,  // UNIX timestamp in seconds
+payload = {
+	"project": {
+		"id": "f348e9f4-f142-42f9-b3bf-478d93f0feb4"
+	},
+	"resource": {
+		"id": "6aad9151-c216-4d6f-b5e9-530df551a426",
+		"type": "asset"
+	},
+	"team": {
+		"id": "aa891687-4b1e-4150-9b6d-9e4911c5b436"
+	},
+	"type": "asset.label.updated",
+	"user": {
+		"id": "59c9ade1-311b-4c3b-8231-b9d88e9a1a85"
+	}
+},
+body = JSON.stringify(payload),
+
+// Validate that caught payload is not older than 5 minutes
+currentTimeUTC = (new Date()).getTime(),
+currentTimestamp = currentTimeUTC / 1000, // JavaScript uses milliseconds whereas Unix Time is in seconds.
+minutes = 5, 
+expired = (currentTimestamp - timestamp) > minutes*60
+hmac1 = crypto.createHmac('sha256', secret),
+generateSignature = hmac1.update(`v0:${timestamp}:${body}`).digest('hex')
+
+// Evaluates to true if the webhook is verified
+console.log(!expired && signature === `v0=${generateSignature}`)
+```
+
+```go
+// Full Go sample code: https://github.com/Frameio/webhooks-example-app/blob/master/main.go
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	out, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Println(string(out))
+
+	// Verify the message has been delivered in the last 5 minutes.
+	timestampStr := r.Header.Get("X-Frameio-Request-Timestamp")
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if time.Since(time.Unix(timestamp, 0)) > 5*time.Minute {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Verify request signature.
+	expected := r.Header.Get("X-Frameio-Signature")
+	signature, _ := computeSignature(r, timestamp, secretKey)
+	if expected != signature {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	var event *Event
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&event)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Handle webhook here.
+	log.Println(event.ID)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// The request includes headers to enable the recipient to validate
+// that the request is from Frame.io and that it's been delivered within
+// the expected time range. To learn more about how this works, take a
+// look at our docs https://docs.frame.io/docs/webhooks#section-security.
+func computeSignature(r *http.Request, timestamp int64, secret string) (string, error) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+	copy := body[:]
+	r.Body = ioutil.NopCloser(bytes.NewReader(copy))
+
+	msg := fmt.Sprintf("%s:%d:%s", version, timestamp, string(body))
+
+	key := []byte(secret)
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(msg))
+
+	result := fmt.Sprintf("%s=%s", version, hex.EncodeToString(h.Sum(nil)))
+
+	return result, nil
+}
+```

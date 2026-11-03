@@ -1,0 +1,203 @@
+---
+title: "User Management"
+---
+
+## Overview
+
+This tutorial covers basic management of Users via the Frame.io API. It assumes the reader has already set up [authentication](/platform/v2/authentication) via OAuth2.0 or with a Developer Token.
+
+### Core concepts
+
+Leaving aside the specific nuances of different Team Member roles and permissions, there are two important keys to understand when managing Users via the Frame.io API:
+
+1. **Team Members belong to Teams**, and have access to all non-private Projects within those Teams. Team Managers and Admins are both extensions of the Team Member role.
+2. **Project Collaborators belong to single Projects**. Depending on how those Projects are configured, they may or may not be able to create Presentations, download Assets, or invite other Collaborators.
+
+For more information, please refer to our Support documentation for [Team Members vs. Collaborators](https://support.frame.io/getting-started/sharing-with-your-team-or-clients/difference-between-team-members-vs-collaborators), and [Account Management Roles](https://support.frame.io/enterprise-accounts/enterprise-account-management-roles).
+
+### How Users join Accounts
+
+In general, new Users are invited by current Users, either directly, or via unique Project join URL. Team Members may also:
+
+1. Add themselves to non-private Projects within public Teams in their Account
+2. Add themselves to public Teams within their Account
+3. Request to join private Teams within their Account
+
+In all cases, join activities will go through a series of logical steps that include checking for prior tenancy, creating “pending” records, and dispatching invitation or join-request emails where appropriate.
+
+The good news is, all of that logic is abstracted by the Frame.io API. If you want to add someone to a Project, use the Collaborator routes; if you want to invite someone to a Team, use the Team Member routes.
+
+### Required scopes
+
+| Scope | Reason |
+| --- | --- |
+| **Teams:** Update | Add and remove Team Members. |
+| **Projects:** Update | Add and remove Project Collaborators. |
+
+## Managing Team Members
+
+### Adding Team Members
+
+To add a new Team Member to a Team, you’ll need:
+
+1. The `id` of the target Team
+2. The email address of the target User.
+
+From there, simply make an authorized `POST` to `https://api.frame.io/v2/teams/:id/members` with the target User’s email in the body payload like so:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**If the User you’ve invited is already a Team Member in your organization**, the API response will indicate as much:
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>"
+}
+```
+
+**If the User you’ve invited is not already in your organization**, your request will trigger an invite flow, and the API response will look more like this:
+
+```json
+{
+    "_type": "pending_team_member",
+    "email": "user@example.com",
+    "id": "<oending-team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>
+}
+```
+
+**Note**: because the User isn’t yet created or recognized, there won’t be a mappable `user_id` in the `pending_team_member` response.
+
+### Removing Team Members
+
+To remove a Team Member from a Team, you’ll need:
+
+1. The `id` of the target Team
+2. The email address of the target User.
+
+From here, you’ll be making a `DELETE` call to the same URL as you would to add a Team Member, and passing it a special query string:
+
+`DELETE` [`https://api.frame.io/v2/teams/:id/members/_?email=user@example.com`](/platform/v2/api-reference/teams/add-team-member)
+
+<Info>
+
+**What is the 'include' pattern? **
+
+**Note** the `/_?email=` construction — this is a special pattern in the Frame.io API called an ‘include’ enabling you to request additional data in your API request (in this case, the email address of the user)).
+
+</Info>
+
+On a successful call, the API will return a similar payload to Team Member addition. If the Team Member is being deleted for the first time, you’ll see an `updated_at` attribute matching the time of your call. If the Team Member has been previously deleted, that timestamp will not update (i.e. it will reflect the time when the Team Member was initially removed).
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>",
+    "updated_at": "<timestamp>"
+}
+```
+
+Attempts to remove Team Members who do not exist or were never associated with the Team will result in 404 errors.
+
+## Managing Project Collaborators
+
+### Adding Project Collaborators
+
+Collaborator management is extremely similar to Team Member management. To add a new Collaborator to a team, you’ll need:
+
+1. The `id` of the target Project
+2. The email address of the target User.
+
+From there, make an authorized `POST` to [`https://api.frame.io/v2/projects/:id/collaborators`](/platform/v2/api-reference/projects/add-collaborator-to-project), with the target User’s email in the body payload:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**If the User you’ve invited is recognized** and the Collaborator role can be instantiated instantly, the API response will indicate as much, and send back a full User object:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+<Info>
+
+**Team Membership **
+
+If the User is already a Team Member in your organization, but is not a member of the target Project, you can still use the Collaborate route, and the API will respond as above. In the background, the Team Member will be added to your target Project, and will still be a Team Member. In other words, you can’t accidentally “demote” Team Members with this route.
+
+</Info>
+
+**If the User you’ve invited is new to your organization**, your request will trigger an invite flow, and the API will respond with a `pending_collaborator` record, like so:
+
+```json
+{
+    "_type": "pending_collaborator",
+    "email": "user@example.com",
+    "id": "<pending-collaborator-record-id>",
+    "project_id": "<project-id>"
+}
+```
+
+### Removing Project Collaborators
+
+**Note:** this process is fundamentally identical to how Team Members are handled (above).
+
+To remove a Collaborator from a Project, you’ll need:
+
+1. The `id` of the target Project.
+2. The email address of the target User.
+
+From here, you’ll be making a `DELETE` call to the same URL as you would to add a Collaborator, and passing it a special query string.
+
+`DELETE` [`https://api.frame.io/v2/projects/:id/collaborators/_?email=user@example.com`](/platform/v2/api-reference/teams/add-team-member)
+
+On a successful call, the API will return a similar payload to Project Collaborator addition.:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+Attempts to remove Collaborators who do not exist or were never associated with the Project will result in 404 errors.
+
+<Warning>
+
+**Warning: Collaborator removal is not idempotent **
+
+Unlike Team Member removal, attempts to remove already-removed Collaborators will result in 404 errors
+
+</Warning>

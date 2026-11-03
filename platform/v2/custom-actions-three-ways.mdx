@@ -1,0 +1,84 @@
+---
+title: "Three Ways to Deploy Custom Actions"
+---
+
+## Introduction
+
+What’s the fastest way to deploy a Custom Action?  What’s the most versatile set-up, allowing you to fully customize your workflow?  The environment you select to catch and handle Custom Actions is an important factor in determining what can be done with your data in resulting workflow steps.  The basic choices are:
+
+1. No code deployments, using an automation platform like Zapier, Integromat or Microsoft Power Automate
+2. Low-code solutions like AWS Lambda or Azure functions, where you can run simple scripts as ‘jobs’ in fully maintained environments;
+3. Servers that you run and maintain
+
+This diagram depicts the architecture for Custom Actions:
+
+![Custom Actions Diagram](/images/platform/v2/custom-actions-three-ways/a73b943-custom_actions_architecture.png)
+
+### No code: deploy to Zapier
+
+Zapier’s “click and create” interface is a good choice for basic automations where your goal is sending assets, comments, or status events from Frame.io to popular apps or productivity tools.
+
+![Zapier Setup](/images/platform/v2/custom-actions-three-ways/548d2d6-zapier_catch_webhook.png)
+
+#### Pros
+
+- Simple to use.  Point and click to create automations.
+- [Task history](https://zapier.com/learn/getting-started-guide/task-history/) is Zapier’s runtime log tool and summarizes data I/O for each workflow step on every automation run.
+- Paying for a premium account unlocks [Paths](https://zapier.com/paths), a tool for building adding forking logic to automations.
+
+#### Cons:
+
+- Zapier’s support for webhooks is restricted in that it won’t support detailed messages or any interaction back to the Frame.io user when your Custom Action runs.  The limitation is explained in the Zapier support docs:
+
+> We \[Zapier\] always return a success message with a payload of debugging information when collecting a webhook - regardless of whether there is a Zap behind the webhook or if it is paused or not…There is no way to customize the response to the request you send to the Catch Hook URL, as the response is sent before the Zap triggers and runs on the webhook request.
+
+- Zapier’s UI can be tedious when verifying Custom Actions are functioning properly.  For example, [Test Data](https://zapier.com/help/create/basics/change-the-test-data-in-your-zap-trigger) needs to be checked and refreshed while testing; if test data doesn’t match your live data, Zapier may throw ‘false negatives’ and show errors even when your Zap design is actually correct.  If a critical piece of data such as `File URL` is not available when a Task expects it, your Zap may error out or not function as expected.
+
+<Info>
+
+**We've written a guide for this!**
+
+We’ve written extensive guides on how to design Zapier integrations, including a detailed guide on [How to Deploy Custom Actions to Zapier](/platform/v2/deploy-custom-actions-to-zapier).
+
+</Info>
+
+## Low code: deploy to AWS
+
+Custom Actions can be sent to API Gateway in AWS and integrated with Amazon’s [infamously large](https://aws.amazon.com/what-is-aws/) set of cloud services.  The simplest pattern is to proxy the Frame.io event contained in your Custom Action to AWS Lambda, a compute service for running serverless functions.  Here’s an example design for a file archive service:
+
+![AWS Lambda](/images/platform/v2/custom-actions-three-ways/2ef81ac-action-lambda.png)
+
+#### Pros: {#pros-1}
+
+- [AWS Free Tier](https://aws.amazon.com/free/?all-free-tier.sort-by=item.additionalFields.SortRank&all-free-tier.sort-order=asc&all-free-tier.q=Lambda&all-free-tier.q_operator=AND) grants you 3.2 million seconds of compute time per month before you’re charged for services.
+- API Gateway and Lambdas support fantastic testing and monitoring tools like CloudWatch and X-Ray.
+- Services can be scaled up to support massive filesizes (500GB+)
+
+#### Cons: {#cons-1}
+
+- Stitching together multiple services (Webhook -> API Gateway -> Lambda 1 -> Lambda 2) or learning how to use newer offerings like AWS Fargate can be time-consuming.
+- AWS documentation is often out-of-date or lacking key details.  For example, when configuring API Gateway, it is not easy to discern whether payloads will be Base64 encoded or not.
+- Configuration is generally a bit complicated.
+
+[See the guide for a complete walkthrough of deploying Custom Actions to AWS](https://medium.com/@frameiokyle/automatic-s3-backups-with-frame-io-custom-actions-and-aws-lambda-d3b8dbed0133).  Note: You can deploy Custom Actions to any cloud compute service, not just AWS (Azure, Google Cloud Platform, Digital Ocean etc.)
+
+### Run a server and host your own code
+
+Cloud services are highly convenient, but for workflows where you want total control over your data, you may decide to write and deploy your own server.
+
+On the DevRel team, we like writing [FastAPI servers](https://fastapi.tiangolo.com/features/) in Python.  They’re easy to create and a good match for the request-response pattern of Custom Actions.
+
+#### Pros: {#pros-2}
+
+- Control the end-to-end flow of your data.  Absolutely no surprises.
+- Sync data down to a NAS or filesystem with no additional exposure to the cloud.
+
+#### Cons: {#cons-2}
+
+- Requires administering a server, building your own security features, handling network discovery, load, etc.
+
+Clone our [Sample Code](https://github.com/Frameio/custom-actions-app-python) to deploy a FastAPI server for handling custom actions.
+
+### Let’s talk about the best design for your needs
+
+Post your requirements to our community, we’re happy to help you suss out the best design for your workflow.

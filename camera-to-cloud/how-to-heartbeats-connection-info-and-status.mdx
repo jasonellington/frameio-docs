@@ -1,0 +1,229 @@
+---
+title: "How to: Manage Status and State"
+sidebarTitle: "Manage Status and State"
+---
+
+## Introduction
+
+This guide explains how to manage device status and maintain synchronization with Frame.io. We use a websocket protocol that enables real-time communication between Frame.io and your device. If you’re unfamiliar with websockets, this guide will help you understand their implementation for C2C integrations.
+
+Websockets allow Frame.io to push messages to your device and, by maintaining a persistent connection, provide a more efficient communication channel than traditional HTTP requests.
+
+In this guide, we’ll cover:
+
+- Opening a socket connection to indicate your device is ‘online’
+- Retrieving information about your device connection
+- Verifying Frame.io backend availability
+
+## Prerequisites
+
+If you haven’t already, please review the [Implementing C2C: Setting Up](/camera-to-cloud/implementing-c2c-setting-up) guide before proceeding.
+
+You’ll need the `access_token` obtained during the [authentication and authorization process](/camera-to-cloud/implementing-c2c-authentication-and-authorization). Be aware that tokens expire after 8 hours, so you may need to refresh your token or go through the authorization process again.
+
+For this guide’s websocket connection examples, we recommend using [websocat](https://github.com/vi/websocat), a CLI tool with comprehensive installation instructions for various operating systems.
+
+<Info>
+
+**MacOS**
+
+Install with: `brew install websocat`
+
+</Info>
+
+## Retrieving Connection Information
+
+After any new authorization or token refresh, your device should immediately query the `identity` endpoint. This provides crucial information about your connection:
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/me \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+The response will resemble this (with some data abbreviated):
+
+```
+{
+    "_type": "project_device",
+    "id": "a7e95254-8cd6-4d59-b54d-28c58570a8de",
+    "asset_type": "video",
+    "authorization": {
+        "_type": "project_device_authorization",
+        "creator": {
+            "_type": "user",
+            "id": "e7e96254-8bd6-4d59-b54d-28c58570a8de",
+            "name": "Harry Potter"
+        },
+        "expires_at": null,
+        "id": "7b2b68e5-788d-497c-8597-f9362cb1a75e",
+        ...
+        "project_device_id": "14856308-46e0-4d7d-8438-320262eec74e",
+        "scopes": {
+            ...
+            "asset_create": true,
+            ...
+            "id": "0fe0accb-447f-44f6-b2af-177d913b3a29",
+            "offline": true,
+            ...
+        }
+    },
+    ...
+    "name": "Frameio-BPEAKE-TEST-DEVICE",
+    "project": {
+        "_type": "project",
+        "id": "2ad59fe6-77b6-4fbc-a9d2-3dd0413ed4a3",
+        "name": "Testbed"
+    },
+    "project_id": "2ad59fe6-77b6-4fbc-a9d2-3dd0413ed4a3",
+    "status": "online",
+    ...
+}
+```
+
+This endpoint helps verify connection details. Your device should display this information to users:
+
+- `project.name` - The connected project name
+
+- `authorization.creator.name` - The user who authorized the device
+
+- `authorization.expires_at` (optional) - Connection expiration time, if set
+
+- `status` (optional) - Device status, which may be:
+
+  - `online` - Device is online and paired
+  - `offline` - Device hasn’t communicated in over 5 minutes (querying this endpoint will change status to `online`)
+  - `paused` - Device has been temporarily disabled in the Frame.io C2C Connections panel
+
+Since expiration and pause status can change at any time within Frame.io, consider polling this information periodically if displaying it to users. We recommend limiting polling frequency to no more than once every 60 seconds.
+
+<Info>
+
+**id**
+
+Note the `id` value as you’ll need it for websocket connection in the next section
+
+</Info>
+
+## Establishing the Websocket Connection
+
+The C2C Connections panel in Frame.io displays each device’s connection status. When a device has an active socket connection, it shows as `online` with a green indicator in the card’s top-left corner. Devices without active connections appear `offline` with a grayed-out display.
+
+The server automatically terminates socket connections after 60 seconds without a “heartbeat” message. While this interval is sufficient, we recommend sending heartbeats every 15 seconds for reliability. If the connection unexpectedly closes, simply reestablish it.
+
+Connecting to Frame.io’s websocket involves two steps:
+
+1. Establishing the TCP/IP handshake and opening the physical websocket connection
+2. Joining the device’s specific channel to identify your device to our backend
+
+To open the websocket connection:
+
+```shell
+websocat -n "wss://api.frame.io/devices/websocket?Authorization=Bearer ACCESS_TOKEN"
+```
+
+<Info>
+
+**The Authorization Header**
+
+Unlike standard API endpoints where the access token goes in the `Authorization` header, for websocket connections it’s included as a URL-encoded query parameter. Note that you must still include `Bearer ` (with a space) before your access token. In URL-encoded strings, spaces appear as `%20`, so this formatting is expected.
+
+</Info>
+
+A successful connection returns a `101` status code, indicating protocol switching to `wss`. Your websocket library may handle this automatically. An expired token will produce a `403` response.
+
+Next, join your device’s channel by sending this JSON message, using the `id` from your connection information:
+
+```json
+{"topic":"devices:YOUR_DEVICE_ID", "event":"phx_join", "payload":"", "ref":"channel_connect"}
+```
+
+You’ll receive a confirmation:
+
+```json
+{"event":"phx_reply","payload":{"response":{},"status":"ok"},"ref":"channel_connect","topic":"devices:YOUR_DEVICE_ID"}
+```
+
+<Info>
+
+**The ref and payload fields**
+
+The `ref` field correlates responses with their initiating events. Since event ordering isn’t guaranteed, this identifier helps pair server responses with the triggering events. Frame.io doesn’t use this field for incoming events—it’s solely for client reference. The `payload` field must always be present but can often be an empty string (we’ll specify when a payload requires specific content).
+
+</Info>
+
+Check the C2C dashboard—your device should now appear online! We recommend implementing a background process to maintain this connection:
+
+```python title="Python"
+def heartbeat_task():
+    """
+    Task that emits heartbeats every 15 seconds.
+    """
+
+    while True:
+        c2c.emit_socket_heartbeat()
+        sleep(15)
+```
+
+The heartbeat message format:
+
+```json
+{"topic":"phoenix", "event":"heartbeat", "payload":"", "ref":"heartbeat"}
+```
+
+Which receives this response:
+
+```json
+{"event":"phx_reply","payload":{"response":{},"status":"ok"},"ref":"heartbeat","topic":"phoenix"}
+```
+
+With an active socket connection and channel subscription, your device will show as online in Frame.io’s C2C Connections panel. When the connection terminates, it will appear offline.
+
+## Displaying Device Status
+
+Rather than displaying the raw status values (`online`, `offline`, `paused`), we recommend translating them into more meaningful user-facing indicators:
+
+- **Paused**: true/false - Show `true` if the status is `paused`, otherwise `false`
+- **Connected**: true/false - Indicates whether the device can reach the Frame.io backend (see backend connection testing below)
+
+## Managing the Paused Status
+
+While displaying pause status is optional, understanding its function is important.
+
+The pause feature is designed to temporarily block sensitive content from being uploaded. It doesn’t block network traffic but prevents specific media from reaching Frame.io. This is useful in situations like filming scenes containing sensitive material where immediate cloud storage might be inappropriate.
+
+Pausing is controlled through the Frame.io interface, not through your integration. When a device is paused, only media created during the paused period is blocked—previously captured media remains eligible for upload.
+
+Important considerations:
+
+- Don’t rely solely on the identity endpoint to validate upload eligibility—our backend handles this automatically
+- Socket events will notify you of status changes with `event: "status_updated"` and `payload: "paused"` or `"resumed"`
+- Although events can help manage status, they may be missed or delivered out of order
+- Receiving a `409` error during upload doesn’t necessarily mean the device is currently paused—it may indicate the media was created during a previous pause window
+- If displaying a paused status, verify its accuracy by periodically checking the connection info
+
+## Verifying Backend Connectivity
+
+To check Frame.io backend availability, use this endpoint:
+
+```shell
+curl -X GET https://api.frame.io/health \
+    | python -m json.tool
+```
+
+This endpoint requires no authorization. A successful response indicates connectivity:
+
+```json
+{
+    "ok": true
+}
+```
+
+This health check is particularly valuable as it confirms connectivity specifically with Frame.io, rather than general network availability. There may be scenarios where your network functions but Frame.io is unreachable due to service issues or routing problems.
+
+## Next Steps
+
+We encourage you to contact our team with any questions and proceed to the [basic upload guide](/camera-to-cloud/how-to-basic-upload). We look forward to supporting your integration progress.
+
+For more information on managing device authorization, see the [authorization management guide](/camera-to-cloud/how-to-authorization-management).

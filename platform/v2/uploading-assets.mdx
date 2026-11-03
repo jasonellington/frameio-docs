@@ -1,0 +1,178 @@
+---
+title: "Uploading Assets"
+---
+
+# Overview
+
+This tutorial covers how to upload assets into Frame.io. Frame.io can handle all file types, not just video, but also scripts, pictures, maps, and reference files. In more technical terms, an asset in Frame.io is a robust representation of a file in S3 and its context in Frame.io, including transcodes, user/team/project context, and metadata. For more information about assets, please refer to the resource definition.​
+
+## Core hierarchies
+
+It’s also helpful to know how Frame.io structures its core models.
+
+**Accounts**, to which **Users** belong, have many **Projects**, which all contain **Assets**. **Teams** are available to Enterprise accounts only, and provide an additional level of logical separation. Assets do not “know” which Team they belong to — only which Project and Account — but Projects are strictly owned by Teams, and not Accounts, making Teams an integral part of the Asset upload process.
+
+## Prerequisites
+
+For this tutorial, you’ll need:
+
+- A Frame.io account with a developer token (tokens are explained below)
+- [Frame.io Python SDK](https://github.com/Frameio/python-frameio-client)
+
+## Upload an Asset
+
+This section walks you through the steps for uploading an asset.
+
+1. Create a developer token at [developer.frame.io](/platform/v2) with the following scopes:
+
+| Scope | Reason |
+| --- | --- |
+| **Accounts:** Read | Fetch the Account list for the requesting User. |
+| **Teams:** Read | Fetch available Teams for the desired Account. |
+| **Projects:** Read | Fetch available Projects for the desired Team. |
+| **Assets:** Create, Read | Create the new Asset record, and fetch available Assets to traverse the folder structure within the Project. |
+
+<Info>
+
+**Need help creating an API token? **
+
+Review the instructions [**here**](/platform/v2/authentication).
+
+</Info>
+
+2. Locate a destination for your asset. At minimum, Assets need to be placed within a **Project**. You’ll need to retrieve the root asset ID (`root_asset_id`) for a project or an asset ID for a folder so you can specify the location in the file hierarchy you want to upload to.
+
+<Warning>
+
+**NOTE: **
+
+You cannot upload with a project ID alone.  To upload to the root of your project, specify the `root_asset_id` in your request.
+
+</Warning>
+
+In general you need to retrieve (in the order specified):
+
+- account ID(s) and choose an account
+- team ID(s) and choose a team
+- projects associated with a team
+- the project ID for the project you want to work with
+- the root asset ID or a folder ID
+
+You can upload directly into the root of a project using the `root_asset_id`.
+
+### List Assets
+
+To choose where you want to upload your new asset to, you can use the API to list all assets in a project or folder within a project. If an asset is a *folder*, it will contain child assets, which can also be files and folders. When listing assets information, you can use any asset ID, but if you want to review everything associated with a project, use the `root_asset_id`.
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+From the returned list of assets, you can use an ID for any asset that is a folder, or the root asset ID. You will use this ID to mark where you want to upload your new asset to.
+
+### Upload Asset
+
+In this example, we are going to upload a new file. You send your request with the following information:
+
+| Parameter | Description |
+| --- | --- |
+| `filesize` | Enter the size of the file you want to upload |
+| `filetype` | Choose the type of file you’re uploading. Choices include video and image. Examples: `video/mp4`, `image/png`. |
+| `name` | Enter a string representing the file’s name, with no spaces. |
+| `type` | This represents whether you’re using a `file` or a `folder`. A version stack is when you stack several files onto one another. |
+
+If you want to create a new folder, then you do not need to include `filesize` or `filetype` in your request.
+
+For a `cURL` request, you can quickly upload an asset into Frame.io by including a link to your file using the `"source": {  "url":"URL_FOR_VIDEO" }` parameter. The link must be publicly accessible. Otherwise, you can use the Python SDK, which handles breaking your file into a chunk for each upload link for you.
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Asset URLs will expire **
+
+The URLs you get back from the asset creation API call are pre-signed to authorize your upload, but will expire after 24 hours.
+
+</Info>
+
+# Build your own file uploader
+
+If you want to build your own uploader, for best performance, it’s recommended to upload chunks in parallel. Each chunk should be `PUT` directly to the Amazon S3 urls provided in the response from the Frame.io API.
+
+Your file chunks must match the order of the provided `upload_urls`, as they *dictate the sequence of the final concatenated and transcoded asset.* This means the 1st URL takes the 1st chunk, 2nd URL takes the 2nd chunk, and so on.
+
+#### Psuedocode Example
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+The headers for each request to S3 should include the `filetype` of your new Asset exactly as it’s been returned from your initial call to the Frame.io API, as well as an additional privacy header:
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+You can see an example of how this is all handled in our Python SDK [here](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py).
+
+<Info>
+
+**AWS errors are XML formatted **
+
+Please note that any errors you get at this stage will be coming from AWS directly, and therefore will be formatted as XML, and not Frame.io’s standard JSON error handling. We generally recommend building retry logic around these uploads for any production usage, as files incompletely-uploaded files (i.e. files with missing chunks) will fail to transcode and display in Frame.io
+
+</Info>
+
+That’s it! Once you’ve completed the `PUT` calls to the `upload_url`s, you’ll have a new Asset in Frame.io.

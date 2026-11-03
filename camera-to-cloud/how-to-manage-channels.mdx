@@ -1,0 +1,182 @@
+---
+title: "How to: Manage Channels"
+sidebarTitle: "Manage Channels"
+---
+
+What happens when you have devices in your ecosystem that cannot connect to the internet and speak directly to Frame.io, but that can talk to your C2C-enabled device? Some integrations might wish to take actions on behalf of such devices, a Sound Recorder that uploads on behalf of a Microphone, or a Camera that makes realtime-comments on behalf of an attachment’s buttons.
+
+These requests are fulfilled by understanding a device’s channels. If your integration will not be managing sub devices, you can skip this guide.
+
+## What will I need?
+
+If you haven’t read the [Implementing C2C: Setting Up](/camera-to-cloud/implementing-c2c-setting-up) guide, give it a quick glance before moving on!
+
+You will need the `access_token` you received during the [device authentication and authorization guide](/platform/v2/how-to-authorization-management-hardware).
+
+You will also need a list of Device Model IDs for the sub-devices that should be able to connect to Frame.io through your primary device.
+
+## What is a Channel?
+
+Channels are briefly discussed in our [Architecture Overview](/camera-to-cloud/integration-architecture). Every project device has at least one channel, and while we have generally been treating them as one and the same, we now need to separate their concepts. Let’s dig deeper.
+
+A project device has the ability to communicate directly with frame.io. A channel collects data for the project device to communicate. In most cases, the ProjectDevice and the first channel are one-in-the-same. Let’s consider a camera: conceptually, the project device represents the camera’s networking card, which sends data directly to Frame.io, while the channel represents the Camera’s CMOS sensor, collecting video data to send through the network card (project device).
+
+Most importantly, the Project Device is authenticated with Frame through an OauthApp, while channels are not. They use their parent project device’s authentication.
+
+Our model allows a project device to have multiple channels, which may or may not be part of the physical device. Channels may be pieces of hardware that communicate to the primary device over TCP/IP, Bluetooth, SDI, etc. The project device acts a router to send this data to frame.io. How that data is supplied from the channels to the project device is up to you, the integrator.
+
+Imagine a sound recorder, connected to Frame.io as a project device, with many microphones each connected as separate channels. The recorder may send the mix file on its primary channel, and individual microphone’s tracks on its sub-device’s channels. How you use channels and what each represents is up to you! Channels are not authenticated, they can be added and subtracted by the device at any time.
+
+Since channels can belong to a separate, physical sub-devices, each channel will be associated with a device model, like any other hardware or software integration. This allows frame.io to display the model of the sub-device, which may be different from the host device, and allows integrations to define behavior for each sub-device separately. What device models can be added to a given integration as channels must be defined ahead of time.
+
+There are a few reasons for why you might want to connect new channels to your C2C device:
+
+- Allow for multiple configurations for an integration depending on the channel + device model. This included asset fixed folder structure, tokenized folder paths, file extension routing, etc. Imagine a DIT station which uses different channels to upload editorial proxies or Camera Raw.
+- Gives the user in frame.io visibility into your sub-devices.
+- Channels can be configured with human inputs, aka buttons, which can be configured for real-time logging functions.
+
+Let’s go a bit deeper into how to manage channels with the C2C API.
+
+## Listing Channels
+
+A list of existing channels can be fetched by the [identity endpoint](/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) in the channels field. Let’s take a look at the `"channels"` field of the response payload:
+
+```json
+{
+    "_type": "project_device",
+    ...
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+            "external_index": 0,
+            "id": "5919e9bc-7fc2-4629-97e5-852ce27cfa1a",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Host Device",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "online",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        },
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+            "external_index": 0,
+            "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Client Device 01234",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "offline",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        }
+    ],
+    ...
+    "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+    ...
+    "id": "bf30fc66-f126-4336-bdfc-75d3e659b95am"
+}
+```
+
+Notice that the `device_id` for the first channel matches the `device_id` of our Project Device as a whole.
+
+## Connecting a Channel
+
+We can connect a new channel with the following request:
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/connect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'{
+            "client_id": [client_id],
+            "device_model_id": [device_model_id]
+        }
+__JSON__
+    | python -m json.tool
+```
+
+We get the following response:
+
+```json
+{
+   "_type": "project_device_channel",
+   "actor_id": null,
+   "asset_type": "video",
+   "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+   "external_index": 0,
+   "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+   "inserted_at": "2023-07-14T19:11:43.217565Z",
+   "name": "Test Client Device 01234",
+   "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+   "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+   "real_time_logging_capable": true,
+   "status": "offline",
+   "updated_at": "2023-07-14T19:11:43.217565Z"
+}
+```
+
+This response mirrors the channels field from the [identity](/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) endpoint.
+
+The client_id is what governs uniqueness, so it must be a stable value, such as the serial number.
+The device_model_id is what tells Frame.io, the underlying type of hardware device this channel represents, such as a specific model of microphone. These will have been setup by your partner manager.
+
+If a channel has already been declared, you will receive a 409 error with the error title Already Exists.
+
+When creating a channel with the same identifiers of one that was previously connected, and then disconnected, all previous user configuration for the channel will be restored.
+
+## Disconnecting a Channel
+
+A channel is disconnected by the Frame.io defined id. Not by client_id or device_model_id.
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/:channel_id/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Which returns a `204` response with a blank payload.
+
+When deleting a channel that does not exists, you will get a 404. You cannot disconnect the first, primary channel for the parent device.
+
+## Disconnecting all Sub-Device Channels
+
+You can disconnect all current sub-device channels on a Project Device with the following call:
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Which returns a `204` response with a blank payload. This call will always succeed, even if the project device has no client device channels.
+
+We can now list all our channels using the [identity](/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) endpoint; only the host device’s primary channel will remain.
+
+## Channel Management Flow
+
+We do not recommend that ProjectDevice’s manage channel state internally to avoid data integrity issues that could be a result of power cycles happening at less-than-ideal times. For instance:
+
+- Powering off after a Channel Connect call has been processed, but before the returned `id` can be committed to a data store
+- Sub devices being plugged/unplugged from the host device while the device is off.
+
+Instead, it is recommended that all host devices execute the following steps when first booted:
+
+- Call the Bulk Channel Disconnect endpoint to clear all existing sub-device channels
+- Call the Channel Connect endpoint for each sub-device currently connected
+  After initial setup, a host device MUST call the Channel Disconnect endpoint whenever a sub device is disconnected, and the Channel Connect endpoint whenever a new sub device is added. Host devices MAY NOT clear sub-devices each time a new device is connected.
+
+Host devices MUST correctly handle poor network conditions when managing devices, and properly add / remove currently connected devices upon connection to the network being re-established.
+
+## Next Up
+
+If you haven’t already, we encourage you to reach out to our team, then continue to the next guide. We look forward to hearing from you!

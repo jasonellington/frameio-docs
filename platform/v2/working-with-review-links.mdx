@@ -1,0 +1,82 @@
+---
+title: "Working with Review Links"
+---
+
+## Overview
+
+Review Links are a core Frame.io feature for collecting Assets, and sending them around for feedback via a single URL without requiring explicit Team or Project access. Fundamentally, they’re a representation of Assets from within a single Project, so this guide will assume that:
+
+1. You either have Assets at hand, or are familiar with [uploading Assets via API](/platform/v2/uploading-assets).
+2. You know the ID of the Project in which you’d like to create the Review Link.
+3. Your goal is to end up with a URL that you can distribute outside of Frame.io (e.g. via email, chat, or other dispatch).
+
+### Core concepts
+
+Review Links strictly belong to Projects, and an Asset in a Review Link is represented as a special resource type called a **Review Link Item**, which will always contain the `review_link_id` and `asset_id` it’s joining, as well as the full payload of the associated Asset.
+
+While Review Link Items do not need to be tracked or managed on their own, they’re a helpful structure to understand the full workflow captured in this guide. Accordingly, the hierarchical family of a Review Link looks like this:
+
+Project > Review Link > Review Link Item > Asset reference
+
+### Required scopes
+
+Before beginning this guide, you’ll need to make sure you have a token that includes at least the following scopes:
+
+| Scope | Reason |
+| --- | --- |
+| **Projects:** Read | Not strictly required, but necessary for fetching the `root_asset_id` of a Project. |
+| **Assets:** Read | Not strictly required, but necessary for navigating to `asset_ids` via API. |
+| **Review Links:** Create, Read, Update | Create the Review Link, add Assets, and fetch information (especially if tracking in another system). |
+
+## 1. Gather your IDs
+
+To create a Review Link, you’ll need to gather:
+
+1. A Project ID
+2. The IDs of one or many Assets in that Project
+
+If you don’t have the Project ID handy, but do have access to Frame.io and know which Project you’d like to use, you can see the ID on your address bar when navigating to the project: `https://app.frame.io/projects/<project-id>`.
+
+Similarly, if you don’t have the Asset ID(s) handy, navigate to the asset(s) you want, and pull the ID(s) from the address bar in your browser: `https://app.frame.io/player/<asset-id>`.
+
+## 2. Create the Review Link
+
+To make the base for your link, you’ll need to determine your desired Review Link options, and build them into a JSON payload. At the minimum, you’ll need to come up with a `name`.
+
+Here’s an example payload — for convenience, it shows the defaults for each field, should you choose to generate with a `name` only:
+
+```json
+{    
+    "name": "New Review Link",
+    "allow_approvals": true,
+    "current_version_only": false,
+    "enable_downloading": true,
+    "expires_at": null,
+    "has_password": false
+}
+```
+
+Now make an authorized `POST` `https://api.frame.io/v2/projects/:id/review_links`, using your payload as the request body.
+
+Congratulations! You’ve just made a Review Link. In the response body, you’ll see two important attributes:
+
+- **`id`**: This is the reference to your Link container. Hang onto that, as you’ll need it when you add Assets in the next step.
+- **`short_url`**: This is the URL for your Review Link that you’ll ultimately distribute. It will look something like `https://f.io/_aBcDeF`
+
+## 3. Add the Assets to the Review Link
+
+Now that you have a Review Link, it’s time to add some Assets to it. Start by prepping a JSON payload with a string-array of your Asset `id`(s):
+
+```json
+{
+    "asset_ids":[
+        "<asset-id-1>",
+        "<asset-id-2>",
+        "<asset-id-3>"
+    ]
+}
+```
+
+Now make an authorized `POST` to `https://api.frame.io/v2/review_links/:id/assets`, using the Review Link `id` from Step 2 in your path, and your Asset `id`(s) in the request body.
+
+All done! You’re now ready to distribute your `short_url`.

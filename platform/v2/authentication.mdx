@@ -1,0 +1,91 @@
+---
+title: "Authentication"
+---
+
+## Overview
+
+Authentication is required for making API calls with the Frame.io API. The Frame.io API offers two choices for authentication:
+
+- **Developer tokens**: a persistent bearer token that carries the same access and permissions as the individual user who generated it.
+- **OAuth 2 authorization code flow**, which will enable Frame.io users to sign in with their credentials and grant an external application permission to act on their behalf.
+
+All actions using the API, whether conducted through either type of authentication, ultimately use bearer token headers, and are controlled by scopes.
+
+### Which Authentication Type is Best for My Project?
+
+When getting started, you’ll want to use a [Developer Token](https://developer.frame.io/authentication/developer-tokens) for your project.
+
+**Developer Tokens** are associated with an individual user’s account, have the same access permissions as the User who created them, and are restricted by scopes.
+
+These are great for:
+
+- Experimenting (because you can create and destroy them very quickly)
+- Integration scenarios where all actions can be taken via a single Account/User context.
+
+**OAuth Code Flow** is appropriate for externally-hosted applications that need to act on behalf of several different users. There is a little bit more overhead with managing bearer tokens via OAuth, so it’s not uncommon to first experiment with a Developer Token, and then refactor the work into an OAuth app later.
+
+<Info>
+
+To continue, you’ll need a Frame.io Account. If you don’t have a Frame.io account, you can sign up quickly and easily by going to [Frame.io](https://frame.io) and clicking [**Sign Up Free**](https://accounts.frame.io/welcome).
+
+</Info>
+
+## Developer tokens
+
+1. Sign into the Frame.io [Developer Portal](/platform/v2) with your Frame.io user credentials.
+2. You should get the Welcome screen. To create a new Developer Token, click the **Create a Token** button.
+3. You’ll get the Tokens screen. Click **New**.
+4. On the new token screen, you need to provide a description and scopes for your token. For **DESCRIPTION**, we recommend choosing something that will help you remember what you use the token for. Under **SCOPES**, you can select which precise access scopes this token should have. For this walkthrough, simply click on **Select all scopes**. You can create tokens with more specific permissions and privileges later as needed (see [Scopes](/platform/v2/key-concepts#scopes) for more information).
+5. Scroll down and click the **Create** button. If you are successful, you’ll get a page with a summary of information about your token.
+6. Copy the string presented in the **Token** field. **This is your new token**. Store it somewhere safe — it represents access to your account, and once you navigate off this page, you won’t be able to see it again.
+   At this point, you should receive an email verifying that you made a token with your chosen scopes.
+
+<Warning>
+
+Frame.io tokens are shown only upon initial creation. If you lose a token, you can always create a new one; but you’ll never be able to see old tokens apart from their descriptions and scopes.
+
+</Warning>
+
+### Testing your new token
+
+Now that you have your token, let’s try a request using bearer authentication. We’ll do a basic request to get information about yourself:
+
+<CodeGroup>
+
+```bash title="cURL"
+curl -H "Authorization: Bearer <YOUR_TOKEN>" https://api.frame.io/v2/me
+```
+
+```python title="Python"
+import requests
+
+url = "https://api.frame.io/v2/me"
+headers = {
+ "Authorization": "Bearer <YOUR_TOKEN>"
+}
+
+requests.GET(url,headers=headers)
+```
+
+</CodeGroup>
+
+In response, you should see a JSON representation of your User record.
+
+Congratulations! You’ve just made your first call to the Frame.io API. 🎉
+
+## What is OAuth 2?
+
+OAuth2.0 is a common authentication protocol that enables a user to allow one application to interact with another in a limited fashion, without directly sharing credentials. This process is normally referred to as a User “granting credentials,” via a special login screen.
+
+### OAuth 2 Authorization Code Flow
+
+The OAuth 2 Authorization Code Flow enables users to grant limited access to external applications. An application requests specific permissions based on its initial configuration — in the case of Frame.io, when the app is [registered on our Developer Portal](https://developer.frame.io/app/oauth_apps). The user approves the request, and the external app can then operate on that user’s behalf.
+
+Learn how to get started with the OAuth 2 Authorization Code Flow here: [Set up OAuth 2 Authentication Code Flow](/platform/v2/oauth-2-code-authorization-flow)
+
+### More About OAuth 2
+
+If you want to learn more about OAuth 2, these are some great resources:
+
+- [OAuth2](https://oauth.net/2/)
+- [The Authorization Code Flow](https://developer.okta.com/blog/2018/04/10/oauth-authorization-code-grant-type)

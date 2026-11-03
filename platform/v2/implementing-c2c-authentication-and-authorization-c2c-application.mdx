@@ -1,0 +1,455 @@
+---
+title: "How to: Authorize (Application)"
+sidebarTitle: "How to - Authorize (Application)"
+---
+
+## Introduction
+
+In this Guide, we will learn how to Authenticate and Authorize a *C2C Application* on a [Frame.io](http://frame.io/) Project.
+
+## What will I need?
+
+If you haven’t read the [Implementing C2C: Setting Up](/camera-to-cloud/implementing-c2c-setting-up) guide, give it a quick glance before moving on!
+
+Additionally, you should have received a `client_id` from our team that will be used to identify your integration. If you have not received a `client_id`, please take a look at [this introduction](/camera-to-cloud/getting-started-with-cloud-device-integrations) to the C2C ecosystem and reach out to our team.
+
+If you received a `client_secret` instead of a `client_id`, then we have set you up as a hardware device rather than a C2C Application, and you will either want to follow the [Hardware Device Auth guide](/platform/v2/implementing-c2c-authentication-and-authorization-hardware) or reach out to our team to be issued a `client_id` instead.
+
+## Walking through the application auth flow
+
+Let’s make sure we have a high-level understanding of the expected user experience for the Authorization Flow we want to implement. Check out the following resources to see this flow from the user’s point of view, try downloading [Zoelog](https://zoelog.io/) and signing into [Frame.io](http://frame.io/) to get a feel for the authorization process for C2C Applications!
+
+## OAuth overview
+
+C2C Applications use an OAuth 2.0 flow for Authentication and Authorization. This is a standardized set of calls that can be used to authenticate and authorize a third-party application or user for a service. You can [read more about the OAuth flow here](https://www.digitalocean.com/community/tutorials/an-introduction-to-oauth-2).
+
+## The callback / redirect URI(s)
+
+As part of the Oauth flow, our servers will need to make an HTTP call to a URI / URL that you control. After a user logs in to [Frame.io](http://frame.io/) in their browser, we will redirect the browser to this URI to supply your app with some information. You redirect URI must be:
+
+- Owned by you
+- Static
+
+You can have more than one valid redirect registered for your device so long as they meet these two criteria.
+
+During the OAuth flow, we will check that the callback URI that is being requested by your application is one of the URI’s we have on file. If it is not, the Authorization flow will fail. If we did not make this check, a bad actor could supply a redirect to an address that they control.
+
+For development purposes, we support non-HTTPS callbacks on `http://localhost`.
+
+## Device identification
+
+When connecting to Camera to Cloud, each individual app installation will need to identify itself uniquely, so we can list device connections in a user’s project.
+
+For C2C Applications, we call this the `device_id` of the device. When setting up your implementation, you should think about how you want to do this. Some platforms offer an API for generating a device+app-specific identifier for this exact use case:
+
+| PLATFORM | REFERENCE |
+| --- | --- |
+| iOS | [identifierForVendor](https://developer.apple.com/documentation/uikit/uidevice/1620059-identifierforvendor) |
+| Android | [FID or GUID](https://developer.android.com/training/articles/user-data-ids) |
+
+<Warning>
+
+**Be careful not to leak personally identifying information**
+
+The user’s e-mail, for instance, is not a valid value to use as a `device_id`. Likewise, *make sure you own the unique identifier*. Do not use the device’s MAC Address, for instance. The MAC address is not owned by your software, and might also be considered personally identifying information.
+
+</Warning>
+
+If you’re not sure what value you would like to use, we can talk through this choice together and make sure a suitable value is chosen that makes integration as easy as possible.
+
+## Step 1: Authenticating the user
+
+When I decide I want to connect to [Frame.io](http://frame.io/) in *YourApp™*, I go to the [Frame.io](http://frame.io/) configuration section and select “Connect to Project” (or something similar). When I hit the button I am redirected to [Frame.io](http://frame.io/) to log in and authorize your App.
+
+We do this by building a URL and opening it in a web browser. Let’s look at some python-like pseudocode:
+
+```python title="Python"
+def redirect_to_auth(config):
+    credentials = {
+        "response_type": "code",
+        "redirect_uri": "http://MyApp.io/frameio-callback",
+        "client_id": f"{MYAPP.client_id}",
+        "scope": "offline device.connect asset.create",
+        "state": str(uuid.uuid4()),
+        "device_id": f"{HARDWARE.get_vendor_id('com.mycompany.myapp')}",
+    }
+
+    encoded = parse.urlencode(credentials)
+    url = "https://applications.frame.io/oauth2/auth?" + encoded
+
+    webbrowser.open(url)
+```
+
+Our “payload” is encoded in the url itself, and when fully encoded the url will look something like this:
+
+```text
+https://applications.frame.io/oauth2/auth?response_type=code&redirect_uri=http%3A%2F%2FMyApp.io%2Fframeio-callback&client_id=[client_id]&scope=offline+device.connect+asset.create&state=[state]&device_id=62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff
+```
+
+Let’s break down these options a little:
+
+`response_type`: What the Oauth flow should respond with. This value should always be “code”.  This tells our Oauth server to send back a code to the redirect URI, which will then be used to fetch the actual authorization tokens.
+
+`redirect_uri`: The URL/URI where the Oauth server should GET when responding to an Auth request.
+
+`client_id`: Identifies your app. For application integrations, this value will be supplied by Frame.io.
+
+`scope`: A list of space-delimited permissions that your app is requesting. The following permissions are available to C2C applications
+
+- `offline`: The app can refresh its own authorization when the initial token expires.
+- `device.connect`: The device can get a list of accounts and projects that are available for C2C connections by the user.
+- `asset.create`: The app can upload assets to projects it is connected to.
+
+Although it is possible to request and be granted a subset of these scopes, you will always want to request all three of them.
+
+`state`: A random value associated with this request. We use `state` to verify calls to our redirect URI are for valid requests.
+
+When you receive a callback on your registered URI, you should validate that the `state` is expected.
+
+<Warning>
+
+**\{'t': '#frag', 'p': \{\}, 'c': \{'t': 'p', 'p': \{\}, 'c': \[\{'t': 'code', 'p': \{\}, 'c': 'state'\}, ' must be random'\]\}\}**
+
+If the state param is not random, you open yourself up to CRSF attacks, where a bad actor spoofs your state param and makes a bad request to your callback. You can read more about the `state` param in [this blog by Auth0](https://auth0.com/docs/secure/attack-protection/state-parameters)
+
+</Warning>
+
+`device_id`: A unique identifier for this particular device / installation. The device ID should be a value *owned by you* (so not MAC address / CPU serial number, etc), and *should not contain personally identifying information* (so no email addresses, social security codes, thumbprint hashes, etc). See the [above section on device_id](/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application#device-identification) for more information.
+
+## Step 2: Receiving the OAuth response
+
+After the user has signed into [Frame.io](http://frame.io/) and accepted the requested scopes in their browser, a GET request is made to your callback URI. The request contains a URL-encoded payload with the following query params:
+
+`code`: a code that will be used to fetch that actual authorization tokens from Frame.io’s backend.
+
+`state`: The state value that was included in the original authentication request in step 1.
+
+`scope`: The granted scopes / permissions.
+
+The full URI will look something like this:
+
+```text
+https://MyApp.io/frameio-callback?code=[authorization_code]&scope=offline+device.connect+asset.create&state=[state]
+```
+
+Parsing URI’s can be tricky, and you’re HTTP / server library likely has good resources for doing so, so take a look before deciding to try and parse this value yourself!
+
+For testing, we can quickly set up a server to observe the get request using Python. Your callback URI needs to be configured as `http://localhost:8888/callback`
+
+```shell
+$ python -m http.server 8888
+```
+
+Now we can use the following template to request [Frame.io](http://frame.io/) access. Fill in your `[client_id]` and a `[state]` value. You can [generate a random UUID here](https://www.uuidgenerator.net/) for `state`.
+
+```text
+https://applications.frame.io/oauth2/auth?response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8888%2Fcallback&client_id=[client_id]&scope=offline+device.connect+asset.create&state=[state]&device_id=62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff
+```
+
+When we go through the auth flow, we will get a 404 error. That is because Python does not recognize the resource being requested and doesn’t know how to respond to it. But not to worry, the auth request was still successful! We should see our server print something like this to our terminal:
+
+```text
+Serving HTTP on :: port 8888 (http://[::]:8888/) ...
+::1 - - [08/Mar/2022 14:04:34] code 404, message File not found
+::1 - - [08/Mar/2022 14:04:34] "GET /callback?code=[authentication_code]&scope=offline+device.connect+asset.create&state=[state] HTTP/1.1" 404 -
+```
+
+We should verify that the state is the same one we sent, and the `authentication_code` will be important in the next step for retrieving our access tokens.
+
+In an actual app, a callback handler might look something like this:
+
+```python title="Python"
+@handler("/frameio-callback")
+def do_get(request):
+    params = url.parse_query(request.url.parts.query)
+    if "error" in params:
+       raise AuthError(params["error"])
+
+    # Handles sending the authentication code and state to the proper user
+    MyApp.frameio_oauth_success(state=params["state"], code=params["code"])
+
+    # Render some sort of confirmation page for the user.
+    request.send_response(
+        code=200, 
+        headers={"Content-type": "text/html"}, 
+        data=OauthSuccessPage()
+    )
+```
+
+## Step 3: Retrieving our access tokens
+
+Now that we have our `authorization_code`, we can retrieve our access token! At this point, our access token has already been granted, we just need to ask the backend for it.
+
+Let’s make the following request:
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'state=[state]' \
+    --form 'code=[authorization_code]' \
+    --form 'redirect_uri=http://localhost:8888/callback' \
+    --form 'grant_type=authorization_code' \
+    --form 'scope=offline device.connect asset.create' \
+    | python -m json.tool
+```
+
+<Info>
+
+**OAuth endpoints**
+
+Note that the host for this request is `applications.frame.io`, as opposed to `api.frame.io`, which we use for most requests. Also note that we are using form data here rather than JSON data. *The C2C Oauth endpoints only accept form data.*
+
+</Info>
+
+Once you are authenticated, other endpoints will accept `application/json` payload, but the authentication endpoints will return an error if you send JSON rather than `application/x-www-form-urlencoded` data.
+
+Lets go over these parameters:
+
+`client_id`: The Oauth app identifier we were issued by [Frame.io](http://frame.io/)
+
+`state`: The state value we included in our original authorization request to the browser, and received in the callback.
+
+`code`: The authorization code we received in the callback
+
+`redirect_uri`: The same redirect URI we have registered with Frame.io’s backend. If this value is not in the list of comma seperated URLs that [Frame.io](http://frame.io/) has on record for your integration, this request will fail.
+
+`grant type`: For software device authorization flow, will always be `authorization_code`.
+
+`scope`: Must match the approved scopes returned in the callback.
+
+We should receive a response that looks something like this:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+Our device is now successfully authorized with Frame.io! Keep these values handy as we will need them to make the rest of our requests. Let’s take a look at what’s in the payload:
+
+`access_token`: This is your key to the rest of the [Frame.io](http://frame.io/) backend. We will need to add this to the header of the rest of the requests we are going to make in these tutorials.
+
+`expires_in`: The number of seconds until `access_token` expires. After the token’s time is up, it will need to be refreshed, which we will go over in a future tutorial.
+
+`refresh_token`: A token we can use to manage our `access_token`. It will most commonly be used to refresh our authorization, but it can also be used to revoke it.
+
+`token_type`: Will always be `bearer` for the C2C API, and is not actionable.
+
+We still have a few steps until we are actually connected to a project, so with that under our belt, let’s continue!
+
+## Step 4: List accounts
+
+Next we need to get a list of accounts that our user is eligible to connect to. This is the first call that requires our access token, and we’ll be adding it to a header:
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/accounts \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API endpoint specificaton**
+
+Docs for `/v2/devices/accounts` can be [found here](/camera-to-cloud/api-reference/applications-auth/device-list-accounts)
+
+</Info>
+
+<Info>
+
+**The Authorization header**
+
+For every end point that requires authorization, we need to add the `access_token` to the `Authorization` header. Notice that we need to pre-append `Bearer ` (with a space!) to our access token as the value.
+
+</Info>
+
+This call should return a list of accounts the user can connect to:
+
+```json
+[
+    {
+        "_type": "account",
+        "display_name": "Hogwarts General",
+        "id": "46b7ea11-3041-4e2b-97f7-98fbf5c974c9"
+    },
+    {
+        "_type": "account",
+        "display_name": "Gryffindor",
+        "id": "e6007a3d-cad7-4666-9ee3-23c1af032060"
+    },
+    {
+        "_type": "account",
+        "display_name": "QUIDDITCH LEGENDS -- LETS GOOOOOOOOOO",
+        "id": "cc94119d-f957-4d6e-b8cf-0c095211b1b9"
+    }
+]
+```
+
+At this point, you would display this list to the user and have them select the account they wish to connect to. Then, we will use the `id` of the account in the next step to list the projects for which the user can connect a C2C device.
+
+## Step 5: List projects
+
+Now we need to get a list of projects for the account we are interested in:
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/accounts/[account_id]/projects \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API endpoint specificaton**
+
+Docs for `/v2/devices/accounts/[account_id]/projects` can be [found here](/camera-to-cloud/api-reference/applications-auth/device-list-projects)
+
+</Info>
+
+We need to add the `account_id` we are trying to list projects for to the URL. Also, notice the overall resource path starts with `/devices/...`. We aren’t just listing projects here, we are listing projects *that the user has C2C device management permissions to*. If a project that the user belongs to is not listed, that means that they do not have C2C device management permissions for that project.
+
+We will get a response similar to the one for accounts:
+
+```json
+[
+    {
+        "_type": "project",
+        "id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+        "name": "Match Recordings"
+    },
+    {
+        "_type": "project",
+        "id": "ed5dbf4a-f146-416b-add0-74de98201876",
+        "name": "Year Book Material"
+    }
+]
+```
+
+Just as with accounts, this list should be displayed to the user for them to select the project they wish to connect to, and just like accounts, we’ll need the project `id` for the next step.
+
+## Step 6: Connecting to a project
+
+Now that the user has selected the project they wish to connect to, we’re ready to rock and roll! There’s just one last step to finish pairing our software device to a [Frame.io](http://frame.io/) project:
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/connect?project_id={project_id} \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API endpoint specificaton**
+
+Docs for `/v2/devices/connect` can be [found here](/camera-to-cloud/api-reference/applications-auth/device-project-connect)
+
+</Info>
+
+The project id is a URL query param, and we still need to pass our authorization header!
+
+We get a response like this (some data omitted for brevity):
+
+```json
+{
+    "_type": "project_device",
+    "asset_type": "video",
+    "authorization": {
+        "_type": "project_device_authorization",
+        "creator": {
+            "_type": "user",
+            "account_id": "93f872fb-9924-4e31-a430-2574e0742260",
+            "deleted_at": null,
+            "email": "hpotter@hoggyhoggyhogwarts.edu",
+            "id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+            ...
+            "name": "Harry Potter",
+            ...
+        },
+        "creator_id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+        "expires_at": null,
+        "id": "ee9f5949-b7fa-4c71-8480-6d4c60877c51",
+        "inserted_at": "2022-03-09T18:14:21.893283Z",
+        "project_device_id": "6a55d7f6-dfb7-46a1-bff8-a3acb2d3d1aa",
+        "scopes": {
+            ...
+            "asset_create": true,
+            ...
+            "id": "1e174fe9-5b53-48db-b556-c310c0848898",
+            "offline": true,
+            ...
+        }
+    },
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "asset_type": "video",
+            ...
+        }
+    ],
+    "creator_id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+    "deleted_at": null,
+    "device_id": "a8a4f3bf-196c-4748-832b-28f1d0801515",
+    "id": "93af90e7-ee89-4b47-86e6-c2750f3790b6",
+    ...
+    "name": "MyApp-62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff",
+    "project": {
+        "_type": "project",
+        "id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+        "name": "Testbed"
+    },
+    "project_id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+    "status": "online",
+    ...
+}
+```
+
+<Info>
+
+**One project at a time**
+
+You can only pair a device with one project at a time and performing another pairing operation to a different project will remove its connection with the previously connected one.
+
+</Info>
+
+If you’re response payload looks like that: Whoo! You did it! You’ve authorized your first Camera to Cloud device. Take a moment to celebrate!
+
+When you’re done celebrating, you should display the project name to the user to verify the project they connected to.
+
+## Using a third-party OAuth library
+
+[Frame.io](http://frame.io/) uses standard Oauth2.0 flow. For security, we enforce PKCE. There are many libraries out there to handle this part of an integration for you.
+
+Here are a couple popular Oauth libraries:
+
+| Programming Language | Name | URL |
+| --- | --- | --- |
+| Swift | `OAuthSwift` | [Github](https://github.com/OAuthSwift/OAuthSwift) |
+| Python | `requests-oauthlib` | [Github](https://github.com/requests/requests-oauthlib) |
+| Flutter | `oauth2_client` | [Github](https://pub.dev/packages/oauth2_client) |
+
+Remember that [Frame.io](http://frame.io/) adds a `device_id` field to identify a particular device. This is an additional custom field. The library you choose to use will more than likely have support for custom fields, but make sure you don’t forget to add it!
+
+## Troubleshooting
+
+If you find yourself here then something has gone wrong! What would integrating with a third party be without some sort of error? This section lists a set of common issues and will walk you through the steps most likely to solve them. Take a look through the following list and see if anything matches your problem. The [errors guide](/camera-to-cloud/how-to-handle-errors) is also great resource for looking up API errors.
+
+If you don’t find a solution here, we would love to hear the issue you ran into so we can add it here!
+
+**The Account or Project I want to Connect to was not Returned:** if you are listing accounts and / or projects and the one you want to connect to is not listed, then a couple things could be going on. In Frame.io, navigate to the project you wish to connect to and click on the `C2C Connections` tab. This will help you suss out what is going wrong.
+
+- **C2C is not enabled for your account:** if the screen is blank and there is a message about C2C not being available for your account, the account manager needs to enable it for your project in the account settings!
+- **You are not a device manger**: if the screen is blank and there is a message about not having permissions, then the account manager either needs to change the permissions for who is allowed to connect C2C devices, or add you into a role that has those permissions.
+
+**Invalid Client error:** `invalid_client` is returned when the information you are providing to us about the device does not match anything we have on record. This most likely means that your `client_secret`, `client_id`, or `redirect_uri` do not match what Frame.io has on file in our backend.
+
+**Bad Request error:** `bad_request` is returned when the request data is malformed in some way. Double-check that you have not misspelled a field name or forgotten to add a required field.
+
+## Next up
+
+If you haven’t already, we encourage you to reach out to our team, then continue to the next guide. We look forward to hearing from you!

@@ -1,0 +1,277 @@
+---
+title: "Frame.io Python SDK — Upload Guide"
+sidebarTitle: "Python SDK Upload Guide"
+---
+
+This guide explains how to upload files to Frame.io using the **Frame.io Python SDK** (`frameio`). The SDK handles chunked multi-part uploads to S3 via pre-signed URLs, with parallel workers, automatic retries, and optional progress tracking.
+
+For the general upload API concepts (upload URLs, headers, chunking), see [How Local & Remote Uploads Work](/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work).
+
+---
+
+## Prerequisites
+
+<Steps>
+
+<Step title="Authentication">
+
+You have a working `Frameio` client. See the [Authentication Guide](/platform/docs/guides/authentication/python-sdk) for setup.
+
+</Step>
+
+<Step title="Install the SDK">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="Target folder">
+
+You need the `account_id` and `folder_id` where the file should be uploaded. Use the SDK to find them:
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## Quick Start
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+That’s it. The SDK splits the file into chunks based on the upload URLs returned by the API, uploads them in parallel, and handles retries automatically.
+
+---
+
+## How It Works
+
+Local upload is a two-step process:
+
+<Steps>
+
+<Step title="Create file resource">
+
+Call `client.files.create_local_upload()` with the file name and size. The API creates a placeholder file and returns pre-signed S3 PUT URLs — one per chunk. The number of URLs (and therefore chunks) depends on the file size.
+
+</Step>
+
+<Step title="Upload to S3">
+
+`FrameioUploader` reads the upload URLs from the response, splits your file into matching chunks, and PUTs each chunk to its URL in parallel using a thread pool. Each request includes the required `x-amz-acl: private` and `Content-Type` headers.
+
+</Step>
+
+</Steps>
+
+<Note>
+
+The upload goes directly from your application to S3 — it does not pass through the Frame.io API servers. This is the same pattern used by services like YouTube, Vimeo, and Dropbox for large file uploads.
+
+</Note>
+
+---
+
+## Using `FrameioUploader`
+
+`FrameioUploader` is the recommended way to upload files. It wraps the lower-level chunked uploader and handles all the details — extracting upload URLs from the API response, setting required headers, chunking the file, and uploading in parallel.
+
+### Progress Tracking
+
+Use the `on_progress` callback to track upload progress:
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+The callback is invoked once after each chunk completes, with the cumulative bytes uploaded so far and the total file size.
+
+#### Rich progress bar
+
+For a polished terminal experience, use [Rich](https://github.com/Textualize/rich):
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### Configuration
+
+`FrameioUploader` accepts several optional parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `max_workers` | `5` | Number of concurrent upload threads |
+| `headers` | `{"x-amz-acl": "private"}` | Headers sent with every S3 PUT request. Custom headers are merged with the defaults. |
+| `max_retries` | `3` | Retry attempts per chunk (exponential backoff: 1s, 2s, 4s, …) |
+| `on_progress` | `None` | Callback `(bytes_uploaded, total_bytes)` fired after each chunk |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### Full Example
+
+A complete example with authentication, upload, and progress tracking:
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+If you need full control over the upload process — for example, to handle chunking manually, integrate with an async pipeline, or customize retry logic — see [How Local & Remote Uploads Work](/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work) for the raw API flow and a standalone Python script example.
+
+</Tip>
+
+---
+
+## Remote Upload
+
+If your file is already accessible via a public URL, use remote upload instead. No chunking is needed — Frame.io fetches the file directly:
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+Remote upload currently has a **50 GB file size limit**. For files larger than 50 GB, use [local upload](#quick-start) instead.
+
+</Warning>
+
+---
+
+## Checking Upload Status
+
+After uploading, you can verify the file was received:
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

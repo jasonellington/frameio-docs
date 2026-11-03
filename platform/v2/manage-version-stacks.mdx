@@ -1,0 +1,171 @@
+---
+title: "Manage Version Stacks"
+---
+
+## Overview
+
+Version Stacks are an organizational principle in Frame.io that enable Assets to be vertically “stacked” without being put into folders. Stacked versions make for easier Asset-to-Asset navigation within the Frame.io UI, and support side-by-side review.
+
+We do not currently support uploading directly into a Stack, so the API sequence for managing basic Version Stack workflow will follow the same sequence as the Frame.io UI:
+
+1. Upload the Asset (optionally: mark as private).
+2. Assign the Asset into Stack.
+
+Existing Version Stacks can be reordered, and individual versions can be knocked out a stack. Finally, Version Stacks can be deleted without deleting any of their constituent assets.
+
+<Info>
+
+**All Version Stacks have a cover_asset **
+
+Version Stacks will always have an attribute called `cover_asset_id` at their top level. This is the `id` of the Asset whose thumbnail is displayed in the Frame.io web UI, and is the highest-numbered version in the stack.
+
+</Info>
+
+### Core concepts
+
+**Version Stacks** — like **Folders** — are special `types` of Assets. You can fetch them with the same endpoints, and based on the value of the `type` key in the API response, parse and route accordingly. This is generally straightforward in practice, but can present a couple of wrinkles when managing Stacks at scale.
+
+The key to working with Version Stacks is separating the **four most common scenarios**:
+
+1. An Asset can be added to an Asset, which will create a Stack with a new `id`.
+2. An Asset can be added to an existing Stack.
+3. A Stack can be reordered.
+4. Individual Versions can be removed.
+
+**The first two scenarios** use the same [endpoint call](/platform/v2/api-reference/assets/add-version-to-asset), so the only real nuance is knowing whether you’re creating a new Stack (from two Assets), or adding your Asset to an existing Stack. Aside from that, the constraints are predictable:
+
+1. Stacks must match on `asset_type` (e.g. you can’t stack an *image* on a *stream*).
+2. The acting User must have permissions for both the source Asset and destination Asset or Stack.
+3. Asset Stack sequentially.
+4. You can’t stack a Stack on a Stack.
+5. Folders are right out.
+
+**The latter two scenarios** are also pretty simple, but require knowing a bit more about the Stack itself. For example, to reorder an Asset in a Stack, you’ll need to know the `id`s of the Assets on either side of where you want your target Asset to land; and that will generally mean you’ve fetched the entire Stack already.
+
+### Required scopes
+
+Before beginning this guide, you’ll need to make sure you have a token that includes the following scopes:
+
+| Scope | Reason |
+| --- | --- |
+| **Assets:** Read, Update | - Fetch source and destination Assets.<br />- Add an Asset to a Version Stack.<br />- Reorder a Stack.<br />- Remove an Asset from a Stack.<br />- Delete a Stack. |
+
+## Adding Assets to Version Stacks
+
+### Step 1: locate your destination
+
+The first step is to identify which of the two key scenarios you’re in — adding an Asset to another Asset to create a Stack, or adding an Asset to a Stack to extend that Stack.
+
+If you know that you’re working with an unversioned Asset, or you already have a Version Stack `id`, you can move onto Step 2.
+
+If not, the easiest way to determine whether or not a destination Asset is already part of a stack is to:
+
+1. `GET` your target Asset via call to `/v2/assets/:id​`
+2. Check the `type` that comes back.
+
+- If it’s *version_stack*, the uuid you’ve just checked is your destination uuid. Move onto Step 2.
+
+3. If the `type` is *file*, grab the `parent_id`
+4. GET the parent via the same endpoint, and check its `type`.
+
+If the parent’s `type` is *version_stack*, use its `id` as your destination.
+
+If the `type` is anything else, you’re dealing with a regular Asset and can use the original id as your destination.
+
+### Step 2: prepare your payload
+
+Now that you have your destination uuid, you need to know the uuid of the Asset you’re adding to the Stack.
+
+1. If you’re uploading a new Asset, simply use the id returned with the success response when you [create the Asset](/platform/v2/api-reference/assets/create-asset).
+2. If you’re stacking an existing Asset, you should have the `id` via the process described above.
+
+The only body parameter required for a Version Stack addition is `next_asset_id`:
+
+```json
+{
+    "next_asset_id": "<source-asset-id>"
+}
+```
+
+### Step 3: add your source Asset to the destination
+
+Now that you have both Asset `id` parameters, you’re ready to `POST` to `/assets/:id/version`, where the :id is your destination Asset or Version Stack, and your source (new) Asset is in the body payload.
+
+## Reordering Version Stacks
+
+Version Stacks rely on a simple ordinal concept of each asset have `next_asset_id` and `prev_asset_id` neighbors, where the order refers not the version numbering, but each Assets’s `index` attribute. The `index` runs opposite the version numbers, so accordingly:
+
+- The first (lowest numbered) Version in the Stack has a `prev` Asset, but no `next` Asset
+- The more recent (highest numbered) Version in the Stack has a `next` Asset, but no `prev` Asset
+- All “inner” versions have both a `prev` and `next` Asset, which are the Assets with higher and lower Version IDs, respectively.
+
+This gives us three distinct scenarios, all of which rely on the same endpoint call:
+
+**Call:**
+
+```
+PUT https://api.frame.io/v2/asset/:id/tween
+```
+
+**Body:**
+
+```json
+{
+  "prev_asset_id": "<asset_id>",
+  "next_asset_id": "<asset_id>"
+}
+```
+
+In all cases, the `id` in the URL path will be the Asset you’re moving.
+
+| Scenario | `prev_asset_id` | `next_asset_id` |
+| --- | --- | --- |
+| Move to top of Stack | `null` | `id` of the previous top Asset (highest version number). |
+| Move to bottom of Stack | `id` of the previous bottom Asset (v1). | `null` |
+| Move Version within a stack | `id` of the Asset just *above* where you’d like to move your Asset. | `id` of the Asset just *below* where you’d like to move your new Asset. |
+
+## Removing Assets and deleting Version Stacks
+
+### Removing Assets
+
+When an Asset is moved into a Version Stack, it becomes a child of the Stack itself. The move an Asset out of a Version Stack, what you’ll need to do is effectively re-parent it back into the Stack’s containing folder.
+
+1. `GET` the Version Stack itself via call to `/v2/assets/:id`
+2. Grab the `parent_id` of the Stack itself (which becomes your new target folder `id`)
+3. Move the your target Asset into the folder as follows:
+
+**Call**:
+
+```
+POST https://api.frame.io/v2/assets/:parent_id/move
+```
+
+**Body**:
+
+```json
+{
+    "id":"<asset_id>"
+}
+```
+
+### Deleting Version Stacks
+
+Deleting a Version Stack is extremely straight-forward:
+
+```
+DELETE https://api.frame.io/v2/assets/:version_stack_id/unversion
+```
+
+That’s it. Deleting a Stack will return all its constituent Assets to the Stack’s containing folder.
+
+<Info>
+
+**Stacks of size 1 should be deleted **
+
+If you remove all elements from a Version Stack, you’ll end up with a Version Stack with a single element in it. This is easy to spot — if you `GET` the Version Stack by its `id`, you’ll see that it has an attribute of `"version": 1`.
+
+</Info>
+
+All of this is technically ok — the singleton version will load and play, new versions can be added, and everything will carry on as normal; but to avoid presenting a confusing scenario for users in Frame.io’s web and other applications, we recommend deleting singleton Stacks.
+
+For more information on the Version Stacking endpoint, please refer to the [Assets](/platform/v2/api-reference/assets/library-search-get) documentation.

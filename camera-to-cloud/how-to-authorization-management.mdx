@@ -1,0 +1,164 @@
+---
+title: "How to: Manage Authorization"
+sidebarTitle: "Manage Authorization"
+---
+
+## Overview
+
+This guide outlines the procedures for managing device authorization tokens in Frame.io, including token refresh, revocation, and secure storage practices.
+
+## Prerequisites
+
+Please review the [Implementing C2C: Setting Up](/camera-to-cloud/implementing-c2c-setting-up) guide to ensure proper configuration.
+
+Essential components required:
+
+- A valid `client_secret` issued by Frame.io
+- Your assigned `client_id` as detailed in the [authentication and authorization guide](/camera-to-cloud/implementing-c2c-authentication-and-authorization)
+- Valid `access_token` and `refresh_token` credentials
+
+## Understanding Authorization Tokens
+
+Our previous guide on [device authentication](/camera-to-cloud/implementing-c2c-authentication-and-authorization) outlined the process of obtaining initial authorization tokens through user authentication.
+
+Access tokens maintain functionality for approximately 8 hours. To eliminate the need for frequent device re-pairing, we implement the `offline` scope to obtain a refresh token alongside the authorization. This refresh token enables the generation of new access tokens upon expiration.
+
+Refresh tokens remain valid for 14 days. This deliberate limitation on access token duration enhances security by minimizing potential vulnerabilities from compromised tokens. Note that if authorization is not renewed before the refresh token expires, user re-authentication will be necessary.
+
+## Access Token Renewal Process
+
+Upon access token expiration, API requests will receive this response:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+Execute the following command to obtain a new token:
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**API endpoint specification**
+
+Detailed documentation for `/v2/auth/token` is available [here](/camera-to-cloud/api-reference/authentication/auth-device-token)
+
+</Info>
+
+This implementation requires multiple authentication factors to enhance security. An unauthorized party would need to obtain both the `refresh_token` and `client_secret` to successfully impersonate your integration.
+
+A successful renewal generates this response:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+Upon successful token refresh, your previous credentials become invalid. Ensure proper storage of the new authorization tokens.
+
+Attempting to reuse an expired refresh token results in:
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+This indicates the token has been previously processed and is no longer valid.
+
+<Danger>
+
+**Getting a 401 during a refresh**
+
+Receipt of a `401 Not Authorized` response during token refresh indicates credential invalidation, necessitating a new authorization process.
+
+</Danger>
+
+## Handling Failed Refresh Responses
+
+Due to the single-use nature of `refresh_token` values, failing to capture the refresh response—whether due to network interruption or system shutdown—necessitates reinitiating the complete authentication/authorization sequence.
+
+This security protocol, while potentially inconvenient, is essential for maintaining system integrity.
+
+## Token Revocation Process
+
+Circumstances may require termination of Frame.io access, such as project completion or application reset. Implement proper revocation procedures when discontinuing current authorization.
+
+Execute the following command to revoke authorization:
+
+<Info>
+
+**Reauthorizing**
+
+Following revocation, you must reinitiate the authentication & authorization process as outlined in the [authentication and authorization guide](/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]'
+```
+
+<Info>
+
+**API endpoint specification**
+
+Complete documentation for `/v2/auth/revoke` is available [here](/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)
+
+</Info>
+
+The system returns headers without a payload. Success is indicated by a `200` status code:
+
+```text
+HTTP/2 200
+...
+```
+
+Post-revocation, Frame.io operations requiring `access_token` authentication will return `Not Authorized`. Access restoration requires device re-pairing to the project.
+
+## Token Storage Implementation
+
+Maintaining persistent authorization across system restarts requires secure token storage. Adhere to these essential guidelines:
+
+**Implement User Access Controls:** Restrict token visibility and access exclusively to application processes.
+
+**Enable Storage Encryption:** Implement encryption for stored tokens, including `client_secret` and authorization credentials. Never maintain authorization keys in plaintext format.
+
+**Maintain Credential Separation:** While our demonstration Python application consolidates storage, production environments should separate authorization tokens from `client_secret`. Consider these factors:
+
+- `client_secret` and `client_id` represent permanent device credentials—loss results in permanent device failure
+- Authorization tokens undergo regular updates throughout device operation
+- Segregated storage ensures that token storage corruption only requires device re-pairing rather than complete authentication reset
+
+While SQLite provides optimal token storage capabilities, at minimum implement separate storage for authorization data and core credentials.
+
+## Next Steps
+
+We welcome your progress and invite you to proceed to the [connection status and heartbeats guide](/camera-to-cloud/how-to-heartbeats-connection-info-and-status). Please contact our team with any questions or concerns.

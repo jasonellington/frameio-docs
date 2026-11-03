@@ -1,0 +1,151 @@
+---
+title: "How to: Manage Auth (Application)"
+sidebarTitle: "How to - Manage Auth (Application)"
+---
+
+## Introduction
+
+In this guide, we will learn how to refresh, revoke, and store *C2C Application* authorization information for Frame.io.
+
+## What will I need?
+
+If you haven’t read the [Implementing C2C: Setting Up](/camera-to-cloud/implementing-c2c-setting-up) guide, give it a quick glance before moving on!
+
+You’ll need the `client_id` given to you by our team, and the same `device_id` you used in the [authentication and authorization guide](/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). The `access_token` and `refresh_token` is also required to complete this guide.
+
+## Authorization tokens
+
+In [the last guide](/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application), we learned how to *generate* new authorization tokens by having the user authenticate and authorize a device on a project.
+
+*Access tokens only last ~1 hour before they expire*. We don’t want the user of a device to have to sign in every 8 hours, so in the last guide we requested the `offline` scope, and also got a *refresh token* when we authorized with Frame.io. Refresh tokens can be used to generate a new access token when the current one expires.
+
+*A refresh token is good for 30 days*. By restricting the amount of time an access_token is good for, we limit the potential shenanigans that could occur if one got leaked. If Authorization is not refreshed before the *refresh token* is used, the user will have to re-authenticate.
+
+## Refreshing your access token
+
+If you make a call to our API that requires an access token and get the following response:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+… then your access token has expired!
+
+To refresh your token, we’ll make the following call:
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'scope=offline device.connect asset.create' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Not sure what these values are?**
+
+All these values were generated in [the previous guide](/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). Take a look if you haven’t already, then come back here!
+
+</Info>
+
+By using all these values (instead of just the refresh token),  we make it impossible to generate new authorization from a leaked refresh token aline. If someone wants to generate a token as if they were your integration, they will need both the `refresh_token` *and* the `client_id`.
+
+You should get a response like this:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+These are your new authorization tokens. *Once you have refreshed your tokens, the old tokens will no longer work,* so make sure you keep these handy!
+
+If we try using our old refresh token to refresh now, we will get an error:
+
+```json
+{
+    "error": "token_inactive",
+    "error_description": "Token is inactive because it is malformed, expired or otherwise invalid. Token validation failed."
+}
+```
+
+Our token has already been refreshed, so using the existing refresh token is invalid.
+
+<Danger>
+
+**Getting a 401 during a refresh**
+
+If you get a `401 Not Authorized` response while refreshing your tokens, then your token is no longer valid and you will need to restart the authorzation process over again.
+
+</Danger>
+
+## Missing a refresh response
+
+*A refresh token can only be used once* . If you make a call to Frame.io to refresh a token, and miss the response, either due to a network error or unexpected power cycle, then *you will need to restart the entire authentication / authorization flow.*
+
+This is an unfortunate possibility, but it’s better to be safe than sorry!
+
+## Revoking tokens
+
+In some instances, we might want to “sign out” of Frame.io. A user might decide they no longer want to be connected after completing a shoot, for instance. Revoking authorization is also a good practice if your app gets into a bad state and needs to reset to a clean slate. Any time you know you are planning to discard its current authorization, your app should make an attempt to revoke it.
+
+To revoke our authorization, we make the following call:
+
+<Info>
+
+**Reauthorizing**
+
+After you make this call you will need to restart the authentication & authorization process detailed in [the last guide](/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application).
+
+</Info>
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/revoke \
+    --include \
+    --form 'client_id=[client_id]' \
+    --form 'token=[refresh_token]'
+```
+
+The response will not contain a payload. We used `--include` in the command to print the returned headers, which should start with a status code of `200` if out call succeeded:
+
+```text
+HTTP/2 200
+...
+```
+
+Now that our token has been revoked, all calls to [Frame.io](http://frame.io/) that require an `access_token` will return with `Not Authorized`, and if the user wishes to use the Frame.io connection again, they will need to sign into Frame.io and connect to a project again.
+
+## Storing tokens
+
+In order to maintain functionality across power cycles, you will need to store your authorization headers at rest. This can be done in a file, a database, or in your own cloud. Here are a few guidelines for storing authorization tokens:
+
+**Do not allow the user to see or access the tokens**. Your user should never be allowed to view or retrieve their tokens. They should be managed by your app and your app alone.
+
+**Encrypt your tokens at rest.** Just as with the `client_id`, access and refresh tokens should be encrypted at rest when possible to prevent keys from being stolen. *Authorization keys should not be stored in plaintext.*
+
+**Do not store your authorization tokens in the same file as your client_id.** The example Python app stores the `client_id` and `device_id` in the same file as its authorization tokens. This works fine for a demo, but is not a good practice for production code. `client_id` and `device_id` are static values for a device, and *the device will stop functioning if they are lost.*
+
+The authorization tokens are not static, and will need to be re-written many times over the lifetime of the device. If the device were to lose power while updating a file with new tokens, that file could become corrupted, and the `client_id` could be lost, resulting in the device being unable to re-authenticate at Frame.io *ever again*. By separating the tokens, at worst, a user will have to sign into Frame.io again.
+
+The best place to store tokens would be a proven database like SQLite, but at the very least authorization data should be separated from our other values.
+
+## Next up
+
+If you haven’t already, we encourage you to reach out to our team, then continue to the next guide. We look forward to hearing from you!

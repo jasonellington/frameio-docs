@@ -1,0 +1,58 @@
+---
+title: "Rate Limits"
+---
+
+# Overview
+
+Whether a token is distributed via Developer Portal, OAuth grant, or the Accounts backend that serves Frame.io’s own applications, **all API calls to Frame.io are rate limited.**
+
+Rate limits apply are applied across any and all API requests from an individual user (irrespective of which token or auth method is used), are depleted and refilled progressively, and are reflected in the response headers of every request made to the Frame.io API. Each endpoint is configured with its own limits, which range from as low as `10` requests/minute, to as high as `100` requests/second.
+
+Requests that have exceeded the rate limit for a particular endpoint will receive a `429` HTTP error in response.
+
+## Depletion and refill
+
+The Frame.io API uses a [leaky bucket](https://wikipedia.org/wiki/Leaky_bucket) strategy of progressive rate limiting, in which limits refresh gradually during their allotted time window. In other words, there is not a concept of any hard cutoff after which limits refresh for a particular resource (i.e. “fixed” and “sliding window” enforcement strategies). Rather, remaining limits are constantly refreshing at a pace relative to a resource’s limit and time window.
+
+### Exponential backoff
+
+Our recommended strategy for managing rate limits is usually referred to as “exponential backoff.”
+
+In short:
+
+- When receiving a `429`, pause for a period (normally one second)
+- If another `429`  is received, exponentially increase the wait period until normal function resumes
+
+## Headers
+
+Responses to API requests will always include the following three headers that should be utilized to limit your outbound requests:
+
+| Header | Value |
+| --- | --- |
+| `x-ratelimit-limit` | The rate limit for this resource path, measured in requests. |
+| `x-ratelimit-remaining` | The number of requests remaining in the current time window. |
+| `x-ratelimit-window` | The time window for this resource path’s limits, measured in milliseconds (ms). |
+
+### Example
+
+The following example is from the response to `GET v2/assets/:id/children`, to fetch the child assets of a Project root, folder, or Version Stack. The limit for that path is 40 requests per 60,000 ms (one minute), and there are 39 requests remaining after one has been made.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Details
+
+Rate limits vary greatly across resource paths in the Frame.io API. Below are some select details, expressed for readability as resource and action (e.g. “Assets — Update” instead of `PUT /assets/:id`).
+
+As a general rule, resource paths that create new data are limited at or below 100 calls per minute, and resource paths that fetch lists of assets are limited to 200 calls per minute.
+
+| Resource | Action | Limit (requests) | Limit window (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1,000 |
+| **Assets** | `update` | `10` | 1,000 |
+| **Assets** | `read` | `5` | 1,000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60,000 |
+| **Search** | `read` | `200` | 60,000 |

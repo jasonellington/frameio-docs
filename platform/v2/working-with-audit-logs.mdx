@@ -1,0 +1,134 @@
+---
+title: "Working with Audit Logs"
+---
+
+## Overview
+
+Frame.io supports and maintains Audit Logs for the vast majority of activities taken in its applications. This includes both basic CRUD on core resources, and some special abstractions (e.g. `AssetVersioned`).
+
+<Warning>
+
+**Audit Logs truncate after 30 days**
+
+Frame.io Audit Logs are available via API for a rolling window of 30 days, after which they are moved into cold storage. Therefore, if you want to maintain a long history of Frame.io events, please ensure you’re storing historical log data independently.
+
+</Warning>
+
+### Scope and permissions
+
+Only Account Admins may access the Audit Logs for an Account, and all calls to the Audit Logs endpoint must be scoped to an `account_id` as follows:
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### Responses
+
+Audit Log responses all have a similar format:
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**Don't forget to paginate!**
+
+Audit Log response data can be fairly verbose, so make sure you’re familiar with [pagination](/platform/v2/key-concepts#pagination)!
+
+</Info>
+
+## Filters
+
+Audit Logs support a variety of filters, including date ranges. Unlike Frame.io’s [Search](/platform/v2/search-for-assets) endpoints, filters can be sent only as `GET` query string params.
+
+Filters all follow the same formatting:
+
+### GET + query string
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**One value per filter type**
+
+Currently, Audit Logs support one value per filter type. If you supply two filters of the same type (e.g. `filter[action]=ActionOne&filter[action]=ActionTwo`), the second filter will take precedence.
+
+</Info>
+
+### Key filter types
+
+The key filter types for culling and navigating Audit Logs are:
+
+| Filter type | Description | Example values |
+| --- | --- | --- |
+| `item_type` | Filters for all resources of a single type. | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Filters for a single, specific resource, e.g. an Asset or Presentation. | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | Filters for a single Action, usually associated with an `item_type` | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | Filters for the ID of a specific User (actor). | *&lt;user-id>* |
+| `team_id` | Filters for activities associated with a single Team. This filter is useful only on teams that have multiple Teams. | *&lt;team-id>* |
+| `inserted_at` | Filters for Audit events occurring before or after a specific datetime. Must be ISO-8601 format, UTC. | *2022-08-25T00:00:00Z* |
+
+### Item Types and Actions
+
+| Resource | Actions |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## Filter examples
+
+Filters all follow a similar format, as outlined above. Below are a handful of examples target at specific use cases that can help you get started.
+
+| Scenario | Query string |
+| --- | --- |
+| Actions taken by a single User. | `?filter[actor_id]=<user-id>` |
+| All activity on a specific Presentation. | `?filter[item_id]=<presentation-id>` |
+| Comments left by a User. | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| All Review Link activity on a Team. | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## Date ranges
+
+Date ranges are a slightly special case, in that it’s necessary to specify both the `inserted_at` datetime `value`, and the `op`eration to apply to that datetime.
+
+Accordingly, date range queries will always have two filter elements, each of which will itself be nested beside an `[inserted_at]` parameter.
+
+Supported operations include:
+
+- **gt**: greater than
+- **gte**: greater than or equal to
+- **lt**: less than
+- **lte**: less than or equal to
+
+### Date range examples
+
+| Scenario | Query string |
+| --- | --- |
+| All Audit Log records from a date. | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| All Assets uploaded by a specific User up to a date. | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

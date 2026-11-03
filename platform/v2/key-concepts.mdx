@@ -1,0 +1,75 @@
+---
+title: "Key Concepts"
+---
+
+## API Structure
+
+The Frame.io API supports common concepts like rate limiting, pagination for resource collections, versioning, and errors. This section describes the specifics of each.
+
+### Organization and style
+
+The API is organized around common [REST](https://restfulapi.net/) principles. All requests should be made over SSL. All request and response bodies, including errors, are encoded in JSON.
+
+Unless otherwise specified, API methods conform to the following:
+
+- Properties without a value will use `null` instead of being undefined
+- “Snake Case” is used for attribute names (e.g. `first_name`)
+- Timestamps are rendered in ISO-8601 format (e.g. `2016-02-03T16:38:46.985Z`)
+
+### Path conventions
+
+Accounts > Teams > Projects > Assets > Comments
+
+Generally, resource paths in the Frame.io API will follow the above hierarchy model, to within one parent level. Where intuitive, the API supports standalone resource paths for objects that are strictly owned, logically speaking.
+
+For example, the Frame.io API supports both of the following paths:
+
+- `GET /accounts/:id/teams` — returns all the Teams for an Account.
+- `GET /teams` — returns all the Teams for the calling User.
+- `GET /teams/:id` — returns details about a specific Team.
+
+Another example: Comments don’t mean much outside their Asset context, so Comment collection and creation methods sit within the Asset scope. However, if updating or deleting a Comment, the Asset context isn’t as meaningful, and is omitted from the resource path:
+
+- `GET /assets/:id/comments`
+- `POST /assets/:id/comments`
+- `PUT /comments/:id`
+- `DELETE /comments/:id`
+
+## Scopes
+
+Whether retrieving a token via OAuth2.0, or directly via the [Developer Portal](/platform/v2), all API tokens must be associated with an explicit list of “scopes,” which refer to a combination of a resource (e.g. `Asset`) and an action (e.g. `create`), and are expressed with dot notation.
+
+For example, a token with the `asset.create` scope would be able to create new Assets.
+
+If you are using an implementation with a Developer Token, then scopes are set and assigned to the access token itself. If you’re using an OAuth application, then scopes are defined for application, and when users interact with the application for the first time they agree to grant the application permission to act with the requested scopes.
+
+Available scopes for Developer Tokens and applications include the following (please note that some scopes are not available to everyone, and they are called out when an issue).
+
+| Scope Category | Description |
+| --- | --- |
+| Accounts, Users, and Teams | Get information about Accounts and Teams you have access to. If the authenticated User is an admin, etc., they may have access to information about additional Users and Teams in their account.  <br />**Note**: To update Teams (e.g. managing webhooks), you must have a Team Manager or Account Admin role. |
+| Projects and Assets | Get basic info on Projects, check or update User’s membership, create or update Assets |
+| Comments | Get, create, or delete comments on an Asset, or create replies to a specific Comment.<br />**Note:** Requests to update or delete comments must be performed by the comment creator. |
+| Review Links | Create or manage settings on Review Links.<br />**Note:** Review Links are a core Frame.io feature for collecting Assets, and sending them around for feedback via a single URL without requiring explicit Team or Project access. |
+| Webhooks | Webhooks provide a way to leverage events that occur inside of Frame.io into notifications that can be sent to external systems for processing, API callback, and ultimately, workflow automation. |
+| Audit Logs | Frame.io exposes logs for the vast majority of activities taken in its applications. This includes both basic CRUD on core resources, and some special abstractions (e.g. `AssetVersioned`). You must be an Admin to access logs. |
+| Presentations | Create or edit options and Assets in existing Presentation Pages. |
+
+## Pagination
+
+API methods that return a collection of results are always paginated. All methods that expect paginated results will respond to the following query parameters, and return the following header attributes:
+
+| Description | Query parameter | Header attribute |
+| --- | --- | --- |
+| Page size | `page_size` | `per-page` |
+| Page number | `page` | `page-number` |
+| Number of pages | N/A | `total-pages` |
+| Total count | N/A | `total` |
+
+In addition, paginated results will include a `Link` response header ([see RFC-5988](https://tools.ietf.org/html/rfc5988)) with the following information:
+
+- `next` — the corresponding URL is the link to the next page.
+- `prev` — the corresponding URL is the link to the previous page.
+- `last` — the corresponding URL is the link to the last page.
+
+**Note:** when neither the `next` nor `prev` links are present, it indicates that the first page returned is the only page.

@@ -1,0 +1,294 @@
+---
+title: "Working with Annotations"
+---
+
+# Overview
+
+Annotations in Frame.io are represented as a serialized JSON blob of drawing objects, complete with colors, coordinates, and sizes. In the blob, all quotation marks apart from the outer bounding pair are escaped with forward slashes (e.g. `\"key\":\"value\"`).
+
+There are three basic shapes — **arrow**, **rect**, and **line** — as well as free-hand drawing, which is outside the scope of this guide, but follows the same basic principles of serialized coordinate data.
+
+## The coordinate system
+
+All shapes are placed on a cartesian coordinate system with an upper-left origin, and a scale of 0 to 1 on each axis.
+
+![coordinate_plane.png](/images/platform/v2/working-with-annotations/099478340a4f8604fd4389c5d431ec9e9321f509f2d6055b0c92dd62e4e36147.webp)
+
+## Basic shape data
+
+All shapes are placed on the above plane with a combination of coordinates and style data. Each shape has some common attributes, and then each has a slightly different way of addressing the coordinate system.
+
+All attributes for distance/width/height use the same 0 to 1 scale as the main coordinate grid itself, but are generally marked from the shape’s point of origin.
+
+In other words, if a video is being displayed in a 640x480 viewport, `x=1` will equal an absolute 640px in that context. This enables annotations to scale seamlessly while maintaining their relative position as viewing screen, size, and context shift.
+
+**Note**: the origin of a *rect* is always the upper-left corner of the shape, regardless of drawing origin.
+
+### Common attributes
+
+| Attribute | Description |
+| --- | --- |
+| `tool` | *arrow*, *rect*, or *line*. States which shape is being made. |
+| `color` | Six-digit hex color for the shape. |
+| `size` | Pixel size for the shape’s line. For arrows, this refers only to the start of the line, as end width is determined programmatically. |
+
+### Arrow
+
+| Attribute | Description |
+| :--- | :--- |
+| `x` | x-coordinate of the arrow’s origin. |
+| `y` | y-coordinate of the arrow’s origin. |
+| `w` | Difference in arrow’s y-axis position from start to end, relative to the arrow’s origin. |
+| `h` | Difference in arrow’s x-axis position from start to end, relative to the arrow’s origin. |
+
+### Rect
+
+| Attribute | Description |
+| :--- | :--- |
+| `x` | x-coordinate of the upper-left corner of the rectangle. |
+| `y` | y-coordinate of the upper-left corner of the rectangle. |
+| `w` | Width of the rectangle, relative to upper-left rectangle origin. |
+| `h` | Height of the rectangle, relative to upper-left rectangle origin. |
+| `ix` | The drawing x-origin of the rectangle. (Not required). |
+| `iy` | The drawing y-origin of the rectangle. (Not required). |
+| `radius` | Radius of the rectangle’s corner roundedness. Must be positive. Values above 150 are visually indistinguishable. |
+
+### Line
+
+| Attribute | Description |
+| :--- | :--- |
+| `x1` | x-coordinate of the line’s origin. |
+| `y1` | y-coordinate of the line’s origin. |
+| `x2` | x-coordinate of the line’s terminus. Absolute value on the image plane. |
+| `y2` | y-coordinate of the line’s terminus. Absolute value on the image plane. |
+
+## Simple example: the coordinate plane
+
+![plane-example.png](/images/platform/v2/working-with-annotations/99384da1b5af9a10636927f13840b9554fa518600b181af4f71f094dab50861c.webp)
+
+```text
+{"annotation": "[{\"tool\":\"line\",\"color\":\"#E74A3C\",\"size\":3,\"x1\":0.0028530670470756064,\"y1\":0.012680297987002695,\"x2\":0.9964336661911555,\"y2\":0.9903312727849104},{\"tool\":\"line\",\"color\":\"#34A3DB\",\"size\":3,\"x1\":0.004992867332382311,\"y1\":0.98779521318751,\"x2\":0.9942938659058488,\"y2\":0.012680297987002695}]}
+```
+
+```json
+{
+    "annotation": [
+        {
+            "tool": "line",
+            "color": "#E74A3C",
+            "size": 3,
+            "x1": 0.0028530670470756064,
+            "y1": 0.012680297987002695,
+            "x2": 0.9964336661911555,
+            "y2": 0.9903312727849104
+        },
+        {
+            "tool": "line",
+            "color": "#34A3DB",
+            "size": 3,
+            "x1": 0.004992867332382311,
+            "y1": 0.98779521318751,
+            "x2": 0.9942938659058488,
+            "y2": 0.012680297987002695
+        }
+    ]
+}
+```
+
+### Breakdown
+
+![blue-plane.png](/images/platform/v2/working-with-annotations/ced74a7487e5331393af727a794384e9e3294d7f048fda4c64e73b4ba32b4445.webp)
+
+```json
+{
+   "tool":"line",
+   "color":"#34A3DB",
+   "size":3,
+   "x1":0.004992867332382311,
+   "y1":0.98779521318751,
+   "x2":0.9942938659058488,
+   "y2":0.012680297987002695
+}
+```
+
+![plane-example-red.png](/images/platform/v2/working-with-annotations/35bbbbcbe89e4262ec4e0fedf5e13d48baeceb10421fe48bcb854eb216a28676.webp)
+
+```json
+{
+   "tool":"line",
+   "color":"#E74A3C",
+   "size":3,
+   "x1":0.0028530670470756064,
+   "y1":0.012680297987002695,
+   "x2":0.9964336661911555,
+   "y2":0.9903312727849104
+}
+```
+
+## Complex example: lots of boxes
+
+![lots-of-boxes.png](/images/platform/v2/working-with-annotations/9241b75e4785251c5c42b5b11306370df8d0510932e1537e20dbcde58977fea3.webp)
+
+```text
+{"annotation": "[{\"tool\":\"rect\",\"color\":\"#34A3DB\",\"size\":3,\"x\":0.008426966292134831,\"y\":0.02663337494798169,\"w\":0.0702247191011236,\"h\":0.10986267166042447,\"ix\":0.008426966292134831,\"iy\":0.02663337494798169,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#1ABCA1\",\"size\":3,\"x\":0.8932584269662921,\"y\":0.0449438202247191,\"w\":0.08895131086142327,\"h\":0.35122763212650854,\"ix\":0.8932584269662921,\"iy\":0.0449438202247191,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#E67422\",\"size\":3,\"x\":0.023408239700374533,\"y\":0.7873491468997087,\"w\":0.1254681647940075,\"h\":0.2047440699126093,\"ix\":0.023408239700374533,\"iy\":0.7873491468997087,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#E74A3C\",\"size\":3,\"x\":0.6919475655430711,\"y\":0.5409904286308781,\"w\":0.29868913857677903,\"h\":0.4427798585101955,\"ix\":0.6919475655430711,\"iy\":0.5409904286308781,\"radius\":8},{\"tool\":\"arrow\",\"color\":\"#E74A3C\",\"size\":3,\"x\":0.25374531835205993,\"y\":0.23137744486059092,\"w\":0.24250936329588013,\"h\":0}]}"
+```
+
+```json
+{
+    "annotation": [
+        {
+            "tool": "rect",
+            "color": "#34A3DB",
+            "size": 3,
+            "x": 0.008426966292134831,
+            "y": 0.02663337494798169,
+            "w": 0.0702247191011236,
+            "h": 0.10986267166042447,
+            "ix": 0.008426966292134831,
+            "iy": 0.02663337494798169,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#1ABCA1",
+            "size": 3,
+            "x": 0.8932584269662921,
+            "y": 0.0449438202247191,
+            "w": 0.08895131086142327,
+            "h": 0.35122763212650854,
+            "ix": 0.8932584269662921,
+            "iy": 0.0449438202247191,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#E67422",
+            "size": 3,
+            "x": 0.023408239700374533,
+            "y": 0.7873491468997087,
+            "w": 0.1254681647940075,
+            "h": 0.2047440699126093,
+            "ix": 0.023408239700374533,
+            "iy": 0.7873491468997087,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#E74A3C",
+            "size": 3,
+            "x": 0.6919475655430711,
+            "y": 0.5409904286308781,
+            "w": 0.29868913857677903,
+            "h": 0.4427798585101955,
+            "ix": 0.6919475655430711,
+            "iy": 0.5409904286308781,
+            "radius": 8
+        },
+        {
+            "tool": "arrow",
+            "color": "#E74A3C",
+            "size": 3,
+            "x": 0.25374531835205993,
+            "y": 0.23137744486059092,
+            "w": 0.24250936329588013,
+            "h": 0
+        }
+    ]
+}
+```
+
+### Breakdown {#breakdown-1}
+
+With all that in mind, it’s helpful to lay out each element in the above image to develop a clearer picture of the annotation coordinate system. Note that the `size` and `radius` for each of the rectangles in this example are taking the Frame.io UI defaults.
+
+#### Blue rect
+
+![blue-box.png](/images/platform/v2/working-with-annotations/ccc803531559e559395c2811d2be436316bbce6249c89b4af0b366efcf6b4d27.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#34A3DB",
+   "size":3,
+   "x":0.008426966292134831,
+   "y":0.02663337494798169,
+   "w":0.0702247191011236,
+   "h":0.10986267166042447,
+   "ix":0.008426966292134831,
+   "iy":0.02663337494798169,
+   "radius":8
+}
+```
+
+#### Green rect
+
+![box-green.png](/images/platform/v2/working-with-annotations/4ce987f7843bf36e865fe0ceb6ae0ebbfa383cf719018754070a489fb3e3f17a.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#1ABCA1",
+   "size":3,
+   "x":0.8932584269662921,
+   "y":0.0449438202247191,
+   "w":0.08895131086142327,
+   "h":0.35122763212650854,
+   "ix":0.8932584269662921,
+   "iy":0.0449438202247191,
+   "radius":8
+}
+```
+
+#### Red rect
+
+![red-box.png](/images/platform/v2/working-with-annotations/61638bc1073613b5456b11ac4ce287447c3aaade152c0e6faf7699d995b11b31.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#E74A3C",
+   "size":3,
+   "x":0.6919475655430711,
+   "y":0.5409904286308781,
+   "w":0.29868913857677903,
+   "h":0.4427798585101955,
+   "ix":0.6919475655430711,
+   "iy":0.5409904286308781,
+   "radius":8
+}
+```
+
+#### Orange rect
+
+![orange-box.png](/images/platform/v2/working-with-annotations/b7a8f7c7feb18d0439ef14f7fe71441d3cada3f551dda44c9e69ef9c8b34a8d4.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#E67422",
+   "size":3,
+   "x":0.023408239700374533,
+   "y":0.7873491468997087,
+   "w":0.1254681647940075,
+   "h":0.2047440699126093,
+   "ix":0.023408239700374533,
+   "iy":0.7873491468997087,
+   "radius":8
+}
+```
+
+#### Red arrow
+
+![red-arrow.png](/images/platform/v2/working-with-annotations/1f3e9db0880bf0bef5aa305de38471893b8ae9901226383441ff08c317087160.webp)
+
+```json
+{
+   "tool":"arrow",
+   "color":"#E74A3C",
+   "size":3,
+   "x":0.25374531835205993,
+   "y":0.23137744486059092,
+   "w":0.24250936329588013,
+   "h":0
+}
+```
