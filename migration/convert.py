@@ -391,7 +391,7 @@ def callout(tag, p, children, ctx):
     body = blocks(children, ctx)
     title = p.get('title')
     if title and str(title).strip().lower() != tag.lower():
-        t = esc(str(title))
+        t = esc(str(title).strip())
         body = f'**{t}**\n\n{body}' if body else f'**{t}**'
     return wrap(tag, [], body)
 
@@ -647,10 +647,8 @@ for r in by_kind['endpoint']:
         samples.setdefault('python', samples.pop('python sdk'))
     cs = [{'lang': l, 'label': LABEL[l], 'source': samples[l]} for l in ORDER if samples.get(l)]
     upd = {'x-mint': {'href': public_path(r['slug'])}, 'x-codeSamples': cs}
-    summary = (json.load(open(f'openapi/{name}.json'))['paths'].get(path, {}).get(meth.lower(), {}) or {}).get('summary')
-    if r['title'] and r['title'] != summary:
-        upd['x-mint']['metadata'] = {'sidebarTitle': r['title']}
-        report['endpoint_label_differs'].append(f'{r["slug"]}: {summary} / {r["title"]}')
+    # Mintlify derives the sidebar label from x-mint.href unless this is set.
+    upd['x-mint']['metadata'] = {'sidebarTitle': r['title']}
     actions[name].append({'target': f"$.paths['{path}'].{meth.lower()}", 'update': upd})
     manifest.append(dict(source_url=f'{HOST}/{r["slug"]}', source_title=r['title'], source_sidebar_label=r['title'], nav_section=trail(r), converted_file=f'openapi/{name}.json {meth} {path}', status='done', notes='Generated from the OpenAPI spec at the original URL.'))
 for name, acts in actions.items():
