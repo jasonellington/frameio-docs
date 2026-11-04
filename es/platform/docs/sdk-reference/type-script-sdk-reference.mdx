@@ -1,0 +1,3144 @@
+---
+title: "Referencia del SDK de TypeScript"
+---
+
+### Instalación {#installation}
+
+```bash
+npm i -s frameio
+```
+
+---
+
+### Uso {#usage}
+
+Crea una instancia del cliente y úsalo de la siguiente manera:
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: "YOUR_TOKEN" });
+await client.metadataFields.metadataFieldDefinitionsCreate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        field_type: "select",
+        field_configuration: {
+            enable_add_new: false,
+            options: [
+                {
+                    display_name: "Option 1",
+                },
+                {
+                    display_name: "Option 2",
+                },
+            ],
+        },
+        name: "Fields definition name",
+    },
+});
+```
+
+---
+
+### Tipos de solicitud y respuesta {#request-and-response-types}
+
+El SDK exporta todos los tipos de solicitud y respuesta como interfaces de TypeScript. Solo tienes que importarlos con el siguiente espacio de nombres:
+
+```typescript
+import { Frameio } from "frameio";
+
+const request: Frameio.UpdateFieldDefinitionParams = {
+    ...
+};
+```
+
+---
+
+### Manejo de excepciones {#exception-handling}
+
+Cuando la API devuelve un código de estado de error (respuesta 4xx o 5xx), se lanza una subclase del siguiente error.
+
+```typescript
+import { FrameioError } from "frameio";
+
+try {
+    await client.metadataFields.metadataFieldDefinitionsCreate(...);
+} catch (err) {
+    if (err instanceof FrameioError) {
+        console.log(err.statusCode);
+        console.log(err.message);
+        console.log(err.body);
+        console.log(err.rawResponse);
+    }
+}
+```
+
+---
+
+### Avanzado {#advanced}
+
+#### Encabezados adicionales {#additional-headers}
+
+Si quieres enviar encabezados adicionales como parte de la solicitud, usa la opción de solicitud headers.
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    headers: {
+        'X-Custom-Header': 'custom value'
+    }
+});
+```
+
+#### Parámetros adicionales de cadena de consulta {#additional-query-string-parameters}
+
+Si quieres enviar parámetros adicionales de cadena de consulta como parte de la solicitud, usa la opción de solicitud queryParams.
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    queryParams: {
+        'customQueryParamKey': 'custom query param value'
+    }
+});
+```
+
+---
+
+#### Reintentos {#retries}
+
+El SDK incorpora reintentos automáticos con retroceso exponencial. Una solicitud se reintentará siempre que se considere reintentable y que el número de reintentos no haya superado el límite configurado (valor predeterminado: 2).
+
+Una solicitud se considera reintentable cuando se devuelve cualquiera de los siguientes códigos de estado HTTP:
+
+- 408 (Tiempo de espera agotado)
+- 429 (Demasiadas solicitudes)
+- 5XX (Errores internos del servidor)
+
+<br />
+
+Usa la opción de solicitud `maxRetries` para configurar este comportamiento.
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    maxRetries: 0 // override maxRetries at the request level
+});
+```
+
+---
+
+#### Tiempos de espera {#timeouts}
+
+De forma predeterminada, el SDK usa un tiempo de espera de 60 segundos. Usa la opción timeoutInSeconds para configurar este comportamiento.
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    timeoutInSeconds: 30 // override timeout to 30s
+});
+```
+
+#### Cancelar solicitudes {#aborting-requests}
+
+El SDK permite a los usuarios cancelar solicitudes en cualquier momento pasando una señal de cancelación.
+
+```typescript
+const controller = new AbortController();
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    abortSignal: controller.signal
+});
+controller.abort(); // aborts the request
+```
+
+---
+
+#### Acceder a los datos sin procesar de la respuesta {#access-raw-response-data}
+
+El SDK proporciona acceso a los datos sin procesar de la respuesta, incluidos los encabezados, mediante el método `.withRawResponse()`. El método `.withRawResponse()` devuelve una promesa que se resuelve en un objeto con las propiedades `data` y `rawResponse`.
+
+```typescript
+const { data, rawResponse } = await client.metadataFields.metadataFieldDefinitionsCreate(...).withRawResponse();
+
+console.log(data);
+console.log(rawResponse.headers['X-My-Header']);
+```
+
+#### Compatibilidad con entornos de ejecución {#runtime-compatibility}
+
+El SDK funciona en los siguientes entornos de ejecución:
+
+- Node.js 18+
+- Vercel
+- Cloudflare Workers
+- Deno v1.25+
+- Bun 1.0+
+- React Native
+
+---
+
+#### Personalizar el cliente Fetch {#customizing-fetch-client}
+
+El SDK te permite personalizar el cliente HTTP / la función Fetch subyacente. Si trabajas en un entorno no compatible, esto te ofrece una solución de último recurso para garantizar que el SDK funcione.
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({
+    ...
+    fetcher: // provide your implementation here
+});
+```
+
+---
+
+### Referencia {#reference}
+
+#### Permisos de cuenta {#account-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.accountPermissions.index(accountId, { ...params }) -> core.Page<Frameio.AccountUserRole>">
+
+Enumera los roles de usuario de una cuenta determinada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+const response = await client.accountPermissions.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include_deactivated: true,
+    sort: "role_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.accountPermissions.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include_deactivated: true,
+    sort: "role_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.AccountPermissionsIndexRequest`
+
+`requestOptions`: `AccountPermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Cuentas {#accounts}
+
+<AccordionGroup>
+
+<Accordion title="client.accounts.index({ ...params }) -> core.Page<Frameio.Account>">
+
+Enumera las cuentas del usuario actual.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.accounts.index({
+    sort: "display_name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.accounts.index({
+    sort: "display_name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+
+`request`: `Frameio.AccountsIndexRequest`
+
+`requestOptions`: `Accounts.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.accounts.auditlogIndex(accountId, { ...params }) -> Frameio.AuditLogsWithIncludesResponse">
+
+Enumera los registros de auditoría con opciones de filtrado mediante parámetros de consulta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.accounts.auditlogIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "user",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.AuditlogIndexRequest`
+
+`requestOptions`: `Accounts.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Autenticación {#auth}
+
+<AccordionGroup>
+
+<Accordion title="new ServerToServerAuth({ clientId, clientSecret, ... })">
+
+Autentica mediante la concesión OAuth 2.0 `client_credentials`. Este flujo no implica a ningún usuario y no devuelve un token de actualización. Cuando el token de acceso caduca, el SDK solicita automáticamente uno nuevo con las credenciales del cliente.
+
+```typescript title="usage"
+import { FrameioClient, ServerToServerAuth } from "frameio";
+
+const auth = new ServerToServerAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+});
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**Parámetros**
+
+`clientId`: `string` — ID de cliente OAuth de Adobe IMS.
+
+`clientSecret`: `string` — Secreto de cliente OAuth de Adobe IMS.
+
+`scopes`: `string` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749). De forma predeterminada, los ámbitos de servidor a servidor.
+
+`imsBaseUrl`: `string` — URL base de IMS para entornos de staging o alternativos. De forma predeterminada, producción.
+
+`fetch`: `typeof fetch` — Implementación personalizada de fetch (para proxy, TLS, etc.).
+
+`onTokenRefreshed`: `OnTokenRefreshed` — Callback opcional que se ejecuta después de cada obtención de token.
+
+`timeout`: `number` — Tiempo de espera de las solicitudes HTTP en milisegundos. Valor predeterminado: 30000.
+
+`maxRetries`: `number` — Número máximo de reintentos ante fallos transitorios. Valor predeterminado: 2.
+
+`refreshBuffer`: `number` — Segundos antes de la caducidad para activar una actualización proactiva. Valor predeterminado: 60.
+
+`logger`: `Logger` — Instancia de logger para la salida de diagnóstico.
+
+**Métodos**
+
+`getToken(): Promise<string>` — Devuelve un token de acceso válido y lo actualiza si es necesario. Pásalo al cliente: `new FrameioClient({ token: () => auth.getToken() })`.
+
+`authenticate(): Promise<TokenResponse>` — Obtiene explícitamente un nuevo token de acceso.
+
+`revoke(): Promise<void>` — Revoca los tokens en el servidor y borra el estado local.
+
+`exportTokens(): ExportedTokens` — Exporta el estado actual de los tokens para conservarlo.
+
+`importTokens(data: ExportedTokens): void` — Restaura el estado de los tokens a partir de un objeto exportado previamente.
+
+</Accordion>
+
+<Accordion title="new WebAppAuth({ clientId, clientSecret, redirectUri, ... })">
+
+Autentica mediante la concesión OAuth 2.0 `authorization_code`. Úsala en aplicaciones del lado del servidor que puedan almacenar un secreto de cliente de forma segura.
+
+```typescript title="usage"
+import { randomBytes } from "crypto";
+import { FrameioClient, WebAppAuth } from "frameio";
+
+const auth = new WebAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+    redirectUri: "https://myapp.com/callback",
+});
+const url = auth.getAuthorizationUrl({ state: randomBytes(24).toString("hex") });
+// redirect the user to url ...
+await auth.exchangeCode("CODE_FROM_CALLBACK");
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**Parámetros**
+
+`clientId`: `string` — ID de cliente OAuth de Adobe IMS.
+
+`clientSecret`: `string` — Secreto de cliente OAuth de Adobe IMS.
+
+`redirectUri`: `string` — URI de redirección registrado.
+
+`scopes`: `string` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749).
+
+`imsBaseUrl`: `string` — URL base de IMS para entornos de staging o alternativos. De forma predeterminada, producción.
+
+`fetch`: `typeof fetch` — Implementación personalizada de fetch (para proxy, TLS, etc.).
+
+`onTokenRefreshed`: `OnTokenRefreshed` — Callback opcional que se ejecuta después de cada actualización de token.
+
+`timeout`: `number` — Tiempo de espera de las solicitudes HTTP en milisegundos. Valor predeterminado: 30000.
+
+`maxRetries`: `number` — Número máximo de reintentos ante fallos transitorios. Valor predeterminado: 2.
+
+`refreshBuffer`: `number` — Segundos antes de la caducidad para activar una actualización proactiva. Valor predeterminado: 60.
+
+`logger`: `Logger` — Instancia de logger para la salida de diagnóstico.
+
+**Métodos**
+
+`getToken(): Promise<string>` — Devuelve un token de acceso válido y lo actualiza si es necesario.
+
+`getAuthorizationUrl({ state }): string` — Construye la URL de autorización de Adobe IMS. Pasa un valor CSRF/state opaco que se te devolverá.
+
+`exchangeCode(code: string): Promise<TokenResponse>` — Intercambia un código de autorización por tokens de acceso y de actualización.
+
+`refresh(): Promise<TokenResponse>` — Activa manualmente una actualización del token.
+
+`revoke(): Promise<void>` — Revoca los tokens en el servidor y borra el estado local.
+
+`exportTokens(): ExportedTokens` — Exporta el estado actual de los tokens para conservarlo.
+
+`importTokens(data: ExportedTokens): void` — Restaura el estado de los tokens a partir de un objeto exportado previamente.
+
+</Accordion>
+
+<Accordion title="new SPAAuth({ clientId, redirectUri, ... })">
+
+Autentica mediante `authorization_code` + PKCE (sin secreto de cliente). Úsalo en aplicaciones de una sola página basadas en navegador que no pueden almacenar un secreto de cliente de forma segura.
+
+```typescript title="usage"
+import { randomBytes } from "crypto";
+import { FrameioClient, SPAAuth } from "frameio";
+
+const auth = new SPAAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "https://myapp.com/cb",
+});
+const result = await auth.getAuthorizationUrl({ state: randomBytes(24).toString("hex") });
+// redirect the user to result.url, store result.codeVerifier ...
+await auth.exchangeCode({ code: "CODE_FROM_CALLBACK", codeVerifier: result.codeVerifier });
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**Parámetros**
+
+`clientId`: `string` — ID de cliente OAuth de Adobe IMS.
+
+`redirectUri`: `string` — URI de redirección registrado.
+
+`scopes`: `string` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749).
+
+`imsBaseUrl`: `string` — URL base de IMS para entornos de staging o alternativos. De forma predeterminada, producción.
+
+`fetch`: `typeof fetch` — Implementación personalizada de fetch (para proxy, TLS, etc.).
+
+`onTokenRefreshed`: `OnTokenRefreshed` — Callback opcional que se ejecuta después de cada actualización de token.
+
+`timeout`: `number` — Tiempo de espera de las solicitudes HTTP en milisegundos. Valor predeterminado: 30000.
+
+`maxRetries`: `number` — Número máximo de reintentos ante fallos transitorios. Valor predeterminado: 2.
+
+`refreshBuffer`: `number` — Segundos antes de la caducidad para activar una actualización proactiva. Valor predeterminado: 60.
+
+`logger`: `Logger` — Instancia de logger para la salida de diagnóstico.
+
+**Métodos**
+
+`getToken(): Promise<string>` — Devuelve un token de acceso válido y lo actualiza si es necesario.
+
+`getAuthorizationUrl({ state }): Promise<AuthorizationUrlResult>` — Construye la URL de autorización de Adobe IMS con un desafío PKCE. Devuelve un `AuthorizationUrlResult` con `url` y `codeVerifier`.
+
+`exchangeCode({ code, codeVerifier }): Promise<TokenResponse>` — Intercambia un código de autorización + verificador PKCE por tokens.
+
+`refresh(): Promise<TokenResponse>` — Activa manualmente una actualización del token.
+
+`revoke(): Promise<void>` — Revoca los tokens en el servidor y borra el estado local.
+
+`exportTokens(): ExportedTokens` — Exporta el estado actual de los tokens para conservarlo.
+
+`importTokens(data: ExportedTokens): void` — Restaura el estado de los tokens a partir de un objeto exportado previamente.
+
+</Accordion>
+
+<Accordion title="new NativeAppAuth({ clientId, redirectUri, ... })">
+
+Autentica mediante `authorization_code` + PKCE en aplicaciones de escritorio y móviles. Comparte la misma API que `SPAAuth`; usa un URI de redirección con esquema personalizado (p. ej., `myapp://callback`).
+
+```typescript title="usage"
+import { randomBytes } from "crypto";
+import { FrameioClient, NativeAppAuth } from "frameio";
+
+const auth = new NativeAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "myapp://callback",
+});
+const result = await auth.getAuthorizationUrl({ state: randomBytes(24).toString("hex") });
+// open result.url in the system browser, store result.codeVerifier ...
+await auth.exchangeCode({ code: "CODE_FROM_CALLBACK", codeVerifier: result.codeVerifier });
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**Parámetros**
+
+`clientId`: `string` — ID de cliente OAuth de Adobe IMS.
+
+`redirectUri`: `string` — URI de redirección registrado (se admite un esquema personalizado).
+
+`scopes`: `string` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749).
+
+`imsBaseUrl`: `string` — URL base de IMS para entornos de staging o alternativos. De forma predeterminada, producción.
+
+`fetch`: `typeof fetch` — Implementación personalizada de fetch (para proxy, TLS, etc.).
+
+`onTokenRefreshed`: `OnTokenRefreshed` — Callback opcional que se ejecuta después de cada actualización de token.
+
+`timeout`: `number` — Tiempo de espera de las solicitudes HTTP en milisegundos. Valor predeterminado: 30000.
+
+`maxRetries`: `number` — Número máximo de reintentos ante fallos transitorios. Valor predeterminado: 2.
+
+`refreshBuffer`: `number` — Segundos antes de la caducidad para activar una actualización proactiva. Valor predeterminado: 60.
+
+`logger`: `Logger` — Instancia de logger para la salida de diagnóstico.
+
+**Métodos**
+
+Los mismos que `SPAAuth`: `getToken()`, `getAuthorizationUrl({ state })`, `exchangeCode({ code, codeVerifier })`, `refresh()`, `revoke()`, `exportTokens()`, `importTokens(data)`.
+
+</Accordion>
+
+<Accordion title="AuthorizationUrlResult">
+
+Objeto devuelto por `SPAAuth.getAuthorizationUrl()` y `NativeAppAuth.getAuthorizationUrl()`. Contiene la URL de autorización y el verificador de código PKCE.
+
+**Propiedades**
+
+`url`: `string` — La URL de autorización completa a la que redirigir al usuario.
+
+`codeVerifier`: `string` — El verificador de código PKCE que se debe almacenar y pasar a `exchangeCode()`.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Excepciones de autenticación {#auth-exceptions}
+
+Todos los errores de autenticación extienden `FrameioAuthError` y se pueden importar desde `frameio`.
+
+| Excepción | Descripción |
+| --- | --- |
+| `FrameioAuthError` | Error base para todos los errores del SDK de autenticación. |
+| `AuthenticationError` | Error en el intercambio o la actualización del token. Tiene las propiedades `errorCode` y `errorDescription`. |
+| `TokenExpiredError` | El token de actualización ha caducado; es necesario volver a autenticarse. |
+| `NetworkError` | Error en una solicitud de red (tiempo de espera, error de conexión, etc.). |
+| `RateLimitError` | Adobe IMS devolvió 429 y se agotaron los reintentos. Tiene la propiedad `retryAfter`. |
+| `PKCEError` | Error en la verificación PKCE. |
+| `ConfigurationError` | Falta la configuración obligatoria o no es válida. |
+
+#### Colecciones {#collections}
+
+<AccordionGroup>
+
+<Accordion title="client.collections.index(accountId, projectId, { ...params }) -> Frameio.CollectionsResponse">
+
+Enumera las colecciones de un proyecto.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.collections.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator,project",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CollectionsIndexRequest`
+
+`requestOptions`: `Collections.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.collections.show(accountId, collectionId, { ...params }) -> Frameio.CollectionResponse">
+
+Muestra los detalles de una colección.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.collections.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator,project",
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`collectionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CollectionsShowRequest`
+
+`requestOptions`: `Collections.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Comentarios {#comments}
+
+<AccordionGroup>
+
+<Accordion title="client.comments.show(accountId, commentId, { ...params }) -> Frameio.CommentWithIncludesResponse">
+
+Muestra un único comentario de un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.comments.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    include: "owner",
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`commentId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CommentsShowRequest`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.delete(accountId, commentId) -> void">
+
+Elimina un comentario de un recurso.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.comments.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`commentId`: `Frameio.Uuid` —
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.update(accountId, commentId, { ...params }) -> Frameio.CommentResponse">
+
+Actualiza un comentario de un recurso determinado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.comments.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    data: {
+        annotation:
+            '[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed: false,
+        page: 4,
+        text: "This is great!",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`commentId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateCommentParams`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.index(accountId, fileId, { ...params }) -> core.Page<Frameio.CommentWithIncludes>">
+
+Enumera los comentarios de un recurso determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.comments.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        timestamp_as_timecode: true,
+        include: "owner",
+        sort: "owner_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.comments.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    include: "owner",
+    sort: "owner_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CommentsIndexRequest`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.create(accountId, fileId, { ...params }) -> Frameio.CommentResponse">
+
+Crea un comentario en un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.comments.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    data: {
+        annotation:
+            '[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed: false,
+        page: 4,
+        text: "This is great!",
+        timestamp: "00:00:02:12",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateCommentParams`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.createAttachment(accountId, commentId, { ...params }) -> Frameio.CommentAttachmentResponse">
+
+Crea un archivo adjunto para un comentario existente.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.comments.createAttachment("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_size: 1024000,
+        media_type: "image/png",
+        name: "screenshot.png",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`commentId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateAttachmentParams`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.deleteAttachment(accountId, commentId, attachmentId) -> void">
+
+Elimina un archivo adjunto de un comentario.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.comments.deleteAttachment("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`commentId`: `Frameio.Uuid` —
+
+`attachmentId`: `Frameio.Uuid` —
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Acciones personalizadas {#custom-actions}
+
+<AccordionGroup>
+
+<Accordion title="client.customActions.actionsIndex(accountId, workspaceId, { ...params }) -> Frameio.ActionsWithIncludesResponse">
+
+Enumera las acciones de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.customActions.actionsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionsIndexRequest`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsShow(accountId, actionId, { ...params }) -> Frameio.ActionWithIncludesResponse">
+
+Muestra los detalles de una acción personalizada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.customActions.actionsShow("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`actionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionsShowRequest`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsCreate(accountId, workspaceId, { ...params }) -> Frameio.ActionCreateResponse">
+
+Crea una acción personalizada en un espacio de trabajo.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.customActions.actionsCreate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        description: "customizing our workflow",
+        event: "my.event",
+        name: "First Custom Action",
+        timeout: 7,
+        url: "https://example.com/custom-action",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionCreateParams`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsUpdate(accountId, actionId, { ...params }) -> Frameio.ActionResponse">
+
+Actualiza los detalles de una acción personalizada.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.customActions.actionsUpdate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        active: true,
+        description: "customizing our workflow",
+        event: "my.event",
+        multi_asset: true,
+        name: "First Custom Action",
+        timeout: 7,
+        url: "https://example.com/custom-action",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`actionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionUpdateParams`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsDelete(accountId, actionId) -> void">
+
+Elimina una acción personalizada.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.customActions.actionsDelete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`actionId`: `Frameio.Uuid` —
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Archivos {#files}
+
+<AccordionGroup>
+
+<Accordion title="client.files.list(accountId, folderId, { ...params }) -> Frameio.FileAssetsWithIncludesResponse">
+
+Enumera los archivos de una carpeta determinada.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.list("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links.original",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FilesListRequest`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.create(accountId, folderId, { ...params }) -> Frameio.FileWithUploadUrlsResponse">
+
+Crea un archivo nuevo en la carpeta principal. `Create file (local upload)` y `Create file (remote upload)` han reemplazado este endpoint.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_size: 1137444,
+        media_type: "image/png",
+        name: "asset.png",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCreateParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.show(accountId, fileId, { ...params }) -> Frameio.FileWithIncludesResponse">
+
+Muestra los detalles de un archivo.<br />
+Usa el parámetro de consulta include para incluir de forma selectiva propiedades adicionales en la respuesta.
+
+<Note>
+
+Si incluyes `media_links.original` y el usuario no tiene permiso para descargar el archivo, este endpoint responderá con un error `403 Forbidden`. Si el contenido no es accesible porque se requiere una marca de agua para este usuario y los media_links solicitados no la admiten, la solicitud se completará correctamente, pero los enlaces multimedia no admitidos se establecerán en null. Del mismo modo, si un enlace de transcodificación solicitado no existe para un archivo concreto (p. ej., al incluir `media_links.video_h264_180` en un archivo de imagen estática) o el proceso de transcodificación no ha finalizado (es decir, el estado del archivo es “uploaded” en lugar de “transcoded”), el enlace también se establecerá en null en la carga útil de la respuesta. En resumen, el cliente debe gestionar correctamente los enlaces multimedia nulos.
+
+</Note>
+
+Límites de frecuencia: 10 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FilesShowRequest`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.delete(accountId, fileId) -> void">
+
+Elimina un archivo por ID.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.files.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.update(accountId, fileId, { ...params }) -> Frameio.FileResponse">
+
+Actualiza los detalles de un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.files.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "asset.png",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileUpdateParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.copy(accountId, fileId, { ...params }) -> Frameio.FileCopyResponse">
+
+Copia un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.files.copy("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    copy_metadata: true,
+    copy_comments: "none",
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCopyParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.createRemoteUpload(accountId, folderId, { ...params }) -> Frameio.FileRemoteUploadResponse">
+
+Crea un archivo nuevo en la carpeta principal mediante carga remota.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.createRemoteUpload("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "asset.png",
+        source_url: "https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.png",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCreateRemoteUploadParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.move(accountId, fileId, { ...params }) -> Frameio.FileResponse">
+
+Mueve un archivo a una carpeta o a una version_stack.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.files.move("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileMoveParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.createLocalUpload(accountId, folderId, { ...params }) -> Frameio.FileWithUploadUrlsResponse">
+
+Crea un archivo nuevo en la carpeta principal mediante carga local.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.createLocalUpload("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_size: 1137444,
+        name: "asset.png",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCreateLocalUploadParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.showFileUploadStatus(accountId, fileId) -> Frameio.FileUploadStatusResponse">
+
+Muestra los detalles del estado de carga de un archivo.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.showFileUploadStatus("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.importFile(accountId, folderId, { ...params }) -> Frameio.FileResponse">
+
+Importa un archivo desde una ubicación de almacenamiento configurada en la cuenta.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+await client.files.importFile("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        key: "uploads/08091b0f-a541-42f5-a059-5e8c4afecc12/original.png",
+        name: "asset.png",
+        storage_location: "123e4567-e89b-12d3-a456-426614174000",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`folderId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.FileImportParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Permisos de carpeta {#folder-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.folderPermissions.folderUserRolesIndex(accountId, folderId, { ...params }) -> Frameio.UserRolesResponse">
+
+Enumera los roles de usuario de una carpeta determinada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.folderPermissions.folderUserRolesIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include_deactivated: true,
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderUserRolesIndexRequest`
+
+`requestOptions`: `FolderPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folderPermissions.folderUserRolesUpdate(accountId, folderId, userId, { ...params }) -> Frameio.UpdateUserRolesResponse">
+
+Actualiza los roles de usuario de la carpeta indicada si el usuario ya se ha añadido a la carpeta. Si el usuario no se ha añadido a la carpeta, se añadirá con el rol indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.folderPermissions.folderUserRolesUpdate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        role: "editor",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateUserRolesParams`
+
+`requestOptions`: `FolderPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folderPermissions.delete(accountId, folderId, userId) -> void">
+
+Quita a un usuario de una carpeta determinada.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.folderPermissions.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`requestOptions`: `FolderPermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Carpetas {#folders}
+
+<AccordionGroup>
+
+<Accordion title="client.folders.show(accountId, folderId, { ...params }) -> Frameio.FolderWithIncludesResponse">
+
+Muestra los detalles de una carpeta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FoldersShowRequest`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.delete(accountId, folderId) -> void">
+
+Elimina una carpeta por ID.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.update(accountId, folderId, { ...params }) -> Frameio.FolderResponse">
+
+Actualiza los detalles de una carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Folder name",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderUpdateParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.index(accountId, folderId, { ...params }) -> Frameio.AssetsWithIncludesResponse">
+
+Enumera los elementos secundarios de la carpeta indicada.<br />
+Usa el parámetro de consulta include para incluir de forma selectiva propiedades adicionales en la respuesta.
+
+<Note>
+
+Si incluyes `media_links.original` y el usuario no tiene permiso para descargar archivos en el proyecto correspondiente, este endpoint responderá con un error `403 Forbidden`. Si el contenido no es accesible porque se requiere una marca de agua para este usuario y los media_links solicitados no la admiten, la solicitud se completará correctamente, pero los enlaces multimedia no admitidos se establecerán en null. Del mismo modo, si un enlace de transcodificación solicitado no existe para un archivo concreto (p. ej., al incluir `media_links.video_h264_180` en un archivo de imagen estática) o el proceso de transcodificación no ha finalizado (es decir, el estado del archivo es “uploaded” en lugar de “transcoded”), el enlace multimedia también se establecerá en null en la carga útil de la respuesta. En resumen, el cliente debe gestionar correctamente los enlaces multimedia nulos.
+
+</Note>
+
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+    type: "file,folder,version_stack",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderIndexRequest`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.copy(accountId, folderId, { ...params }) -> Frameio.FolderCopyResponse">
+
+Copia una carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.copy("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    copy_metadata: true,
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderCopyParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.list(accountId, folderId, { ...params }) -> Frameio.FoldersWithIncludesResponse">
+
+Enumera las carpetas de una carpeta determinada.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.list("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FoldersListRequest`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.create(accountId, folderId, { ...params }) -> Frameio.FolderResponse">
+
+Crea una carpeta nueva dentro del parámetro de ruta `folder_id` indicado.
+Límites de frecuencia: 3 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Folder name",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderCreateParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.move(accountId, folderId, { ...params }) -> Frameio.FolderResponse">
+
+Mueve una carpeta a otra carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.folders.move("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderMoveParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Grupos {#groups}
+
+<AccordionGroup>
+
+<Accordion title="client.groups.index(accountId, { ...params }) -> Frameio.GroupsWithIncludesResponse">
+
+Enumera los grupos de la cuenta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.groups.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "creator_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.GroupsIndexRequest`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.groups.show(accountId, groupId, { ...params }) -> Frameio.GroupWithIncludesResponse">
+
+Muestra los detalles de un grupo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.groups.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`groupId`: `Frameio.Uuid` —
+
+`request`: `Frameio.GroupsShowRequest`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.groups.create(accountId, { ...params }) -> Frameio.GroupResponse">
+
+Crea un grupo para la cuenta actual.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.groups.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        emoji: "smile",
+        name: "group-1",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.CreateGroupParams`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.groups.update(accountId, groupId, { ...params }) -> Frameio.GroupResponse">
+
+Actualiza los detalles de un grupo.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.groups.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        emoji: "smile",
+        name: "group-1",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`groupId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateGroupParams`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Metadatos {#metadata}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata.bulkUpdate(accountId, projectId, { ...params }) -> void" defaultOpen={true}>
+
+Actualiza los valores de metadatos en varios archivos.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.metadata.bulkUpdate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_ids: ["09b31c2a-04de-464a-a593-643a36ef0d98", "b967fc36-4e18-4b48-a3ab-c790100e2baa"],
+        values: [
+            {
+                field_definition_id: "ff41ce50-269b-4624-8306-aac10e28ab94",
+                value: [
+                    {
+                        id: "e60f47b4-cf8e-4273-96d5-3258a830a0aa",
+                        type: "user",
+                    },
+                    {
+                        id: "24eeaf7e-ce27-4555-bc77-cce39900626d",
+                        type: "account_user_group",
+                    },
+                ],
+            },
+        ],
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.BulkUpdateMetadataParams`
+
+`requestOptions`: `Metadata.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.metadata.show(accountId, fileId, { ...params }) -> Frameio.MetadataResponse">
+
+Muestra los metadatos de un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.metadata.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    show_null: true,
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.MetadataShowRequest`
+
+`requestOptions`: `Metadata.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Campos de metadatos {#metadata-fields}
+
+<AccordionGroup>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsDelete(accountId, fieldDefinitionId) -> void">
+
+Elimina definiciones de campos personalizados de nivel de cuenta.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsDelete(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`fieldDefinitionId`: `Frameio.Uuid` —
+
+`requestOptions`: `MetadataFields.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsUpdate(accountId, fieldDefinitionId, { ...params }) -> Frameio.FieldDefinitionResponse">
+
+Actualiza definiciones de campos personalizados de nivel de cuenta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsUpdate(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        data: {
+            field_type: "select",
+            field_configuration: {
+                enable_add_new: false,
+                options: [
+                    {
+                        display_name: "Option 1",
+                    },
+                    {
+                        display_name: "Option 2",
+                    },
+                ],
+            },
+            name: "Updated-Field-Name",
+        },
+    },
+);
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uui`d\` —
+
+`fieldDefinitionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateFieldDefinitionParams`
+
+requestOptions: MetadataFields.RequestOptions
+
+</Accordion>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsIndex(accountId, { ...params }) -> Frameio.FieldDefinitionsWithIncludesResponse">
+
+Enumera las definiciones de campos de nivel de cuenta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.MetadataFieldDefinitionsIndexRequest`
+
+`requestOptions`: `MetadataFields.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsCreate(accountId, { ...params }) -> Frameio.FieldDefinitionResponse">
+
+Crea definiciones de campos de nivel de cuenta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsCreate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        field_type: "select",
+        field_configuration: {
+            enable_add_new: false,
+            options: [
+                {
+                    display_name: "Option 1",
+                },
+                {
+                    display_name: "Option 2",
+                },
+            ],
+        },
+        name: "Fields definition name",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateFieldDefinitionParams`
+
+`requestOptions`: `MetadataFields.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Permisos de proyecto {#project-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.projectPermissions.index(accountId, projectId, { ...params }) -> core.Page<Frameio.UserRole>">
+
+Enumera los roles de usuario de un proyecto determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+const response = await client.projectPermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.projectPermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectPermissionsIndexRequest`
+
+`requestOptions`: `ProjectPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projectPermissions.delete(accountId, projectId, userId) -> void">
+
+Quita a un usuario de un proyecto determinado.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.projectPermissions.delete(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uui`d\` —
+
+`projectId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`requestOptions`: `ProjectPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projectPermissions.projectUserRolesUpdate(accountId, projectId, userId, { ...params }) -> Frameio.UpdateUserRolesResponse">
+
+Actualiza los roles de usuario del proyecto indicado si el usuario ya se ha añadido al proyecto. Si el usuario no se ha añadido al proyecto, se añadirá con el rol indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.projectPermissions.projectUserRolesUpdate(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        data: {
+            role: "editor",
+        },
+    },
+);
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`UserId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateUserRolesParams`
+
+`requestOptions`: `ProjectPermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Proyectos {#projects}
+
+<AccordionGroup>
+
+<Accordion title="client.projects.show(accountId, projectId, { ...params }) -> Frameio.ProjectWithIncludesResponse">
+
+Muestra los detalles de un proyecto.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.projects.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectsShowRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.delete(accountId, projectId) -> void">
+
+Elimina un proyecto.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.projects.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uui`d\` —
+
+`projectId`: `Frameio.Uuid` —
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.update(accountId, projectId, { ...params }) -> Frameio.ProjectResponse">
+
+Actualiza los detalles de un proyecto.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.projects.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Project Name",
+        restricted: true,
+        status: "active",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectUpdateParams`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.index(accountId, workspaceId, { ...params }) -> core.Page<Frameio.ProjectWithIncludes>">
+
+Enumera los proyectos de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+const response = await client.projects.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include: "owner",
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.projects.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectsIndexRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.create(accountId, workspaceId, { ...params }) -> Frameio.ProjectResponse">
+
+Crea un proyecto en un espacio de trabajo determinado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.projects.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Project Name",
+        restricted: true,
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectsParams`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.accountProjectsIndex(accountId, { ...params }) -> Frameio.ProjectsWithIncludesResponse">
+
+Enumera todos los proyectos a los que tiene acceso el usuario autenticado dentro de la cuenta especificada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.projects.accountProjectsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.AccountProjectsIndexRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.invitedProjectsIndex(accountId, { ...params }) -> Frameio.ProjectsWithIncludesResponse">
+
+Enumera los proyectos de la cuenta especificada a los que se ha invitado al usuario actual, pero a cuyo espacio de trabajo no tiene acceso. Son proyectos en los que el usuario tiene acceso de colaborador específico del proyecto sin permisos más amplios de equipo o espacio de trabajo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.projects.invitedProjectsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.InvitedProjectsIndexRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Búsqueda {#search}
+
+<AccordionGroup>
+
+<Accordion title="client.search.search(accountId, { ...params }) -> Frameio.SearchResponse">
+
+Busca en recursos, carpetas y proyectos dentro de una cuenta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.search.search("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    engine: "nlp",
+    query: "red car driving on highway",
+    filters: {
+        files_and_version_stacks: true,
+        folders: false,
+        projects: false,
+    },
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.SearchParams`
+
+`requestOptions`: `Search.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Recursos compartidos {#shares}
+
+<AccordionGroup>
+
+<Accordion title="client.shares.show(accountId, shareId) -> Frameio.ShareResponse">
+
+Muestra un único recurso compartido (Share).<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.delete(accountId, shareId) -> void">
+
+Elimina un recurso compartido.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.update(accountId, shareId, { ...params }) -> Frameio.ShareResponse">
+
+Actualiza un recurso compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        access: "public",
+        description: "A descriptive summary of the share",
+        downloading_enabled: true,
+        expiration: "2026-01-22T17:04:53Z",
+        name: "Share Name",
+        passphrase: "as!dfj39sd(*",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateShareParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.listReviewers(accountId, shareId, { ...params }) -> core.Page<Frameio.User>">
+
+Enumera los revisores de un recurso compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.shares.listReviewers(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.shares.listReviewers(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.SharesListReviewersRequestreParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.addReviewers(accountId, shareId, { ...params }) -> void">
+
+Añade revisores a un recurso compartido seguro mediante tres tipos de identificador: `adobe_user_id`, `email` y `user_id`.
+Una solicitud solo puede incluir un parámetro de tipo de identificador.
+`email` es el único identificador que permite añadir a un Share revisores que no son miembros de Frame en la cuenta a la que pertenece el Share.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.addReviewers("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        message: "Please join my share!",
+        reviewers: {
+            emails: ["email1@domain.com", "email2@domain.com"],
+        },
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.AddReviewersToShareParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.removeReviewers(accountId, shareId, { ...params }) -> void">
+
+Quita revisores de un Share seguro mediante tres tipos de identificador: `adobe_user_id`, `email` y `user_id`.
+Una solicitud solo puede incluir un parámetro de tipo de identificador.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.removeReviewers("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        reviewers: {
+            adobe_user_ids: ["2A3C1A3D66C621B20A494021@176719f5667c82b4499999.e"],
+        },
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.RemoveReviewerParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.removeAsset(accountId, shareId, assetId) -> Frameio.RemoveAssetResponse">
+
+Quita de un recurso compartido un recurso que se encuentra actualmente en él.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.removeAsset(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`assetId`: `Frameio.Uuid` —
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.addAsset(accountId, shareId, { ...params }) -> Frameio.AddAssetResponse">
+
+Añade un nuevo recurso compartido de recursos.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.addAsset("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        asset_id: "0cc1cb59-1d7c-4176-8532-afe099897318",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.AddAssetParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.index(accountId, projectId, { ...params }) -> core.Page<Frameio.Share>">
+
+Enumera los recursos compartidos de un proyecto.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.shares.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.shares.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.SharesIndexRequest`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.create(accountId, projectId, { ...params }) -> Frameio.ShareResponse">
+
+Crea un recurso compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.shares.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        type: "asset",
+        access: "public",
+        asset_ids: ["12eb1446-5736-4f93-85fc-3b636f156211", "f23a3b3e-7b1f-4655-b91a-acf0566e5bb9"],
+        downloading_enabled: true,
+        expiration: "2026-01-22T17:04:53Z",
+        name: "Share Name",
+        passphrase: "as!dfj39sd(*",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateShareParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Usuarios {#users}
+
+<AccordionGroup>
+
+<Accordion title="client.users.show() -> Frameio.ProfileResponse">
+
+Consulta los detalles del usuario asociado al token de portador.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.users.show();
+```
+
+**Parámetros**
+`requestOptions`: `Users.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Pilas de versiones {#version-stacks}
+
+<AccordionGroup>
+
+<Accordion title="client.versionStacks.index(accountId, versionStackId, { ...params }) -> Frameio.AssetsWithIncludesResponse">
+
+Enumera los elementos secundarios (archivos) de una pila de versiones determinada.<br />
+Usa el parámetro de consulta include para incluir de forma selectiva propiedades adicionales en la respuesta.
+
+<Note>
+
+Si incluyes `media_links.original` y el usuario no tiene permiso para descargar archivos en el proyecto correspondiente, este endpoint responderá con un error `403 Forbidden`. Si el contenido no es accesible porque se requiere una marca de agua para este usuario y los media_links solicitados no la admiten, la solicitud se completará correctamente, pero los enlaces multimedia no admitidos se establecerán en null. Del mismo modo, si un enlace de transcodificación solicitado no existe para un archivo concreto (p. ej., `including media_links.video_h264_180` en un archivo de imagen estática) o el proceso de transcodificación no ha finalizado (es decir, el estado del archivo es “uploaded” en lugar de “transcoded”), el enlace multimedia también se establecerá en null en la carga útil de la respuesta. En resumen, el cliente debe gestionar correctamente los enlaces multimedia nulos.
+
+</Note>
+
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.versionStacks.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStacksIndexRequest`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.show(accountId, versionStackId, { ...params }) -> Frameio.VersionStackWithIncludesResponse">
+
+Muestra los detalles de una pila de versiones.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.versionStacks.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`versionStackId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStacksShowRequest`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.copy(accountId, versionStackId, { ...params }) -> Frameio.VersionStackCopyResponse">
+
+Copia una pila de versiones.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+Actualmente, no se admite copiar pilas de versiones entre proyectos respaldados por almacenamiento de Adobe. El método admitido para copiar pilas de versiones en estos proyectos consiste en copiar los archivos individuales de una pila de versiones y volver a apilarlos.
+
+```typescript title="usage"
+
+await client.versionStacks.copy("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    copy_metadata: true,
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`versionStackId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStackCopyParams`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.list(accountId, folderId, { ...params }) -> Frameio.VersionStacksWithIncludesResponse">
+
+Enumera las pilas de versiones de una carpeta determinada.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```typescript title="usage"
+
+await client.versionStacks.list("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStacksListRequest`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.create(accountId, folderId, { ...params }) -> Frameio.VersionStackWithIncludesResponse">
+
+Crea una nueva pila de versiones en la carpeta principal.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.versionStacks.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_ids: ["dd2a3cdd-fc90-41bd-a7b8-8a0447aec6d4", "79fed48a-8372-496e-8dcb-5e959b9b9fcf"],
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStackCreateParams`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.move(accountId, versionStackId, { ...params }) -> Frameio.VersionStackResponse">
+
+Mueve una pila de versiones a una carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+
+await client.versionStacks.move("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**Parámetros**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStackMoveParams`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Webhooks {#webhooks}
+
+<AccordionGroup>
+
+<Accordion title="client.webhooks.index(accountId, workspaceId, { ...params }) -> core.Page<Frameio.WebhookWithIncludes>">
+
+Enumera los webhooks del espacio de trabajo indicado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.webhooks.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include: "creator",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.webhooks.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WebhooksIndexRequest`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.create(accountId, workspaceId, { ...params }) -> Frameio.WebhookCreateResponse">
+
+Crea un único webhook con secreto.<br />
+Eventos válidos:
+
+`file.created`,<br />
+`file.deleted`,<br />
+`file.ready`,
+`file.updated`,
+`file.upload.completed`,
+`file.versioned`,
+`file.copied`,
+`folder.created`,
+`folder.deleted`,
+`folder.updated`,
+`folder.copied`,
+`comment.completed`,
+`comment.created`,
+`comment.deleted`,
+`comment.uncompleted`,
+`comment.updated`,
+`customfield.created`,
+`customfield.updated`,
+`customfield.deleted`,
+`metadata.value.updated`,
+`project.created`,
+`project.deleted`,
+`project.updated`,
+`collection.created`,
+`collection.updated`,
+`collection.deleted`,
+`share.created`,
+`share.updated`,
+`share.deleted`,
+`share.viewed`<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.webhooks.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        events: [
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name: "New Webhook",
+        url: "https://url.example.com",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WebhookCreateParams`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.show(accountId, webhookId, { ...params }) -> Frameio.WebhookWithIncludesResponse">
+
+Muestra los detalles de un webhook.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.webhooks.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`webhookId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WebhooksShowRequest`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.delete(accountId, webhookId) -> void">
+
+Elimina un webhook.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.webhooks.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`webhookId`: `Frameio.Uuid` —
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.update(accountId, webhookId, { ...params }) -> Frameio.WebhookResponse">
+
+Actualiza los detalles de un webhook.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.webhooks.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        active: true,
+        events: [
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name: "Updated Webhook",
+        url: "https://url.example.com",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`webhookId`: `Frameio.Uuid` —
+` `request`: `Frameio.WebhookUpdateParams\`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Permisos de espacio de trabajo {#workspace-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.workspacePermissions.index(accountId, workspaceId, { ...params }) -> core.Page<Frameio.UserRole>">
+
+Enumera los roles de usuario de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.workspacePermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.workspacePermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspacePermissionsIndexRequest`
+
+`requestOptions`: `WorkspacePermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspacePermissions.workspaceUserRolesDelete(accountId, workspaceId, userId) -> void">
+
+Quita a un usuario de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.workspacePermissions.workspaceUserRolesDelete(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`requestOptions`: `WorkspacePermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspacePermissions.workspaceUserRolesUpdate(accountId, workspaceId, userId, { ...params }) -> Frameio.UpdateUserRolesResponse">
+
+Actualiza los roles de usuario del espacio de trabajo indicado si el usuario ya se ha añadido al espacio de trabajo. Si el usuario no se ha añadido al espacio de trabajo, se añadirá con el rol indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.workspacePermissions.workspaceUserRolesUpdate(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        data: {
+            role: "editor",
+        },
+    },
+);
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateUserRolesParams`
+
+`requestOptions`: `WorkspacePermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Espacios de trabajo {#workspaces}
+
+<AccordionGroup>
+
+<Accordion title="client.workspaces.show(accountId, workspaceId, { ...params }) -> Frameio.WorkspaceWithIncludesResponse">
+
+Muestra los detalles de un espacio de trabajo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.workspaces.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspacesShowRequest`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.delete(accountId, workspaceId) -> void">
+
+Elimina un espacio de trabajo de la cuenta.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.workspaces.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.update(accountId, workspaceId, { ...params }) -> Frameio.WorkspaceResponse">
+
+Actualiza un espacio de trabajo.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.workspaces.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "My Workspace",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspaceParams`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.index(accountId, { ...params }) -> core.Page<Frameio.WorkspaceWithIncludes>">
+
+Enumera los espacios de trabajo de una cuenta determinada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+const response = await client.workspaces.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.workspaces.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspacesIndexRequest`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.create(accountId, { ...params }) -> Frameio.WorkspaceResponse">
+
+Crea un espacio de trabajo en una cuenta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```typescript title="usage"
+await client.workspaces.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "My Workspace",
+    },
+});
+```
+
+**Parámetros**
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspaceParams`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+### npm {#npm}
+
+<Info>
+
+Ver en [npm](https://www.npmjs.com/package/frameio)
+
+</Info>
+
+---

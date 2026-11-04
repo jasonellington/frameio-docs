@@ -1,0 +1,131 @@
+---
+title: "Inicio rápido"
+---
+
+Esta guía describe el camino más rápido para realizar tu primera llamada correcta a la API Frame.io V4. Crearás un proyecto en Adobe Developer Console, generarás credenciales y realizarás tu primera solicitud a la API.
+
+---
+
+## Paso 1: Crea un proyecto en tu Adobe Developer Console + añade la API Frame.io V4 {#step-1-create-a-project-in-your-adobe-developer-console-+-add-the-frame-io-v4-api}
+
+Desde [Adobe Developer Console](https://developer.adobe.com/developer-console/), crea un nuevo proyecto y añade la API Frame.io V4.
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-1.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+<Tip>
+
+Esta guía usa OAuth 2.0 Web App para la autenticación. Para obtener información sobre otros métodos de autenticación, consulta la **[Guía de autenticación](/es/platform/docs/guides/authentication/overview)**
+
+</Tip>
+
+## Paso 2: Configura tu aplicación {#step-2-configure-your-application}
+
+Selecciona OAuth Web App como tipo de aplicación y configura los campos de redirección.
+
+| **Redirect URI** | Una ruta de tu aplicación que recibe la respuesta OAuth de Adobe IMS. Después de que un usuario inicie sesión y apruebe el acceso, Adobe IMS lo redirige a esta URL con un código de autorización en la cadena de consulta, que tu aplicación intercambia después por un token de acceso |
+| --- | --- |
+| **Redirect URI pattern** | Patrones que coinciden con URL de redirección adicionales más allá del URI de redirección predeterminado. Es útil si tu aplicación se ejecuta en varios entornos o usa enrutamiento dinámico. Si hay varios patrones, deben proporcionarse como una lista separada por comas |
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-2.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+## Paso 3: Autenticación {#step-3-authentication}
+
+Inicia el flujo OAuth redirigiendo al usuario al endpoint de autorización de Adobe IMS:
+
+```
+  https://ims-na1.adobelogin.com/ims/authorize/v2
+  ?client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}
+  &scope=offline_access,openid,email,profile,additional_info.roles
+  &response_type=code
+```
+
+Después de que el usuario inicie sesión y apruebe el acceso, Adobe IMS lo redirige de vuelta al URI de redirección configurado con un código de autorización en la cadena de consulta. Intercambia ese código por un token de acceso enviando una solicitud POST al endpoint de tokens de IMS.
+
+<br />
+
+Esta es una lista de definiciones de parámetros junto con una solicitud y una respuesta de ejemplo:
+
+| Parámetro | Obligatorio | Descripción |
+| --- | --- | --- |
+| **code** | Sí | El valor de la cadena de consulta code devuelta a tu `redirect_uri` cuando un usuario se autentica con tu aplicación |
+| **grant_type** | Sí | El valor siempre debe ser `authorization_code` |
+| **authorization** | Obligatorio para clientes confidenciales | La cadena del encabezado de autenticación `Basic`. Es la palabra literal `Basic` seguida de la cadena codificada en Base64 de tu `clientID:clientSecret` |
+
+**Solicitud de ejemplo**
+
+```
+curl -X POST 'https://ims-na1.adobelogin.com/ims/token/v3' \
+  -H 'Authorization: Basic {AUTHORIZATION}' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'code={CODE}&grant_type=authorization_code'
+```
+
+**Respuesta de ejemplo**
+
+```
+{
+    "access_token": "{ACCESS_TOKEN}",
+    "refresh_token": "{REFRESH_TOKEN}",
+    "sub": "B0DC108C5CD449CA0A494133@c62f24cc5b5b7e0e0a494004",
+    "id_token": "{ID_TOKEN}",
+    "token_type": "bearer",
+    "expires_in": 86399
+}
+```
+
+<Tip>
+
+**Compatibilidad con SDK**
+
+Tanto el SDK de Python como el de TypeScript incluyen módulos de autenticación que gestionan el intercambio OAuth, el canje de tokens y la actualización automática de tokens. Puedes encontrar más información sobre cada uno aquí:
+[**Python**](/es/platform/docs/sdk-reference/python-sdk-reference)  | [**TypeScript**](/es/platform/docs/sdk-reference/type-script-sdk-reference)
+
+</Tip>
+
+---
+
+## Paso 4: Realiza tus primeras solicitudes a la API {#step-4-make-your-first-api-requests}
+
+Con tu token de acceso, empieza llamando al endpoint [`/v4/me`](/es/platform/api-reference/users/show):
+
+```
+curl https://api.frame.io/v4/me \
+-H "Authorization: Bearer <token>"
+```
+
+Esta solicitud llama a la <Tooltip tip="Para obtener más información sobre Adobe IMS, consulta la **[Referencia de la API](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#request-2)**">**API de Adobe IMS**</Tooltip> para verificar tu token y la información del usuario.
+
+Una solicitud correcta devuelve detalles sobre el usuario autenticado, incluidos `user_id`, el nombre y el correo electrónico. Úsala para confirmar que tu flujo de autenticación funciona como se espera.
+
+La mayoría de los endpoints de la API V4 requieren un `account_id`, que `/v4/me` no devuelve. Para obtener tu `account_id`, realiza una solicitud a [`/v4/accounts`](/es/platform/api-reference/accounts/index):
+
+```
+curl https://api.frame.io/v4/accounts \
+-H "Authorization: Bearer <token>"
+```
+
+Esto devuelve la lista de cuentas disponibles para el usuario autenticado. Usa el `account_id` de esta respuesta en las solicitudes posteriores a la API.
+
+<Tip>
+
+**User ID frente a Account ID**
+
+Tu **`user_id`** te identifica como persona, y tu **`account_id`** representa la organización a la que perteneces. La mayoría de los endpoints de V4 funcionan a nivel de cuenta.
+
+</Tip>
+
+---
+
+## Próximos pasos {#next-steps}
+
+Con la autenticación configurada y tu `account_id`, ya puedes empezar a trabajar con la API de Frame.io. Estos recursos pueden ayudarte a empezar:
+
+- [Guía de autenticación](/es/platform/docs/guides/authentication/overview)
+- [Cuentas, proyectos y espacios de trabajo](/es/platform/docs/guides/accounts-projects-and-workspaces)
+- [Referencia de la API](/es/platform/api-reference/account-permissions/account-user-roles-update)
+- [Colección de Postman](/es/platform/docs/guides/postman-collection)

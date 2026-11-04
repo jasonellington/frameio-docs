@@ -1,0 +1,540 @@
+---
+title: "SDK de TypeScript de Frame.io: guía de autenticación"
+sidebarTitle: "SDK de Typescript"
+---
+
+Esta guía explica cómo autenticarse en la API de Frame.io con el **SDK de TypeScript de Frame.io** (`frameio`). La API V4 de Frame.io utiliza [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/), la plataforma de identidad OAuth 2.0 de Adobe.
+
+Esta es una referencia independiente para desarrolladores de TypeScript/JavaScript. Todos los ejemplos de código y flujos que aparecen a continuación son exclusivamente para el paquete `frameio`.
+
+---
+
+## Tipos de autenticación en el SDK de TypeScript {#authentication-types-in-the-typescript-sdk}
+
+El SDK de TypeScript admite cuatro clases de autenticación OAuth, además del uso directo de tokens:
+
+| Método | Caso de uso | ¿Interacción del usuario? | ¿Requiere client secret? |
+| --- | --- | --- | --- |
+| **Token estático** | Scripts rápidos, pruebas, o cuando ya tienes un token | No | No |
+| **Server-to-Server** | Servicios de backend, cron jobs, automatización | No | Sí |
+| **Web App** | Aplicaciones del lado del servidor (Express, Fastify, Next.js) | Sí | Sí |
+| **SPA (PKCE)** | Aplicaciones de navegador que no pueden almacenar un secreto | Sí | No |
+| **Native App (PKCE)** | Aplicaciones de escritorio/móviles con redirecciones mediante esquemas de URI personalizados | Sí | No |
+
+**Server-to-Server** permite que tu aplicación actúe como una cuenta de servicio sin interacción del usuario. Solo está disponible para las cuentas de Frame.io V4 administradas a través de [Adobe Admin Console](https://adminconsole.adobe.com/).
+
+**Web App** y **SPA** permiten que tu aplicación actúe como un usuario concreto. Ambos utilizan Adobe IMS internamente: el usuario autoriza tu aplicación y el SDK intercambia el código resultante por tokens. El SDK de TypeScript gestiona por ti el flujo `/authorize/v2` y `/token/v3` de IMS. Para Web App necesitas un client secret; para SPA se usa [PKCE](https://datatracker.ietf.org/doc/html/rfc7636) en su lugar.
+
+**Native App** sigue el mismo flujo PKCE que SPA, pero utiliza el URI de redirección `adobe+<hash>://callback` que Adobe asigna a tu credencial Native App. Esto permite que tu aplicación intercepte la redirección a nivel del sistema operativo tras la autorización.
+
+---
+
+## Usuarios de cuenta de servicio {#service-account-users}
+
+Cuando usas la autenticación Server-to-Server, tu aplicación actúa como un **usuario de cuenta de servicio**, un tipo de cuenta independiente que puede realizar acciones en nombre del servicio. Son visibles para los demás usuarios de Frame.io: cuando una cuenta de servicio realiza una acción, su nombre se muestra en la interfaz.
+
+Puedes conceder y revocar el acceso de las cuentas de servicio a través de [Adobe Admin Console](https://adminconsole.adobe.com/) y [Developer Console](https://developer.adobe.com/console). Los nombres de las cuentas de servicio se gestionan desde la interfaz de Frame.io. De forma predeterminada, tu primera conexión S2S se llama **Service Account User**, la segunda **Service Account User 2**, y así sucesivamente.
+
+<Info>
+
+Consulta [Automate your setup using Frame.io server to server
+support](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html) para obtener más información.
+
+</Info>
+
+---
+
+## Inicio rápido {#quick-start}
+
+### Requisitos previos {#prerequisites}
+
+1. **Credenciales** de [Adobe Developer Console](https://developer.adobe.com/console):
+
+   - **Client ID**: necesario para todos los flujos OAuth
+   - **Client Secret**: necesario para los flujos Server-to-Server y Web App
+   - **Redirect URI**: necesario para los flujos Web App, SPA y Native App; debe estar registrado en tu proyecto de Adobe
+
+2. **Instala el SDK:**
+
+```bash
+npm install frameio
+```
+
+### Elegir un método {#choosing-a-method}
+
+- **¿No interviene ningún usuario?** Usa **Server-to-Server** (`ServerToServerAuth`).
+- **¿Interviene un usuario y puedes almacenar un secreto?** Usa **Web App** (`WebAppAuth`).
+- **¿Interviene un usuario pero no puedes almacenar un secreto?** Usa **SPA** (`SPAAuth`) para aplicaciones de navegador o **Native App** (`NativeAppAuth`) para aplicaciones de escritorio/móviles.
+
+---
+
+## Token de acceso {#access-token}
+
+Si ya tienes un token de acceso (de otro sistema OAuth o de un intercambio anterior, por ejemplo a través de nuestro [API Explorer](/es/platform/api-reference/accounts/index?explorer=true)), puedes pasarlo directamente:
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: "YOUR_ACCESS_TOKEN" });
+```
+
+Este es el enfoque más sencillo, pero el token acabará caducando y el SDK no lo renovará por ti.
+
+### Tokens de desarrollador legacy {#legacy-developer-tokens}
+
+Para las cuentas migradas a V4 que todavía no se administran a través de [Adobe Admin Console](https://adminconsole.adobe.com/), puedes seguir usando los tokens de desarrollador legacy del [sitio para desarrolladores de Frame.io](https://developer.frame.io/app/tokens). Debes incluir el encabezado `x-frameio-legacy-token-auth` con el valor `true`:
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({
+    token: "YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers: { "x-frameio-legacy-token-auth": "true" },
+});
+```
+
+Los tokens de desarrollador legacy no caducan, pero son un mecanismo de transición. Para nuevas integraciones y cargas de trabajo en producción, recomendamos usar uno de los flujos OAuth 2.0 que se describen a continuación. Consulta la [Guía de migración](/es/platform/docs/resources/migration#authentication) para más detalles.
+
+---
+
+## Server-to-Server (Client Credentials) {#server-to-server-client-credentials}
+
+Usa este flujo para servicios de backend y scripts que necesitan acceder a Frame.io sin interacción del usuario. Este flujo solo está disponible para las cuentas de Frame.io V4 administradas a través de [Adobe Admin Console](https://adminconsole.adobe.com/). Tu aplicación se autentica como un [usuario de cuenta de servicio](#service-account-users) sin intervención humana.
+
+```typescript
+import { FrameioClient, ServerToServerAuth } from "frameio";
+
+const auth = new ServerToServerAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+});
+
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+Eso es todo. `auth.getToken()` es una función asíncrona que el SDK invoca en cada solicitud. Si el token actual sigue siendo válido, lo devuelve de inmediato. Si está a punto de caducar, primero obtiene uno nuevo, de forma totalmente transparente.
+
+### Cómo funciona {#how-it-works}
+
+Tus client credentials (client ID + secret) **nunca caducan**. Solo las rotas manualmente por buenas prácticas de seguridad. S2S te ofrece un acceso a la API prácticamente permanente e ininterrumpido, sin ninguna intervención manual.
+
+Internamente:
+
+1. En la primera llamada a la API, `getToken()` solicita un nuevo token de acceso a Adobe IMS mediante el grant `client_credentials`.
+2. El token se almacena en caché en memoria. Cada token de acceso caduca (normalmente a las 24 horas), pero esto se gestiona por ti.
+3. Cuando un token en caché entra en el margen de renovación (de forma predeterminada, 60 segundos antes de caducar), el SDK obtiene automáticamente uno nuevo con las mismas client credentials.
+4. No intervienen refresh tokens. Las propias client credentials son el secreto de larga duración y siempre pueden usarse para emitir un nuevo token de acceso.
+
+### Autenticación explícita {#explicit-authentication}
+
+Si quieres obtener el token por adelantado (por ejemplo, para detectar enseguida credenciales incorrectas al iniciar):
+
+```typescript
+const auth = new ServerToServerAuth({ clientId: "...", clientSecret: "..." });
+await auth.authenticate(); // throws AuthenticationError if credentials are invalid
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+---
+
+## Web App (Authorization Code) {#web-app-authorization-code}
+
+Usa este flujo para aplicaciones del lado del servidor en las que los usuarios inician sesión con su Adobe ID. Este flujo requiere un client secret, que debe almacenarse de forma segura en tu servidor.
+
+<Steps>
+
+<Step title="Redirige al usuario a Adobe IMS">
+
+```typescript
+import { WebAppAuth } from "frameio";
+import crypto from "crypto";
+
+const auth = new WebAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+    redirectUri: "https://yourapp.com/callback",
+});
+
+// Generate a cryptographically random state value to prevent CSRF attacks
+const state = crypto.randomBytes(32).toString("hex");
+
+const authorizationUrl = auth.getAuthorizationUrl({ state });
+// Store `state` in the user's session, then redirect them to `authorizationUrl`
+```
+
+</Step>
+
+<Step title="Gestiona el callback">
+
+Cuando Adobe IMS redirija al usuario de vuelta a tu `redirectUri`, extrae los parámetros `code` y `state`. Verifica que el state coincide con el que almacenaste y, a continuación, intercambia el código por tokens:
+
+```typescript
+// In your callback handler (e.g. an Express route):
+await auth.exchangeCode(req.query.code as string);
+```
+
+Esto intercambia el código de autorización por un token de acceso y un refresh token, y almacena ambos internamente.
+
+</Step>
+
+<Step title="Usa el cliente">
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+Eso es todo. A partir de este momento, `getToken()` gestiona automáticamente el ciclo de vida del token. Cuando el token de acceso está a punto de caducar, el SDK usa el refresh token para obtener uno nuevo. No se requiere interacción del usuario.
+
+</Step>
+
+</Steps>
+
+### Ejemplo completo con Express {#full-express-example}
+
+```typescript
+import crypto from "crypto";
+import express from "express";
+import session from "express-session";
+import { FrameioClient, WebAppAuth } from "frameio";
+
+const auth = new WebAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+    redirectUri: "http://localhost:3000/callback",
+});
+
+const app = express();
+app.use(session({ secret: crypto.randomBytes(32).toString("hex"), resave: false, saveUninitialized: false }));
+
+app.get("/login", (req, res) => {
+    const state = crypto.randomBytes(32).toString("hex");
+    (req.session as any).oauthState = state;
+    res.redirect(auth.getAuthorizationUrl({ state }));
+});
+
+app.get("/callback", async (req, res) => {
+    if (req.query.state !== (req.session as any).oauthState) {
+        return res.status(403).send("Invalid state parameter");
+    }
+
+    await auth.exchangeCode(req.query.code as string);
+
+    const client = new FrameioClient({ token: () => auth.getToken() });
+    const accounts = await client.accounts.index();
+    res.json(accounts);
+});
+
+app.listen(3000);
+```
+
+---
+
+## Single Page App / PKCE (Authorization Code + PKCE) {#single-page-app-/-pkce-authorization-code-+-pkce}
+
+Usa este flujo para aplicaciones basadas en navegador, aplicaciones de escritorio o herramientas de línea de comandos que no pueden almacenar un client secret de forma segura. Este flujo utiliza [PKCE (RFC 7636)](https://datatracker.ietf.org/doc/html/rfc7636) para proteger el intercambio del código de autorización.
+
+<Steps>
+
+<Step title="Genera la URL de autorización">
+
+```typescript
+import { SPAAuth } from "frameio";
+
+const auth = new SPAAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "https://yourapp.com/callback",
+});
+
+const state = crypto.randomUUID();
+const result = await auth.getAuthorizationUrl({ state });
+// result.url            -> redirect the user here
+// result.codeVerifier   -> store this securely until the callback
+```
+
+`getAuthorizationUrl` devuelve un `AuthorizationUrlResult` que contiene la URL completa (con el `code_challenge` de PKCE incrustado) y el `codeVerifier` que necesitarás en el siguiente paso.
+
+</Step>
+
+<Step title="Intercambia el código con el verifier">
+
+Cuando el usuario sea redirigido de vuelta:
+
+```typescript
+await auth.exchangeCode({
+    code: "CODE_FROM_CALLBACK",
+    codeVerifier: result.codeVerifier,
+});
+```
+
+</Step>
+
+<Step title="Usa el cliente">
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+Eso es todo. La renovación funciona igual que en Web App: el SDK usa el refresh token automáticamente. La diferencia es que no se envía ningún client secret durante la renovación, ya que el flujo SPA está diseñado para clientes públicos.
+
+</Step>
+
+</Steps>
+
+<Warning>
+
+El `codeVerifier` debe almacenarse de forma segura en el lado del cliente entre la solicitud de autorización y el
+intercambio del código. Usa `sessionStorage` o un equivalente en las aplicaciones de navegador.
+
+</Warning>
+
+---
+
+## Native App (Authorization Code + PKCE) {#native-app-authorization-code-+-pkce}
+
+Usa este flujo para aplicaciones de escritorio y móviles. Cuando creas una credencial Native App en [Adobe Developer Console](https://developer.adobe.com/console), Adobe te asigna un URI de redirección con el formato `adobe+<hash>://callback`; registras tu aplicación para que gestione ese esquema de URI personalizado a nivel del sistema operativo. También se admiten redirecciones loopback (`http://127.0.0.1:<port>/callback`) para el desarrollo local. El flujo es idéntico al de SPA: utiliza PKCE sin client secret.
+
+```typescript
+import { NativeAppAuth } from "frameio";
+
+const auth = new NativeAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "adobe+abc123def456://callback", // from your Adobe Developer Console Native App credential
+    // Also supports loopback: "http://127.0.0.1:8080/callback"
+});
+
+const { url, codeVerifier } = await auth.getAuthorizationUrl({
+    state: crypto.randomUUID(),
+});
+
+// Open system browser to `url`
+// Listen for redirect on your custom URI scheme or loopback server
+
+await auth.exchangeCode({ code: "CODE_FROM_REDIRECT", codeVerifier });
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+### Reglas de los URI de redirección {#redirect-uri-rules}
+
+Adobe aplica reglas a los URI de redirección en dos momentos: cuando registras la credencial en [Adobe Developer Console](https://developer.adobe.com/console) y cuando el parámetro `redirect_uri` llega al endpoint `/authorize/v2`. El valor que pasas a `redirectUri` en este SDK debe coincidir con uno de los "Redirect URI patterns" que registraste en la credencial; de lo contrario, Adobe redirige al Default Redirect URI de la credencial.
+
+- Las credenciales **Web App** y **SPA** requieren HTTPS.
+- Las credenciales **Native App** usan una redirección sin HTTPS, normalmente el URI `adobe+<hash>://callback` que se muestra en Developer Console para la credencial.
+
+Consulta [Adobe Developer Console](https://developer.adobe.com/console) para conocer los patrones exactos aceptados para tu credencial.
+
+<Note>
+
+El SDK de Python no incluye una clase de credencial Native App, ya que Python no tiene una forma estándar de registrar
+manejadores de esquemas de URI personalizados. El SDK de TypeScript admite los cuatro tipos de credenciales, incluida Native App.
+
+</Note>
+
+---
+
+## Renovación manual de tokens {#manual-token-refresh}
+
+En los flujos Web App, SPA y Native App, el SDK renueva los tokens automáticamente mediante `getToken()`. Si necesitas un control explícito, puedes llamar directamente a `refresh()`:
+
+```typescript
+await auth.refresh(); // fetches a new access token using the refresh token
+```
+
+Esto resulta útil cuando quieres forzar una renovación antes de una operación crítica en lugar de depender del margen de renovación automática.
+
+`refresh()` está disponible en `WebAppAuth`, `SPAAuth` y `NativeAppAuth`. Lanza `ConfigurationError` si no hay ningún refresh token disponible (es decir, primero debes llamar a `exchangeCode()`). `ServerToServerAuth` no tiene un método `refresh()`; en su lugar, usa `authenticate()` para obtener un nuevo token mediante las client credentials.
+
+---
+
+## Persistencia de tokens {#token-persistence}
+
+Todas las clases de autenticación admiten `exportTokens()` e `importTokens()` para conservar el estado de los tokens entre reinicios. En los flujos Web App, SPA y Native App esto es especialmente importante, ya que los tokens de acceso y de renovación se guardan en memoria de forma predeterminada: si tu aplicación se reinicia, los usuarios tendrían que volver a autenticarse a menos que los conserves. En Server-to-Server, la persistencia es opcional (las client credentials siempre pueden emitir un nuevo token), pero importar un token en caché evita una solicitud adicional al iniciar.
+
+### Exportar e importar {#export-and-import}
+
+```typescript
+// After exchangeCode(), save the token state
+const tokenData = auth.exportTokens();
+// tokenData is: { access_token: "...", refresh_token: "...", expires_at: 1234567890.0 }
+// Save it to your database, file, or secret store
+
+// On next startup, restore it
+auth.importTokens(tokenData);
+const client = new FrameioClient({ token: () => auth.getToken() });
+// The SDK will automatically refresh if the token is near expiry
+```
+
+<Warning>
+
+Almacena los tokens exportados de forma segura. Contienen tokens de acceso y de renovación que conceden acceso a la API. Evita escribir tokens
+en archivos de texto plano en producción.
+
+</Warning>
+
+### Persistencia automática con `onTokenRefreshed` {#automatic-persistence-with-ontokenrefreshed}
+
+Para conservar los tokens automáticamente cada vez que se renuevan, usa el callback `onTokenRefreshed`:
+
+```typescript
+import fs from "fs/promises";
+
+const TOKEN_FILE = "tokens.json";
+
+const auth = new WebAppAuth({
+    clientId: "...",
+    clientSecret: "...",
+    redirectUri: "...",
+    onTokenRefreshed: (tokens) => {
+        fs.writeFile(TOKEN_FILE, JSON.stringify(tokens));
+    },
+});
+
+// On startup, restore if available
+try {
+    const saved = JSON.parse(await fs.readFile(TOKEN_FILE, "utf-8"));
+    auth.importTokens(saved);
+} catch {
+    // No saved tokens — user will need to authenticate
+}
+```
+
+El callback recibe la misma estructura que `exportTokens()` y se ejecuta después de cada renovación de token correcta.
+
+---
+
+## Revocar tokens {#revoking-tokens}
+
+Para cerrar la sesión de un usuario e invalidar sus tokens en Adobe IMS:
+
+```typescript
+await auth.revoke();
+```
+
+Esto envía dos solicitudes de revocación best-effort a Adobe IMS, una para el token de acceso y otra para el refresh token, en paralelo, y borra todo el estado local de los tokens. Para los clientes confidenciales (`WebAppAuth`), las solicitudes de revocación usan HTTP Basic Auth; para los clientes públicos (`SPAAuth`, `NativeAppAuth`), el `client_id` se envía como parámetro de consulta. Los errores de revocación se registran, pero no se lanzan. Tras la revocación, el usuario tendrá que volver a autenticarse.
+
+---
+
+## Gestión de errores {#error-handling}
+
+Todos los errores de autenticación heredan de `FrameioAuthError`, por lo que puedes capturarlos de forma general o gestionar casos concretos:
+
+```typescript
+import {
+    FrameioAuthError,
+    AuthenticationError,
+    TokenExpiredError,
+    ConfigurationError,
+    NetworkError,
+    RateLimitError,
+} from "frameio";
+
+try {
+    await auth.exchangeCode("...");
+} catch (error) {
+    if (error instanceof TokenExpiredError) {
+        // The refresh token has expired; redirect the user to sign in again
+    } else if (error instanceof AuthenticationError) {
+        // Token exchange failed
+        console.error(`Error: ${error.errorCode} - ${error.errorDescription}`);
+    } else if (error instanceof NetworkError) {
+        // Timeout or connection failure (after retries)
+    } else if (error instanceof RateLimitError) {
+        // 429 from Adobe IMS; retry after error.retryAfter seconds
+    } else if (error instanceof FrameioAuthError) {
+        // Catch-all for any other auth error
+    }
+}
+```
+
+### Referencia de errores {#error-reference}
+
+| Excepción | Cuándo se lanza |
+| --- | --- |
+| `ConfigurationError` | Configuración ausente o no válida (p. ej., `clientId` vacío, URI de redirección sin HTTPS, `imsBaseUrl` sin HTTPS) |
+| `AuthenticationError` | Adobe IMS rechaza el intercambio o la renovación del token (incluye `.errorCode` y `.errorDescription`) |
+| `TokenExpiredError` | El propio refresh token ha caducado; el usuario debe volver a autenticarse |
+| `NetworkError` | Tiempo de espera HTTP agotado o error de conexión tras todos los reintentos |
+| `RateLimitError` | Adobe IMS devolvió 429; consulta `.retryAfter` para saber cuánto esperar |
+| `PKCEError` | Disponible para uso propio en los flujos PKCE; el SDK no la lanza internamente |
+
+### Gestionar refresh tokens caducados en producción {#handling-expired-refresh-tokens-in-production}
+
+<Warning>
+
+En los flujos Web App, SPA y Native App, el refresh token acabará caducando. Cuando eso ocurra, `getToken()`
+lanzará `TokenExpiredError`. Debes capturarlo y volver a llevar al usuario por el flujo de autorización.
+
+</Warning>
+
+```typescript
+import { TokenExpiredError } from "frameio";
+
+try {
+    const client = new FrameioClient({ token: () => auth.getToken() });
+    const assets = await client.files.list({ projectId: "..." });
+} catch (error) {
+    if (error instanceof TokenExpiredError) {
+        // Clear persisted tokens and redirect user to login
+        await auth.revoke();
+        return res.redirect("/login");
+    }
+}
+```
+
+---
+
+## Referencia de configuración {#configuration-reference}
+
+Estos parámetros tienen valores predeterminados razonables y rara vez es necesario configurarlos. Si necesitas personalizar el comportamiento (apuntar a un IMS de staging, inyectar un `fetch` personalizado, ajustar los tiempos de espera o conectar un logger), pásalos como parámetros opcionales al construir la clase de autenticación:
+
+| Parámetro | Valor predeterminado | Descripción |
+| --- | --- | --- |
+| `scopes` | Valores predeterminados según el flujo | Scopes de OAuth separados por espacios. S2S usa por defecto `openid AdobeID frame.s2s.all`; los flujos con usuario usan por defecto `openid email profile offline_access additional_info.roles`. |
+| `imsBaseUrl` | `https://ims-na1.adobelogin.com` | URL base de Adobe IMS. Sobrescríbela para entornos de staging o que no sean de producción. Debe usar HTTPS. |
+| `fetch` | `globalThis.fetch` | Implementación personalizada de `fetch` para proxy, mTLS o gestión HTTP personalizada. |
+| `timeout` | `30000` | Tiempo de espera de las solicitudes HTTP, en milisegundos, para las llamadas al endpoint de tokens. |
+| `maxRetries` | `2` | Número máximo de reintentos ante fallos transitorios (5xx, tiempos de espera agotados). Los reintentos por límite de frecuencia (429) se contabilizan por separado. |
+| `refreshBuffer` | `60` | Segundos antes de la caducidad del token en los que se activa la renovación proactiva. |
+| `onTokenRefreshed` | `undefined` | Callback que se ejecuta después de cada renovación de token correcta. Recibe un objeto con `access_token`, `refresh_token` y `expires_at`. |
+| `logger` | No-op (silencioso) | Instancia de logger con los métodos `debug`, `info`, `warn` y `error` (p. ej., `console`, `pino`, `winston`). |
+
+### Entornos de staging {#staging-environments}
+
+Apunta a una instancia de Adobe IMS de staging sobrescribiendo `imsBaseUrl`. El SDK también exporta `DEFAULT_IMS_BASE_URL` (`https://ims-na1.adobelogin.com`) por si necesitas hacer referencia al valor de producción mediante programación.
+
+```typescript
+const auth = new ServerToServerAuth({
+    clientId: "...",
+    clientSecret: "...",
+    imsBaseUrl: "https://ims-na1-stg1.adobelogin.com",
+});
+```
+
+### Fetch personalizado {#custom-fetch}
+
+Para admitir proxies o una configuración TLS personalizada:
+
+```typescript
+import { ProxyAgent } from "undici";
+
+const proxyAgent = new ProxyAgent("http://corporate-proxy:8080");
+
+const auth = new ServerToServerAuth({
+    clientId: "...",
+    clientSecret: "...",
+    fetch: (url, init) => fetch(url, { ...init, dispatcher: proxyAgent }),
+});
+```
+
+---
+
+## Seguridad en concurrencia {#concurrency-safety}
+
+El SDK de TypeScript es seguro para su uso concurrente. Cuando se producen varias llamadas simultáneas a `getToken()` y se necesita una renovación, solo se envía una solicitud de renovación. Las demás esperan la misma promesa y reciben el mismo resultado. No se requiere ningún bloqueo externo.
+
+Esta deduplicación aprovecha el bucle de eventos de un solo hilo de JavaScript y una `Promise` compartida: si ya hay una renovación en curso, las llamadas concurrentes se unen a ella en lugar de iniciar una segunda solicitud.
+
+Si se llama a `revoke()` mientras hay una renovación en curso, la renovación se rechaza con un `AuthenticationError` y los tokens permanecen borrados: la revocación siempre prevalece.

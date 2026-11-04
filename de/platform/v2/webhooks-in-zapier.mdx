@@ -1,0 +1,132 @@
+---
+title: "Webhooks in Zapier"
+---
+
+## Überblick {#overview}
+
+In diesem Leitfaden erstellen Sie ein Webhook-Ereignis für ein Team in Frame.io und verwenden es, um einen Payload an [Zapier](https://zapier.com) zu senden. In diesem Szenario fungiert Zapier als Vermittler – es kann den Hook von Frame.io „abfangen“ und die Daten aus diesem Hook dann für die Interaktion mit anderen Systemen verwenden.
+
+In vielen Fällen unterstützt die Zapier-Integration von Frame.io native „Triggers“, die Daten aus Frame.io ohne manuelle Webhook-Verwaltung abrufen (z. B. wenn ein Asset erstellt wird). In diesem Leitfaden konzentrieren wir uns auf einen Workflow, der derzeit nicht durch einen nativen Trigger unterstützt wird: das Reagieren auf die Erstellung eines neuen Projects in Frame.io.
+
+Zunächst richten wir einen Webhook ein, der eine Benachrichtigung auslöst, wenn in einem Team in Frame.io ein neues Project erstellt wird. Anschließend verwenden wir die Zapier-App von Frame.io, um die Benachrichtigung abzufangen und einige Informationen über das Project an ein Google Sheet weiterzuleiten.
+
+<Info>
+
+**Schritt für Schritt mitmachen**
+
+Bei diesem Leitfaden wechseln Sie häufiger zwischen Frame.io und Zapier hin und her. Für optimale Ergebnisse empfehlen wir, beide Apps nebeneinander zu öffnen, während Sie den Schritten folgen.
+
+</Info>
+
+### Was Sie benötigen {#things-you’ll-need}
+
+Bevor Sie beginnen, benötigen Sie drei Dinge:
+
+1. Zugriff auf einen Frame.io-Account (damit Sie ein Token erstellen können)
+2. Team-Manager- oder Admin-Zugriff auf ein Team in Frame.io (damit Sie einen Webhook erstellen können)
+3. Einen Zapier-Account.
+
+Um die ersten beiden Punkte zu überprüfen, rufen Sie [developer.frame.io](/de/platform/v2) auf und melden Sie sich an. Wenn Sie die Menüpunkte „Tokens“ und „Webhooks“ (siehe unten) nicht sehen, wenden Sie sich bitte an Ihren Frame.io-Account-Ansprechpartner.
+
+![Tools on Frame.io Developer Site](/images/platform/v2/webhooks-in-zapier/532acdfe86b5d1062e4c0910d46f517391c6d3ce397a444c9a7c70d4844777c6.webp)
+
+## Schritt 1: Ein API-Token erstellen {#step-1-create-an-api-token}
+
+Um diesen Leitfaden abzuschließen, benötigen Sie ein API-Token, dessen [Scope](/de/platform/v2/authentication) dem Scope des Webhooks entspricht, den wir senden werden. Wenn Sie bereits ein mit Zapier verbundenes Token haben, das den unten genannten Scope enthält, können Sie einfach dieses verwenden. Falls nicht:
+
+Geben Sie Ihrem neuen Token einen aussagekräftigen Namen und wählen Sie den folgenden Scope aus:
+
+- **Projects:** Read
+
+## Schritt 2: Einen Webhook in Zapier erstellen {#step-2-create-a-webhook-in-zapier}
+
+**In Zapier:** Wählen Sie die Trigger-App „**Webhooks by Zapier**“ und als gewünschte Trigger-Aktion „**Catch Hook**“.
+
+![Trigger selection in Zapier](/images/platform/v2/webhooks-in-zapier/4548e8f93431a9ffad637e3085f495a91ba3afb3493c4e7922a3791ff72c2660.webp)
+
+Überspringen Sie nach dem Speichern den nächsten optionalen Schritt. Sie sollten dann einen Bildschirm mit einer URL sehen, die mit `https://hooks.zapier.com/...` beginnt.
+
+![Enter URL in Zapier](/images/platform/v2/webhooks-in-zapier/11e5976804ba8b3a9f980bdfbe603bd5a0b8732b9d9852067fe2f53c0d3c27f3.webp)
+
+**Auf diesem Bildschirm:**
+
+1. Kopieren Sie diese URL
+2. Lassen Sie Zapier geöffnet
+3. Wechseln Sie in einem separaten Tab oder Fenster zurück zu Frame.io Developer.
+
+## Schritt 3: Das Webhook-Ereignis in Frame.io einrichten {#step-3-set-up-the-webhook-event-in-frame-io}
+
+**Zurück in Frame.io Developer:** Rufen Sie [Webhooks](https://developer.frame.io/webhooks) auf und erstellen Sie einen neuen Webhook mit:
+
+1. Einem aussagekräftigen Namen.
+2. Der URL, die Sie im vorherigen Schritt kopiert haben.
+3. Dem Team, für das dieser Hook funktionieren soll.
+4. Dem Frame.io-Ereignis, das Sie mit dem Hook verknüpfen möchten (für diesen Leitfaden: Projects -> Created).
+
+![New webhook](/images/platform/v2/webhooks-in-zapier/c72e9b4cb11c6cc2644cfe830e15439ef3c460a52831b286af2db7e31f30b891.webp)
+
+Speichern Sie Ihren neuen Webhook mit der Schaltfläche **Create** und kehren Sie zu Zapier zurück.
+
+## Schritt 4: Einen Test-Hook senden {#step-4-send-a-test-hook}
+
+**Zur Zusammenfassung – wir haben jetzt:**
+
+1. Eine Webhook-Konfiguration in Frame.io, die ausgelöst wird, wenn Sie in einem bestimmten Team ein Project erstellen.
+2. Einen Webhook-Trigger in Zapier, der ein neues Project von Frame.io erwartet.
+
+Jetzt senden wir unsere Daten tatsächlich an Zapier, indem wir ein Project erstellen.
+
+### a) In Zapier: Das Abfangen des Webhooks vorbereiten {#a-in-zapier-prepare-to-catch-the-webhook}
+
+Klicken Sie auf dem Bildschirm, der aus Schritt 2 noch geöffnet ist, auf „**Ok, I did this.**“ Dadurch wird Zapier darauf vorbereitet, ein Ereignis unter der angegebenen URL abzufangen.
+
+![webhook](/images/platform/v2/webhooks-in-zapier/991de8bcd401ac6cfa4174f640e7a56bb146a05114524be23cc7759769af492e.webp)
+
+### b) In Frame.io: Ein neues Project erstellen {#b-in-frame-io-create-a-new-project}
+
+Erstellen Sie im konfigurierten Team ein neues Project – mit beliebigen Einstellungen.
+
+Dadurch wird ein Webhook gesendet, der dann von Zapier abgefangen wird. Daraufhin sollten Sie in Zapier eine Bestätigung über einen neuen Hook sehen. Wenn Sie diese aufklappen, sollten Sie den vollständigen Webhook-Payload von Frame.io sehen.
+
+**Glückwunsch**! Klicken Sie auf **Continue** und gönnen Sie sich ein kleines High Five. Der schwierige Teil ist geschafft, und wir können unseren Webhook nun nutzen, um Dinge zu *erledigen*!
+
+## Schritt 5: Ihr Project abrufen {#step-5-get-your-project}
+
+### a) Die Frame.io-Aktion hinzufügen {#a-add-the-frame-io-action}
+
+Klicken Sie auf „**+ Add a Step**“ und suchen Sie nach Frame.io. Nachdem Sie die Frame.io-App ausgewählt haben, wählen Sie die Aktion **Find Project**. Klicken Sie dann auf „**Save + Continue**“.
+
+### b) Ihren Frame.io-Account verbinden {#b-connect-your-frame-io-account}
+
+Klicken Sie auf dem nächsten Bildschirm auf „**Connect an Account**“ und geben Sie im darauffolgenden Pop-up Ihr Frame.io-API-Token ein (das Sie in Schritt 1 erstellt haben). Wenn Sie Ihr Token inzwischen vergessen oder verloren haben, keine Sorge – erstellen Sie einfach ein neues in Ihren [Account-Einstellungen](https://app.frame.io/account?k=tokens) und achten Sie darauf, den Scope „**Project**: Read“ auszuwählen. Klicken Sie auf „**Continue**“.
+
+### c) Ihr Project abrufen {#c-fetch-your-project}
+
+Klicken Sie auf dem nächsten Bildschirm auf den Pfeil ganz rechts neben dem Feld **Project** unten in der Liste und wählen Sie **Use a Custom Value**.
+
+Klicken Sie dann im neu angezeigten Feld „Custom Value for Comment ID“ auf das Symbol rechts und wählen Sie im folgenden Dropdown-Menü die `Resource ID` aus.
+
+![Fetch project](/images/platform/v2/webhooks-in-zapier/ec47b4df78af3d87eb9f501280dd49092d5d33047d2d89bb79acc03fcf999f38.webp)
+
+<Info>
+
+**Dies ist ein gängiges Muster**
+
+Damit Sie bei jedem Ereignis stets mit aktuellen Daten arbeiten, sollten Sie beim Einrichten von Webhooks zwischen Frame.io und Zapier immer diesem Muster aus **Custom Value** + **Resource ID** folgen. Das gilt auch für nativ unterstützte Triggers!
+
+</Info>
+
+Klicken Sie nun auf „**Continue**“. Sobald Zapier auf dem nächsten Bildschirm bestätigt hat, dass die Project-ID vorliegt, klicken Sie auf „**Fetch + Continue**“. Nach Abschluss des Abrufs sollten Sie einen Bildschirm wie den folgenden sehen:
+
+![Fetch complete](/images/platform/v2/webhooks-in-zapier/25b9c67c00d762c5d3719705298368c16fcc8ba0c05869e54a83d283c865fdab.webp)
+
+Hervorragende Arbeit! Jetzt haben Sie alle Informationen über Ihr neues Project in Zapier und können sie an beliebig viele verschiedene Systeme weiterleiten, darunter:
+
+- Google Sheets
+- Airtable
+- Asana
+- Trello
+- Jira
+  …und fast 3.000 weitere.
+
+Sobald Sie den Rest Ihres Zaps aufgebaut haben, schalten Sie ihn einfach auf „On“ – das war's!

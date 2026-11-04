@@ -1,0 +1,131 @@
+---
+title: "Schnellstart"
+---
+
+Diese Anleitung zeigt Ihnen den schnellsten Weg zu Ihrem ersten erfolgreichen Aufruf der Frame.io V4 API. Sie erstellen ein Projekt in der Adobe Developer Console, generieren Zugangsdaten und senden Ihre erste API-Anfrage.
+
+---
+
+## Schritt 1: Ein Projekt in Ihrer Adobe Developer Console erstellen + die Frame.io V4 API hinzufügen {#step-1-create-a-project-in-your-adobe-developer-console-+-add-the-frame-io-v4-api}
+
+Erstellen Sie in der [Adobe Developer Console](https://developer.adobe.com/developer-console/) ein neues Projekt und fügen Sie die Frame.io V4 API hinzu.
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-1.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+<Tip>
+
+Diese Anleitung verwendet OAuth 2.0 Web App für die Authentifizierung. Informationen zu anderen Authentifizierungsmethoden finden Sie im **[Authentifizierungsleitfaden](/de/platform/docs/guides/authentication/overview)**
+
+</Tip>
+
+## Schritt 2: Ihre Anwendung konfigurieren {#step-2-configure-your-application}
+
+Wählen Sie OAuth Web App als Anwendungstyp aus und legen Sie Ihre Weiterleitungsfelder fest.
+
+| **Redirect URI** | Eine Route in Ihrer Anwendung, die die OAuth-Antwort von Adobe IMS empfängt. Nachdem sich ein Benutzer angemeldet und den Zugriff genehmigt hat, leitet Adobe IMS ihn mit einem Autorisierungscode im Query-String an diese URL weiter, den Ihre App dann gegen ein Access Token eintauscht |
+| --- | --- |
+| **Redirect URI pattern** | Muster, die zusätzlich zur Standard-Redirect-URI weitere Weiterleitungs-URLs abdecken. Dies ist nützlich, wenn Ihre App in mehreren Umgebungen läuft oder dynamisches Routing verwendet. Mehrere Muster sollten als kommagetrennte Liste angegeben werden |
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-2.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+## Schritt 3: Authentifizierung {#step-3-authentication}
+
+Starten Sie den OAuth-Flow, indem Sie den Benutzer an den Autorisierungs-Endpoint von Adobe IMS weiterleiten:
+
+```
+  https://ims-na1.adobelogin.com/ims/authorize/v2
+  ?client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}
+  &scope=offline_access,openid,email,profile,additional_info.roles
+  &response_type=code
+```
+
+Nachdem sich der Benutzer angemeldet und den Zugriff genehmigt hat, leitet Adobe IMS ihn mit einem Autorisierungscode im Query-String zurück an Ihre konfigurierte Redirect URI. Tauschen Sie diesen Code gegen ein Access Token ein, indem Sie eine POST-Anfrage an den IMS-Token-Endpoint senden.
+
+<br />
+
+Hier finden Sie eine Liste der Parameterdefinitionen sowie eine Beispielanfrage und -antwort:
+
+| Parameter | Erforderlich | Beschreibung |
+| --- | --- | --- |
+| **code** | Ja | Der Wert des Query-Strings „code“, der an Ihre `redirect_uri` zurückgegeben wird, wenn sich ein Benutzer bei Ihrer Anwendung authentifiziert |
+| **grant_type** | Ja | Der Wert sollte immer `authorization_code` sein |
+| **authorization** | Erforderlich für vertrauliche Clients | Die Zeichenfolge für den `Basic`-Auth-Header. Sie besteht aus dem Wort `Basic`, gefolgt von der Base64-codierten Zeichenfolge Ihrer `clientID:clientSecret` |
+
+**Beispielanfrage**
+
+```
+curl -X POST 'https://ims-na1.adobelogin.com/ims/token/v3' \
+  -H 'Authorization: Basic {AUTHORIZATION}' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'code={CODE}&grant_type=authorization_code'
+```
+
+**Beispielantwort**
+
+```
+{
+    "access_token": "{ACCESS_TOKEN}",
+    "refresh_token": "{REFRESH_TOKEN}",
+    "sub": "B0DC108C5CD449CA0A494133@c62f24cc5b5b7e0e0a494004",
+    "id_token": "{ID_TOKEN}",
+    "token_type": "bearer",
+    "expires_in": 86399
+}
+```
+
+<Tip>
+
+**SDK-Unterstützung**
+
+Sowohl das Python- als auch das TypeScript-SDK enthalten Authentifizierungsmodule, die den OAuth-Handshake, den Token-Austausch und die automatische Token-Aktualisierung übernehmen. Weitere Informationen zu den einzelnen SDKs finden Sie hier:
+[**Python**](/de/platform/docs/sdk-reference/python-sdk-reference)  | [**TypeScript**](/de/platform/docs/sdk-reference/type-script-sdk-reference)
+
+</Tip>
+
+---
+
+## Schritt 4: Ihre ersten API-Anfragen senden {#step-4-make-your-first-api-requests}
+
+Rufen Sie mit Ihrem Access Token zunächst den Endpoint [`/v4/me`](/de/platform/api-reference/users/show) auf:
+
+```
+curl https://api.frame.io/v4/me \
+-H "Authorization: Bearer <token>"
+```
+
+Diese Anfrage ruft die <Tooltip tip="Weitere Informationen zu Adobe IMS finden Sie in der **[API-Referenz](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#request-2)**">**Adobe IMS API**</Tooltip> auf, um Ihr Token und Ihre Benutzerinformationen zu überprüfen.
+
+Eine erfolgreiche Anfrage gibt Details zum authentifizierten Benutzer zurück, darunter `user_id`, Name und E-Mail-Adresse. So können Sie bestätigen, dass Ihr Authentifizierungs-Flow wie erwartet funktioniert.
+
+Die meisten V4-API-Endpoints erfordern eine `account_id`, die von `/v4/me` nicht zurückgegeben wird. Um Ihre `account_id` zu erhalten, senden Sie eine Anfrage an [`/v4/accounts`](/de/platform/api-reference/accounts/index):
+
+```
+curl https://api.frame.io/v4/accounts \
+-H "Authorization: Bearer <token>"
+```
+
+Dies gibt die Liste der Accounts zurück, die dem authentifizierten Benutzer zur Verfügung stehen. Verwenden Sie die `account_id` aus dieser Antwort in nachfolgenden API-Anfragen.
+
+<Tip>
+
+**User ID vs. Account ID**
+
+Ihre **`user_id`** identifiziert Sie als Einzelperson, und Ihre **`account_id`** steht für die Organisation, der Sie angehören. Die meisten V4-Endpoints arbeiten auf Account-Ebene.
+
+</Tip>
+
+---
+
+## Nächste Schritte {#next-steps}
+
+Mit eingerichteter Authentifizierung und Ihrer `account_id` können Sie mit der Frame.io API loslegen. Diese Ressourcen helfen Ihnen beim Einstieg:
+
+- [Authentifizierungsleitfaden](/de/platform/docs/guides/authentication/overview)
+- [Accounts, Projekte und Workspaces](/de/platform/docs/guides/accounts-projects-and-workspaces)
+- [API-Referenz](/de/platform/api-reference/account-permissions/account-user-roles-update)
+- [Postman Collection](/de/platform/docs/guides/postman-collection)

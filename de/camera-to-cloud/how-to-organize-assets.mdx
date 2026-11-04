@@ -1,0 +1,216 @@
+---
+title: "Anleitung: Assets organisieren"
+sidebarTitle: "Assets organisieren"
+---
+
+## Einführung {#introduction}
+
+In dieser Anleitung erfahren Sie, wie und in welchem Umfang Sie steuern können, *wohin* Assets aus Ihrer Integration hochgeladen werden.
+
+## Was benötige ich? {#what-will-i-need}
+
+Wenn Sie die Anleitung [C2C implementieren: Einrichtung](/de/camera-to-cloud/implementing-c2c-setting-up) noch nicht gelesen haben, werfen Sie einen kurzen Blick darauf, bevor Sie fortfahren!
+
+Sie benötigen außerdem das `access_token`, das Sie in der Anleitung zur Authentifizierung und Autorisierung für [C2C-Hardware](/de/platform/v2/implementing-c2c-authentication-and-authorization-hardware) oder [C2C-Anwendungen](/de/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) erhalten haben.
+
+## Ordnerstruktur für Assets {#asset-folder-structure}
+
+Standardmäßig werden Assets mit der folgenden Ordnerstruktur erstellt:
+
+`Cloud Devices` > `{YYYY}_{MM}_{DD}` > `{ASSET_TYPE}` > `{YOUR_DEVICE}` > `{ASSET_NAME}`
+
+Dabei ist `{ASSET_TYPE}` entweder `VIDEO`, `AUDIO` oder `DATA` (pro Kanal für Ihr Gerätemodell konfiguriert), `{YOUR_DEVICE}` ist der Name des Projektgeräts, das mit dem Projekt des Benutzers verbunden ist, und `{ASSET_NAME}` ist der Name des hochgeladenen Assets und das eigentliche abspielbare Asset in Frame.io.
+
+### Routing nach Dateiendung {#extension-routing}
+
+Sie können Ihr Gerät so einrichten, dass verschiedene Assets anhand einer Dateiendung in `{ASSET_NAME}` in benutzerdefinierte `{ASSET_TYPE}`-Ordner geleitet werden. Angenommen, Ihre Integration erzeugt verschiedene Dateitypen, die jeweils einer bestimmten Herkunft zuzuordnen sind. Sie können uns mitteilen, diese Assets wie folgt zuzuordnen:
+
+```text
+.mov -> VIDEO
+.mp4 -> VIDEO
+.raw -> STILLS
+.jpeg -> STILLS
+.pdf -> CAMERA REPORTS
+.las -> LiDAR Scans
+```
+
+Wenn Sie nun das folgende Asset erstellen:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_codes]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "IMAGE_0001.jpeg", 
+            "filetype": "image/jpeg", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API-Endpunkt-Spezifikation**
+
+Die Dokumentation zu `/v2/assets` finden Sie [hier](/de/camera-to-cloud/api-reference/device-asset-create)
+
+</Info>
+
+… wird es an einen Speicherort wie diesen geleitet: `Cloud Devices` > `2022_04_01` > `STILLS` > `MY_DEVICE` > `IMAGE_0001.jpeg`.
+
+Hieße die Datei stattdessen `A001_C001.mov`, würde sie hierhin geleitet: `Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `A001_C001.mov`.
+
+### Tokenisierte Upload-Pfade {#tokenized-upload-paths}
+
+Manche Integrationen möchten mehr Kontrolle über die Ordnerstruktur haben, die ihr Gerät erstellt. Wir bei [Frame.io](http://frame.io/) wiederum müssen sicherstellen, dass Dateien von einem C2C-Gerät in einheitlicher Weise zu [Frame.io](http://frame.io/) hochgeladen werden, und insbesondere gegenüber Kunden von [Frame.io](http://frame.io/) garantieren, mit welchem Teil ihres Projekts ein C2C-Gerät interagieren kann. Daher erlauben wir Integratoren, die Upload-Speicherorte ihrer Assets innerhalb des Ordners `{YOUR_DEVICE}` anzupassen, gestatten jedoch keine Uploads außerhalb dieses Ordners.
+
+Um in eine benutzerdefinierte Ordnerstruktur hochzuladen, müssen Sie mit Ihrem Partnermanager zusammenarbeiten. Benutzerdefinierte Ordnerstrukturen bestehen aus einer Reihe tokenisierter Metadaten, die bei der Asset-Erstellung angegeben werden müssen. Sehen wir uns ein einfaches Beispiel an:
+
+Angenommen, wir haben ein 3D-Kamera-Rig mit `reel_name`-Werten wie `"A001"`, `"A002"`, `"A003"` usw. und `clip_number`-Werten wie `"C001"`, `"C002"` usw. Wir möchten für jeden Clip einen Ordner erstellen und diesen mit den Dateien für das linke und rechte Auge füllen, sodass die Dateien in einem Projekt so aussehen:
+
+![Tokenisierter Ordnerpfad – Beispiel 3D-Rig](/images/camera-to-cloud/how-to-organize-assets/e40b09128d1cbf3c876fd14169a6406642d50d13ce7ab802baff4bbaf50bfd4a.webp)
+
+Dazu müssen wir zwei Einstellungen konfigurieren:
+
+- Erforderliche Metadatenfelder
+- Tokenisierter Dateipfad
+
+Erforderliche Metadatenfelder sind eine einfache Liste von Schlüsseln, die bei der Asset-Erstellung für Ihre Integration gesetzt werden müssen:
+
+```text
+[reel_name, clip_number]
+```
+
+Anschließend können Sie beliebige dieser Schlüssel verwenden, um einen durch `/` getrennten Pfad zu erstellen, wobei `{field_name}` angibt, wo der Wert eines Felds eingefügt werden soll:
+
+```text
+REEL_{reel_name}/{reel_name}_{clip_number}
+```
+
+Beide Einstellungen müssen unserem Team bei [Frame.io](http://frame.io/) übermittelt werden, damit wir sie in die Details Ihrer Integration aufnehmen. Nachdem wir dies eingerichtet haben, müssen diese Werte beim Erstellen eines Assets auf der obersten Ebene des Payloads angegeben werden, damit die Asset-Erstellung erfolgreich ist:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_LEFT.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10,
+            "metadata": {
+              "reel_name": "A001",
+              "clip_number": "C001"
+            },
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Der obige Aufruf erstellt eine Datei mit einem vollständigen Pfad wie: `Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `REEL_A001` > `A001_C001` > `A001_C001_LEFT.mp4`
+
+<Danger>
+
+**Metadatenfehler**
+
+Wenn Ihr Gerät nicht ausdrücklich für diese Felder eingerichtet wurde, erhalten Sie bei demselben Aufruf einen Fehler. Ebenso gilt: Wenn Sie erforderliche Metadatenfelder eingerichtet haben, MÜSSEN Sie diese im Payload zur Asset-Erstellung angeben, andernfalls wird ein Fehler zurückgegeben.
+
+</Danger>
+
+Der Payload akzeptiert jeden gültigen JSON-Wert. Werte, die keine Zeichenfolgen sind, werden wie folgt dargestellt:
+
+- **integers**: Dargestellt zur Basis 10: `10` -> `"10"`
+- **floats**: Verwendet die kürzeste Darstellung gemäß dem Algorithmus, der in „Printing Floating-Point Numbers Quickly and Accurately“ in den Proceedings of the SIGPLAN ‘96 Conference on Programming Language Design and Implementation beschrieben ist.
+- **booleans**: `true` und `false` werden als `"true"` und `"false"` dargestellt
+- **null**: Als leere Zeichenfolge dargestellt. Wäre `reel_name` auf `null` gesetzt, würde der erste benutzerdefinierte Ordner als `REEL_` dargestellt
+
+Im Allgemeinen empfehlen wir, Ihre Werte auf Zeichenfolgen zu beschränken und andere Werte nach Ihren Wünschen zu formatieren (beispielsweise werden Ganzzahlen immer ohne führende Nullen ausgegeben – etwas, das Sie möglicherweise ändern möchten).
+
+Grundsätzlich sollten nur Felder verwendet werden, die für jeden Clip einen gültigen Wert haben; wenn ein Feld nicht immer einen gültigen Wert hat, sollten Sie festlegen, wie nicht gesetzte oder Null-Werte dargestellt werden.
+
+## Versionsstapel {#version-stacking}
+
+[Frame.io](http://frame.io/) unterstützt [Versionsstapel](https://support.frame.io/en/articles/4431-version-stacking-and-comparison) – eine Möglichkeit, mehrere Iterationen desselben Inhalts in der Benutzeroberfläche zu bündeln. Die C2C API ermöglicht es Geräten, neue Iterationen eines Assets hochzuladen, die zusammen mit den vorherigen Versionen in einen Versionsstapel aufgenommen werden.
+
+Um einen Versionsstapel zu erstellen, müssen Sie eine `autoversion_id` angeben, die festlegt, zu welchem Versionsstapel die Assets gehören. Dieser Wert kann beliebig sein: eine UUID, ein Dateiname usw. Achten Sie darauf, nur Werte zu verwenden, die sich in einem Asset-Ordner niemals unbeabsichtigt wiederholen. Wenn Ihre Integration beispielsweise denselben Dateinamen mehr als einmal erzeugen könnte, ist der Dateiname *kein* guter Kandidat für die `autoversion_id`.
+
+Wir geben eine autoversion_id wie folgt an:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v01.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Wenn Sie nun ein neues Asset mit derselben autoversion_id hochladen, wird das Asset als neueste Version in einen Stapel mit dem ursprünglichen Asset aufgenommen:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v02_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+*Assets werden nur gestapelt, wenn sie in denselben Ordner hochgeladen werden*. Wenn Sie Versionsstapel implementieren möchten, sollten Sie daher einige Punkte beachten:
+
+- Tokenisierte Metadaten müssen auf denselben übergeordneten Ordner aufgelöst werden, damit der Versionsstapel erstellt wird.
+- Da das Erstellungsdatum Teil des Dateipfads ist, werden neue Versionen, die nach Mitternacht UTC erstellt werden, möglicherweise nicht korrekt gestapelt, es sei denn, Sie geben einen Offset für die Erstellungszeit des ursprünglichen Uploads an.
+
+Der zweite Punkt ist wichtig. Angenommen, 48 Stunden nach dem ersten Upload wird eine neue Version des Assets erstellt. Um sie mit dem ursprünglichen Asset zu stapeln, müssen wir einen Offset angeben, der 48 Stunden in der Vergangenheit liegt: 172800 Sekunden.
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v03_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 172800,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Wäre das aktuelle Asset *eigentlich* in `2022_04_03` hochgeladen worden, wird es nun in `2022_04_01` hochgeladen und mit dem richtigen Asset gestapelt.
+
+## Wie geht es weiter? {#next-up}
+
+Dies ist die letzte Anleitung zum Erstellen einer großartigen C2C-Integration! Nehmen Sie sich einen Moment Zeit, um sich selbst auf die Schulter zu klopfen! Vielleicht gönnen Sie sich einen Snack. Jetzt bleibt nur noch, die Checkliste für Integratoren durchzugehen, in der Sie eine Zusammenfassung aller Punkte finden, die für eine absolut zuverlässige Integration erforderlich sind.
+
+Falls noch nicht geschehen, wenden Sie sich gerne an unser Team und fahren Sie dann mit der nächsten Anleitung fort. Wir freuen uns darauf, von Ihnen zu hören!

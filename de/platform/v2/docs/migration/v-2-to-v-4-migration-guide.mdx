@@ -1,0 +1,85 @@
+---
+title: "Migrationsleitfaden Frame.io API V3 → V4"
+sidebarTitle: "Migrationsleitfaden V2 zu V4"
+---
+
+Der folgende Leitfaden hilft Ihnen bei der Migration von der Frame.io API V3 (in der Dokumentation manchmal als „Legacy“- oder „v2“-Endpoint bezeichnet) zur Adobe Frame.io API V4. Er orientiert sich an Stil und Struktur des Migrationsbeispiels der Dropbox API und bietet Ihnen einen umfassenden Überblick über Endpoint-Zuordnungen, Payload-Änderungen, Aktualisierungen der Authentifizierung und mehr.
+
+---
+
+## Migrations-Checkliste für Entwickler {#migration-checklist-for-developers}
+
+1. **Ermitteln Sie Ihre aktuelle V3-Nutzung:**
+
+   - Listen Sie alle Aufrufe auf, die Ihre App durchführt (z. B. Dateien erstellen, Ordner auflisten, Kommentare hinzufügen).
+   - Gleichen Sie jeden Aufruf mit der Zuordnungstabelle ab, um das neue V4-Äquivalent zu finden.
+
+2. **Beschaffen Sie Adobe-IMS-Anmeldedaten (OAuth 2.0):**
+
+   - Erstellen Sie eine Integration in der Adobe Developer Console.
+   - Konfigurieren Sie OAuth-2.0-Client-Anmeldedaten und Scope (Frame.io-Zugriff).
+   - Ersetzen Sie alle alten Frame.io-Entwickler-Tokens durch Ihren neuen IMS-Token-Flow.
+
+3. **Aktualisieren Sie Ihre Endpoint-URLs:**
+
+   - **V3:** `https://api.frame.io/v2/...`, wobei Assets über `assets/{asset_id}` bearbeitet werden.
+   - **V4:** `https://api.frame.io/v4/`, und die Endpoints enthalten `accounts/{account_id}` sowie separate `folders/{folder_id}` / `files/{file_id}`.
+
+4. **Passen Sie Request-Payloads und das Parsen von Responses an:**
+
+   - V4 verpackt Daten typischerweise in einem `data`-Objekt (z. B. `{"data": {...}}`).
+   - Ordnererstellung, Datei-Uploads usw. verwenden neue JSON-Feldnamen (z. B. `file_size`, `media_type`).
+   - **Änderungen von Team → Workspace:** Ersetzen Sie `team_id` (V3) durch `workspace_id` (V4).
+
+5. **Überarbeiten Sie Webhook-Registrierungen:**
+
+   - Löschen oder deaktivieren Sie Ihre alten V3-Webhooks (die unter V4 nicht mehr ausgelöst werden).
+   - Registrieren Sie neue Webhooks unter `POST /v4/accounts/{account_id}/webhooks`.
+
+6. **Testen Sie Fehlerbehandlung und Rate Limits:**
+
+   - Stellen Sie sicher, dass Ihr Code neue 4xx/5xx-Responses und Änderungen an Request-/Response-Formaten verarbeitet.
+   - V4 kann andere Fehlerstrukturen zurückgeben (z. B. stärker strukturiertes JSON, 409 bei Konflikten usw.).
+
+7. **Bestätigen Sie Zugriff und Berechtigungen:**
+
+   - Überprüfen Sie, ob das Adobe-IMS-Token zu einem Benutzer (oder Service-Account) mit den richtigen Account-/Workspace-Berechtigungen gehört.
+   - Legacy-V3-Tokens mit Scopes auf „Team-Ebene“ sind in V4 nicht gültig.
+
+8. **Bereitstellen und überwachen:**
+
+   - Testen Sie Ihren aktualisierten Code zuerst in einer Sandbox- oder Entwicklungsumgebung.
+   - Überwachen Sie die Logs auf 4xx/5xx oder unerwartetes Verhalten; beheben Sie alle Probleme vor der vollständigen Bereitstellung.
+
+---
+
+## Endpoints: Zuordnung V3 → V4 {#endpoints-v3-→-v4-mapping}
+
+Nachfolgend finden Sie eine Gegenüberstellung wichtiger Frame.io-V3-Endpoints (links) und ihrer V4-Äquivalente (rechts). Dieser Abschnitt ist von der Dropbox-Tabelle „v1 → v2 mapping“ inspiriert.
+
+> **Tipp:** Diese Tabelle konzentriert sich auf typische Datei-, Ordner- und Projektoperationen. Spezialisierte Endpoints (z. B. Camera to Cloud) sind nicht enthalten.
+
+### OAuth & Authentifizierung {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| Entwickler-Token (Bearer `<token>`) oder Frame.io OAuth 2.0 mit `Authorization: Bearer <token>` | Adobe IMS OAuth 2.0 (Sie müssen ein Projekt in der Adobe Developer Console erstellen) und Folgendes verwenden: `Authorization: Bearer <adobe_access_token>` |
+
+**Hinweis:** Legacy-Entwickler-Tokens können nicht automatisch konvertiert werden. Sie müssen den neuen IMS-OAuth-Flow implementieren.<br />
+**Dokumentation:** [So erhalten Sie ein Adobe-Frame.io-Zugriffstoken](https://developer.adobe.com/frameio/api/current/)
+
+### Ordner- und Dateioperationen {#folder-and-file-operations}
+
+#### Einen Ordner erstellen {#create-a-folder}
+
+- **V3 (Ordner erstellen):**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

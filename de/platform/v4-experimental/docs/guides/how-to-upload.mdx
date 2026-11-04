@@ -1,0 +1,321 @@
+---
+title: "So funktionieren lokale und Remote-Uploads"
+sidebarTitle: "Hochladen"
+---
+
+Dieser Leitfaden beschreibt den vollständigen Ablauf zum Hochladen von Dateien mit der Frame.io V4 API. Er behandelt die reinen API-Anfragen und -Antworten sowohl für lokale als auch für Remote-Uploads.
+
+<Info>
+
+**Suchen Sie nach SDK-spezifischen Leitfäden?** Für Upload-Implementierungen mit integrierter Aufteilung in Chunks, Wiederholungsversuchen und Fortschrittsverfolgung lesen Sie den [Python SDK Upload-Leitfaden](/de/platform/docs/guides/uploading-to-frame-io/python-sdk-upload-guide).
+
+</Info>
+
+## Voraussetzungen {#prerequisites}
+
+Bevor Sie mit dem Hochladen von Dateien beginnen, stellen Sie sicher, dass Sie diese Einrichtungsschritte abgeschlossen haben:
+
+<Steps>
+
+<Step title="Frame.io V4-Konto">
+
+Sie haben ein Frame.io V4-Konto, das über die [Adobe Admin Console](https://adminconsole.adobe.com/) verwaltet wird, ODER Sie sind für Ihren Kontobenutzer [zur Adobe-Authentifizierung gewechselt](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication)
+
+</Step>
+
+<Step title="Einrichtung der Adobe Developer Console">
+
+Sie haben sich bei der [Adobe Developer Console](https://developer.adobe.com/console) angemeldet und die Frame.io API zu einem neuen oder bestehenden Projekt hinzugefügt
+
+</Step>
+
+<Step title="Authentifizierungsdaten">
+
+Sie haben die [passenden Authentifizierungsdaten](https://developer.adobe.com/frameio/guides/Authentication/) für Ihr Projekt generiert
+
+</Step>
+
+<Step title="Zugriffstoken">
+
+Sie haben mit diesen Anmeldedaten erfolgreich ein Zugriffstoken generiert
+
+</Step>
+
+</Steps>
+
+## Upload-Methode auswählen {#choosing-your-upload-method}
+
+Es gibt zwei Möglichkeiten, eine Datei mit der Frame.io API hochzuladen: `Create File (local upload)` und `Create File (remote upload)`.
+
+<CardGroup cols={2}>
+
+<Card title="Lokaler Upload" icon="upload" iconType="solid">
+
+Verwenden Sie diese Methode, wenn die Medien für Ihre Anwendung lokal zugänglich sind – ähnlich wie beim Ziehen einer Datei von Ihrem Desktop
+
+</Card>
+
+<Card title="Remote-Upload" icon="link" iconType="solid">
+
+Verwenden Sie diese Methode, wenn auf die Medien über das Netzwerk zugegriffen wird, etwa über eine Integration mit einem anderen Dienst
+
+</Card>
+
+</CardGroup>
+
+In diesem Leitfaden beginnen wir mit dem einfacheren Fall, einem Remote-Upload.
+
+## Remote-Upload {#remote-upload}
+
+Um eine Datei per Remote-Upload zu erstellen, wählen Sie den Endpunkt **Create File (remote upload)**. Der Anfragetext erfordert den Dateinamen und die Quell-URL.
+
+<Warning>
+
+Für Remote-Uploads gilt derzeit eine **Dateigrößenbeschränkung von 500 GB**. Verwenden Sie für Dateien, die größer als 500 GB sind, stattdessen den [lokalen Upload](#local-upload).
+
+</Warning>
+
+### Anfragebeispiel {#request-example}
+
+```json
+{ 
+    "data": {
+        "name": "my_file.jpg",
+        "source_url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.jpg"
+    }
+}
+```
+
+### Antwortbeispiel {#response-example}
+
+Eine erfolgreiche Anfrage liefert eine Antwort wie die folgende:
+
+```json
+{
+    "data": {
+        "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+        "name": "my_file.jpg",
+        "status": "created",
+        "type": "file",
+        "file_size": 518,
+        "updated_at": "2025-06-26T20:14:33.796116Z",
+        "media_type": "image/jpeg",
+        "parent_id": "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+        "project_id": "7e46e495-4444-4555-8649-bee4d391a997",
+        "created_at": "2025-06-26T20:14:33.159489Z",
+        "view_url": "https://next.frame.io/project/7e46e495-4444-4555-8649-bee4d391a997/view/93e4079d-0a8a-4bf3-96cd-e6a03c465e5e"
+    },
+    "links": {
+        "status": "/v4/accounts/6f70f1bd-7e89-4a7e-b4d3-7e576585a181/files/93e4079d-0a8a-4bf3-96cd-e6a03c465e5e/status"
+    }
+}
+```
+
+## Lokaler Upload {#local-upload}
+
+Um eine Datei per lokalem Upload zu erstellen, wählen Sie den Endpunkt **Create File (local upload)**. Der Anfragetext erfordert den Dateinamen und die Dateigröße in Byte.
+
+### Anfragebeispiel {#request-example-1}
+
+```json
+{ 
+    "data": {
+        "name": "my_file.jpg",
+        "file_size": 50645990
+    }
+}
+```
+
+### Antwortbeispiel {#response-example-1}
+
+Wenn die Anfrage erfolgreich ist, wird eine Platzhalter-Dateiressource ohne Inhalt erstellt. Abhängig von der Dateigröße enthält der Antworttext eine oder mehrere `upload_urls`. In diesem Beispiel müssen wir den Upload in mehreren Teilen durchführen.
+
+```json
+{
+    "data": {
+        "id": "fa18ba7b-b3ee-4dd6-9b31-bd07e554241d",
+        "name": "my_file.jpg",
+        "status": "created",
+        "type": "file",
+        "file_size": 50645990,
+        "updated_at": "2025-06-26T20:08:06.823170Z",
+        "media_type": "image/jpeg",
+        "parent_id": "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+        "project_id": "7e46e495-4444-4555-8649-bee4d391a997",
+        "created_at": "2025-06-26T20:08:06.751313Z",
+        "upload_urls": [
+            {
+                "size": 16881997,
+                "url": "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_1?..."
+            },
+            {
+                "size": 16881997,
+                "url": "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_2?..."
+            },
+            {
+                "size": 16881996,
+                "url": "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_3?..."
+            }
+        ],
+        "view_url": "https://next.frame.io/project/7e46e495-4444-4555-8649-bee4d391a997/view/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d"
+    }
+}
+```
+
+<Warning>
+
+**Wichtige Upload-Anforderungen:**
+
+Beim Senden der nachfolgenden Upload-Anfrage(n) sollten Sie folgende wichtige Details beachten:
+
+- Die HTTP-Anfragemethode muss `PUT` sein
+- Der Header `x-amz-acl` muss enthalten und auf private gesetzt sein
+- Der Header `Content-Type` muss mit dem `media_type` übereinstimmen, der in der ursprünglichen **Create File (local upload)**-Anfrage angegeben wurde. Das gilt auch, wenn die Datei in separaten Teilen hochgeladen wird. Im obigen Beispiel ist der Wert für `media_type` `image/jpeg`. Daher muss auch der Wert für `Content-Type` `image/jpeg` sein.
+
+</Warning>
+
+## Mehrteiliger Upload {#multi-part-upload}
+
+Wenn eine Datei mehr als eine Upload-URL ergibt, müssen Sie die Quelldatei in Chunks aufteilen und für jeden Chunk eine PUT-Anfrage senden.
+
+<Info>
+
+**Empfohlen:** Der [Python SDK Upload-Leitfaden](/de/platform/docs/guides/uploading-to-frame-io/python-sdk-upload-guide) behandelt den mehrteiligen Upload mit `FrameioUploader`, der die Aufteilung in Chunks, parallele Uploads, Wiederholungsversuche und Fortschrittsverfolgung direkt übernimmt.
+
+</Info>
+
+Wenn Sie den Upload manuell implementieren müssen – zum Beispiel in einer Sprache ohne SDK oder um den Prozess vollständig zu kontrollieren –, zeigt das folgende Skript, wie Sie eine Datei in Chunks aufteilen und jeden Chunk über die vorsignierten URLs hochladen.
+
+### Python-Implementierungsbeispiel {#python-implementation-example}
+
+```python title="Multi-part Upload Script"
+import requests
+import math
+from typing import List
+from tqdm import tqdm  # For progress bar
+
+def upload_file_in_chunks(file_path: str, upload_urls: list[str], content_type: str | None = None, chunk_size: int | None = None) -> bool:
+    """
+    Upload a file in chunks using presigned URLs.
+    """
+    try:
+        # Auto-detect content type based on file extension
+        if content_type is None:
+            detected_content_type, _ = mimetypes.guess_type(file_path)
+            content_type = detected_content_type # Default fallback
+
+        print(f"Detected content type: {content_type}")
+
+        # Get file size
+        with open(file_path, 'rb') as f:
+            f.seek(0, 2)  # Seek to end of file
+            file_size = f.tell()
+
+        # Calculate chunk size if not provided
+        if chunk_size is None:
+            chunk_size = math.ceil(file_size / len(upload_urls))
+
+        print(f"File size: {file_size} bytes")
+        print(f"Chunk size: {chunk_size} bytes")
+        print(f"Number of chunks: {len(upload_urls)}")
+
+        # Upload each chunk
+        with open(file_path, 'rb') as f:
+            with tqdm(total=len(upload_urls), desc="Uploading chunks") as pbar:
+                for i, url in enumerate(upload_urls):
+                    start_byte = i * chunk_size
+                    end_byte = min(start_byte + chunk_size, file_size)
+
+                    # Read chunk from file
+                    f.seek(start_byte)
+                    chunk = f.read(end_byte - start_byte)
+
+                    print(f"Uploading chunk {i+1}: {len(chunk)} bytes")
+
+                    # Upload chunk with minimal headers matching the signature
+                    response = requests.put(
+                        url,
+                        data=chunk,
+                        headers={
+                            'content-type': content_type,
+                            'x-amz-acl': 'private'
+                        }
+                    )
+
+                    if response.status_code != 200:
+                        print(f"Failed to upload chunk {i+1}. Status code: {response.status_code}")
+                        print(f"Response text: {response.text}")
+                        print(f"Response headers: {dict(response.headers)}")
+                        return False
+                    else:
+                        print(f"Chunk {i+1} uploaded successfully!")
+
+                    pbar.update(1)
+
+        return True
+
+    except Exception as e:
+        print(f"Error during upload: {str(e)}")
+        return False
+
+# Example usage
+if __name__ == "__main__":
+    # Replace these with your actual values
+    file_path = "/Users/MyComputer/local_upload/sample.jpg"  # Path to your file
+    upload_urls = [
+        "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_1?...",
+        "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_2?...",
+        "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_3?..."
+    ]
+    content_type = "image/jpeg"
+
+    print("Starting file upload...")
+    success = upload_file_in_chunks(file_path, upload_urls, content_type)
+
+    if success:
+        print("File upload completed successfully!")
+    else:
+        print("File upload failed!")
+```
+
+## Zusammenfassung des Upload-Ablaufs {#upload-flow-summary}
+
+<Steps>
+
+<Step title="Upload-Methode auswählen">
+
+Entscheiden Sie sich zwischen Remote-Upload (Datei über URL zugänglich) und lokalem Upload (Datei auf Ihrem System)
+
+</Step>
+
+<Step title="Create File-Anfrage">
+
+Senden Sie die erste Anfrage, um die Dateiressource mit den erforderlichen Metadaten zu erstellen
+
+</Step>
+
+<Step title="Upload-URLs verarbeiten">
+
+Verarbeiten Sie bei lokalen Uploads die zurückgegebenen upload_urls (ein oder mehrere Teile)
+
+</Step>
+
+<Step title="Dateiinhalt hochladen">
+
+Verwenden Sie PUT-Anfragen mit den richtigen Headern, um den Dateiinhalt an die bereitgestellten URLs hochzuladen
+
+</Step>
+
+<Step title="Upload überprüfen">
+
+Prüfen Sie den Dateistatus, um den erfolgreichen Upload und die Verarbeitung zu bestätigen
+
+</Step>
+
+</Steps>
+
+<Info>
+
+**Nächste Schritte**: Sobald Ihre Datei hochgeladen ist, können Sie mit der zurückgegebenen Datei-ID Kommentare hinzufügen, Shares erstellen oder andere Vorgänge mit der Frame.io V4 API ausführen.
+
+</Info>

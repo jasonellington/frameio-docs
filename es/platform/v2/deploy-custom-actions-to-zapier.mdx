@@ -1,0 +1,71 @@
+---
+title: "Implementar Custom Actions en Zapier"
+---
+
+<Info>
+
+**¿Es la primera vez que trabajas con Custom Actions?**
+
+Descubre esta funcionalidad en la **[página de descripción general](/es/platform/v2/custom-actions-overview)**.
+
+</Info>
+
+Como parte de tu workflow de medios, es posible que necesites que los medios de Frame.io lleguen a canales de publicación como YouTube y Wistia, o a destinos de almacenamiento como Google Drive o un archivo de Amazon S3.
+
+Aunque puedes usar los Triggers de Zapier para automatizar tus workflows, las Custom Actions te permiten crear una opción de menú dentro de Frame.io que te da un nivel adicional de control para agilizar la entrega de medios a ubicaciones externas; y como las Custom Actions no son más que webhooks bajo demanda, puedes conectarlas a Zapier como triggers personalizados. Configúralo una sola vez y los miembros de tu equipo y tus colaboradores podrán acceder a la automatización desde Frame.io.
+
+**Esta guía te enseña a conectar las Custom Actions de Frame.io con Zapier y a entregar medios a una aplicación o servicio de terceros.**
+
+**Nota:** los webhooks son una funcionalidad Premium en Zapier. Si buscas una forma de implementar Custom Actions con un coste mínimo, plantéate [escribir tu propia función serverless](https://github.com/Frameio/custom-actions-example-app/tree/master/examples/custom-action-offload-to-s3).
+
+## Arquitectura {#architecture}
+
+![Zapier Custom Action Architecture](/images/platform/v2/deploy-custom-actions-to-zapier/4d06dacec5ef8d46d822674d651ba96182732118bcc08b57770fec125f62b2f2.webp)
+
+## Configura Zapier y crea tu Custom Action {#set-up-zapier-and-create-your-custom-action}
+
+Crea un nuevo Zap en Zapier. Como trigger inicial, selecciona [Zap - Webhooks by Zapier](https://zapier.com/apps/webhook/integrations). Establece la Action en "Catch Hook". En este caso no es necesaria ninguna personalización, así que avanza hasta la siguiente etapa:
+
+![Frame.io Zapier Custom Action - Set up Webhook](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step1.gif "Frame.io Zapier Custom Action - Set up Webhook")
+
+### Prueba la acción {#test-the-action}
+
+Dedica un minuto a probar la Custom Action en Frame.io. Verifica que la acción genera una solicitud que Zapier captura:
+
+![Frame.io Zapier Custom Action - Test the action](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step2.gif "Frame.io Zapier Custom Action - Test the action")
+
+<Info>
+
+**Consejo**
+
+Usa los [registros](https://developer.frame.io/actions) de nuestro sitio para desarrolladores para explorar el payload de la Custom Action
+
+</Info>
+
+### Añade un paso "Find Asset" en Zapier {#add-a-‘find-asset’-step-to-zapier}
+
+El payload de la Custom Action solo hace referencia a tu Asset; no contiene el archivo. Se necesita un paso adicional para indicar a Zapier de dónde obtener el archivo. Añade un trigger de "búsqueda" al Zap: [Frame.io - Find Asset](https://zapier.com/apps/frameio/integrations#css-d28kn1-Button__buttonText)
+
+Así funciona la configuración de Find Asset:
+
+![Frame.io Zapier Custom Action - Add find asset step](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step3.gif "Frame.io Zapier Custom Action - Add find asset step")
+
+Ahora estás pasando a Zapier más información sobre el asset, incluido su nombre, el archivo original y cada una de las [transcodificaciones](https://support.frame.io/en/articles/13321-what-is-my-video-converted-to-when-it-s-uploaded) que Frame.io ha realizado sobre el archivo.
+
+### Envía el Asset a tu destino {#send-the-asset-to-your-destination}
+
+A modo de demostración, entregaremos el archivo a Google Drive:
+
+![Frame.io Zapier Custom Action - send to Google Drive](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step4.gif "Frame.io Zapier Custom Action - send to Google Drive")
+
+## Próximos pasos {#where-to-go-from-here}
+
+Aunque Zapier es posiblemente la forma más sencilla de implementar acciones, presenta algunas limitaciones. Principalmente, no puedes comunicarte con tu usuario siguiendo el [patrón completo de solicitud-respuesta](https://docs.frame.io/docs/custom-actions#create-a-form-callback) que admiten las Custom Actions. El usuario solo recibe un mensaje predeterminado "Success!", lo que significa que Zapier gestionó el webhook y activó la cadena de acciones del Zap:
+
+![Custom Action Success Message](/images/platform/v2/deploy-custom-actions-to-zapier/1076d6c89a745589e34e74c860113a5f213ecf1526c762471686febc9a61dcd0.webp)
+
+Esto puede llevar a confusión, ya que el mensaje "Success!" solo indica que la entrega se realizó correctamente, y aparecerá aunque algo falle en el propio workflow de Zapier. Para obtener más información sobre cómo solucionar problemas en Zapier, consulta su guía sobre [cómo explorar el historial de tareas](https://zapier.com/learn/getting-started-guide/task-history/).
+
+### Crea tu propia aplicación {#rolling-your-own-app}
+
+Escribir una [pequeña aplicación de servidor](https://github.com/Frameio/custom-actions-app-python) o usar [funciones lambda](https://github.com/Frameio/custom-actions-example-app/tree/master/examples/custom-action-offload-to-s3) te permite gestionar las entradas del usuario y crear varias rutas de código, lo que resulta práctico para enviar archivos a varios destinos, tratar los tipos de archivo de forma diferente o aprovechar la información sobre el usuario de Frame.io en la automatización de tu workflow.

@@ -1,0 +1,91 @@
+---
+title: "Autenticación"
+---
+
+## Descripción general {#overview}
+
+La autenticación es necesaria para realizar llamadas con la API de Frame.io. La API de Frame.io ofrece dos opciones de autenticación:
+
+- **Tokens de desarrollador**: un bearer token persistente que tiene el mismo acceso y los mismos permisos que el usuario individual que lo generó.
+- **Flujo de código de autorización de OAuth 2**, que permite a los usuarios de Frame.io iniciar sesión con sus credenciales y conceder a una aplicación externa permiso para actuar en su nombre.
+
+Todas las acciones que usan la API, independientemente del tipo de autenticación empleado, usan en última instancia encabezados con bearer token y están controladas por scopes.
+
+### ¿Qué tipo de autenticación es mejor para mi proyecto? {#which-authentication-type-is-best-for-my-project}
+
+Al empezar, te convendrá usar un [token de desarrollador](https://developer.frame.io/authentication/developer-tokens) para tu proyecto.
+
+Los **tokens de desarrollador** están asociados a la cuenta de un usuario individual, tienen los mismos permisos de acceso que el usuario que los creó y están restringidos por scopes.
+
+Son ideales para:
+
+- Experimentar (porque puedes crearlos y destruirlos muy rápidamente)
+- Escenarios de integración en los que todas las acciones se pueden realizar desde un único contexto de cuenta/usuario.
+
+El **flujo de código de OAuth** es adecuado para aplicaciones alojadas externamente que necesitan actuar en nombre de varios usuarios diferentes. Gestionar bearer tokens mediante OAuth supone algo más de trabajo, por lo que no es raro experimentar primero con un token de desarrollador y, más adelante, refactorizar el trabajo en una aplicación OAuth.
+
+<Info>
+
+Para continuar, necesitarás una cuenta de Frame.io. Si no tienes una cuenta de Frame.io, puedes registrarte de forma rápida y sencilla en [Frame.io](https://frame.io) haciendo clic en [**Sign Up Free**](https://accounts.frame.io/welcome).
+
+</Info>
+
+## Tokens de desarrollador {#developer-tokens}
+
+1. Inicia sesión en el [portal para desarrolladores](/es/platform/v2) de Frame.io con tus credenciales de usuario de Frame.io.
+2. Deberías ver la pantalla de bienvenida. Para crear un nuevo token de desarrollador, haz clic en el botón **Create a Token**.
+3. Verás la pantalla Tokens. Haz clic en **New**.
+4. En la pantalla del nuevo token, debes proporcionar una descripción y los scopes de tu token. En **DESCRIPTION**, te recomendamos elegir algo que te ayude a recordar para qué usas el token. En **SCOPES**, puedes seleccionar exactamente qué scopes de acceso debe tener este token. Para este tutorial, simplemente haz clic en **Select all scopes**. Más adelante puedes crear tokens con permisos y privilegios más específicos según lo necesites (consulta [Scopes](/es/platform/v2/key-concepts#scopes) para obtener más información).
+5. Desplázate hacia abajo y haz clic en el botón **Create**. Si todo va bien, verás una página con un resumen de la información de tu token.
+6. Copia la cadena que aparece en el campo **Token**. **Este es tu nuevo token**. Guárdalo en un lugar seguro: representa el acceso a tu cuenta y, una vez que salgas de esta página, no podrás volver a verlo.
+   En este momento, deberías recibir un correo electrónico que confirma que has creado un token con los scopes elegidos.
+
+<Warning>
+
+Los tokens de Frame.io solo se muestran al crearlos. Si pierdes un token, siempre puedes crear uno nuevo, pero nunca podrás ver los tokens antiguos, salvo su descripción y sus scopes.
+
+</Warning>
+
+### Prueba tu nuevo token {#testing-your-new-token}
+
+Ahora que tienes tu token, probemos una solicitud con autenticación bearer. Haremos una solicitud básica para obtener información sobre ti:
+
+<CodeGroup>
+
+```bash title="cURL"
+curl -H "Authorization: Bearer <YOUR_TOKEN>" https://api.frame.io/v2/me
+```
+
+```python title="Python"
+import requests
+
+url = "https://api.frame.io/v2/me"
+headers = {
+ "Authorization": "Bearer <YOUR_TOKEN>"
+}
+
+requests.GET(url,headers=headers)
+```
+
+</CodeGroup>
+
+Como respuesta, deberías ver una representación JSON de tu registro de usuario.
+
+¡Enhorabuena! Acabas de realizar tu primera llamada a la API de Frame.io. 🎉
+
+## ¿Qué es OAuth 2? {#what-is-oauth-2}
+
+OAuth 2.0 es un protocolo de autenticación habitual que permite a un usuario autorizar que una aplicación interactúe con otra de forma limitada, sin compartir directamente las credenciales. Este proceso se suele denominar "conceder credenciales" por parte del usuario, mediante una pantalla de inicio de sesión especial.
+
+### Flujo de código de autorización de OAuth 2 {#oauth-2-authorization-code-flow}
+
+El flujo de código de autorización de OAuth 2 permite a los usuarios conceder acceso limitado a aplicaciones externas. Una aplicación solicita permisos específicos según su configuración inicial; en el caso de Frame.io, cuando la aplicación se [registra en nuestro portal para desarrolladores](https://developer.frame.io/app/oauth_apps). El usuario aprueba la solicitud y, a partir de ese momento, la aplicación externa puede operar en nombre de ese usuario.
+
+Aprende a empezar con el flujo de código de autorización de OAuth 2 aquí: [Configurar el flujo de código de autorización de OAuth 2](/es/platform/v2/oauth-2-code-authorization-flow)
+
+### Más información sobre OAuth 2 {#more-about-oauth-2}
+
+Si quieres saber más sobre OAuth 2, estos son algunos recursos excelentes:
+
+- [OAuth2](https://oauth.net/2/)
+- [The Authorization Code Flow](https://developer.okta.com/blog/2018/04/10/oauth-authorization-code-grant-type)
