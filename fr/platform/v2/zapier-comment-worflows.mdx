@@ -1,0 +1,108 @@
+---
+title: "Workflows de commentaires avec Zapier"
+---
+
+## Vue d’ensemble {#overview}
+
+Dans ce guide, vous utiliserez l’[application Zapier](https://zapier.com/apps/frameio/) de Frame.io pour « intercepter » les commentaires de Frame.io et les manipuler à l’aide d’autres applications dans Zapier.
+
+Afin de construire un workflow complet, nous suivrons [ce modèle](https://zapier.com/apps/frameio/integrations/frameio/47537/translate-frameio-comments-with-zapier) pour activer la traduction automatique de tout commentaire laissé sur une Team dans Frame.io.
+
+Vous pouvez commencer en utilisant le modèle mentionné ci-dessus, ou en créant un nouveau Zap de zéro dans Zapier. Ce guide adopte la seconde approche.
+
+## Ce dont vous aurez besoin {#things-you’ll-need}
+
+Avant de commencer, vous aurez besoin de trois choses :
+
+1. Un accès à un compte Frame.io (pour pouvoir créer un token d’API)
+2. Un accès Team Manager ou Admin à une Team dans Frame.io (pour pouvoir créer un webhook)
+3. Un compte Zapier (la version gratuite suffit) et l’[application Zapier de Frame.io](https://zapier.com/apps/frameio/integrations)
+
+Pour vérifier les deux premiers points, rendez-vous sur [developer.frame.io](/fr/platform/v2) et connectez-vous. Si vous ne voyez pas les éléments de menu « Tokens » et « Webhooks » (illustrés ci-dessous), veuillez contacter l’administrateur de votre compte Frame.io.
+
+## Tutoriel {#tutorial}
+
+### 1. Téléverser un nouvel asset et laisser un commentaire {#1-upload-a-new-asset-and-make-a-comment}
+
+L’application Zapier de Frame.io s’appuie sur les données les plus récentes. Si nous voulons travailler avec des commentaires, le meilleur point de départ consiste donc à ouvrir Frame.io, à téléverser un nouvel asset et à y laisser un commentaire. Comme les commentaires sont strictement liés à leur asset parent, cela aidera Zapier à récupérer vos échantillons les plus récents.
+
+Pour rappel, les webhooks Zapier sont propres à une seule Team dans Frame.io : assurez-vous donc que votre commentaire porte sur un asset appartenant à la Team dans laquelle vous souhaitez installer votre workflow !
+
+![Comment on a new Asset](/images/platform/v2/zapier-comment-worflows/1e5258be5ee86a989424885a821d593279bba52ee4cfc42f8222c2ef5a80b856.webp)
+
+### 2. Connecter votre compte Frame.io et récupérer votre commentaire {#2-connect-your-frame-io-account-and-fetch-your-comment}
+
+Commencez par créer un nouveau Zap en cliquant sur le grand bouton orange « Make a Zap » de votre tableau de bord Zapier. Recherchez ensuite « Frame.io », sélectionnez l’application Frame.io et choisissez le déclencheur « **New Comment** ».
+
+![4032c5d-2. Zapier trigger](/images/platform/v2/zapier-comment-worflows/82ec07bdfaf828fe1c1e9ee0f2ec440a0ca414ead914894bdff2aa321c95fe6c.webp)
+
+Sur l’écran suivant, si vous n’avez pas encore connecté de compte Frame.io, vous devrez générer un token d’API et le saisir.
+
+### 2.5 Créer un token d’API {#2-5-create-an-api-token}
+
+Rendez-vous sur le [Developer Portal de Frame.io](/fr/platform/v2), connectez-vous avec votre compte Frame.io et cliquez sur « Tokens » pour créer un nouveau [token d’API](https://developer.frame.io/tokens/new).
+
+Donnez à votre nouveau token un nom descriptif et sélectionnez les scopes suivants :
+
+- **Accounts :** Read
+- **Projects :** Read
+- **Assets :** Read
+- **Team :** Read, Update
+- **Comment :** Create Read, Update
+- **Webhooks :** Create, Read, Update, Delete (tous les scopes)
+
+Lorsque vous avez terminé, cliquez sur « **Create** » et copiez votre token. Accédez ensuite à Zapier, cliquez sur « **Connect an Account** » et saisissez votre nouveau token.
+
+![9c6282d-2.5 Token](/images/platform/v2/zapier-comment-worflows/5fec1fd7a8a456e390de9a6e2b7ad56e593fe13b8e7ab35fefc5e67509abddc1.webp)
+
+### 3. Sélectionner une Team et récupérer votre exemple de commentaire {#3-select-a-team-and-grab-your-sample-comment}
+
+Après avoir enregistré avec votre compte nouvellement connecté, choisissez une Team et enregistrez.
+
+Zapier va maintenant rechercher des « Samples » — en tête desquels devrait figurer le commentaire que vous avez laissé à l’étape 1. Développez-le pour le vérifier et, si tout semble correct, enregistrez à nouveau.
+
+![5db288d-3. Sample search](/images/platform/v2/zapier-comment-worflows/2dc0dab4efff48d4b75619f00432d70e20018c89cff751a78d15ab479f6d2c63.webp)
+
+### 4. Ajouter votre action de traduction {#4-add-your-translation-action}
+
+Il est temps d’ajouter une action à votre Zap ! Recherchez « Translate » et vous devriez trouver l’action « **Translate by Zapier** ».
+
+Sur l’écran de configuration qui suit, choisissez l’icône en haut à droite de la case centrale et sélectionnez le champ « Text » de votre étape de déclenchement. Ainsi, Zapier traitera toujours dynamiquement le texte de tout nouveau commentaire qui atteint ce Zap.
+
+Choisissez maintenant votre langue, enregistrez et testez.
+
+Si tout semble correct, confirmez et cliquez sur « **Add a Step** ».
+
+![de48d15-4. Translate Config](/images/platform/v2/zapier-comment-worflows/0aa91c5a7c923ade94fa0f01d7a613e7a753b8d5d51b93de613f3ffc919bc00f.webp)
+
+### 5. Mettre à jour votre commentaire Frame.io {#5-update-your-frame-io-comment}
+
+Maintenant que nous disposons du texte original et du texte traduit, il est temps de reconstruire notre commentaire !
+
+Choisissez l’application Frame.io, puis l’action **Update Comment**.
+
+En bas de l’écran suivant, dans le champ « Comment », cliquez sur la liste déroulante et sélectionnez « **Use a Custom Value** ». Ensuite, choisissez l’« **ID** » de votre étape de déclenchement. Comme à l’étape précédente, cela garantit que les nouveaux commentaires seront toujours traités dynamiquement.
+
+![Custom-value.png](/images/platform/v2/zapier-comment-worflows/07c9d89dbfd52426941a410869fd5d22a050e766288fe1d8a0a51c9c9a4850d1.webp)
+
+![8020a1d-5. Pick the ID](/images/platform/v2/zapier-comment-worflows/78cd6dd39ea6f26288a113288ba0bcd4058da55cb915945e45edbb82ee552870.webp)
+
+Cliquez maintenant sur « Refresh Fields » et composez le texte dynamique de votre commentaire en combinant votre texte original et votre texte traduit.
+
+![c57593d-5. Final template](/images/platform/v2/zapier-comment-worflows/f680b858d4fb9c1a249d9bd3f7b11214f5127289c807e4e527e6d469fe0cdfe7.webp)
+
+### 6. Tester votre action {#6-test-your-action}
+
+Une fois que tout semble correct, cliquez sur « **Continue** », puis testez votre action. Cela renverra votre commentaire traduit vers Frame.io.
+
+Accédez à Frame.io : si vous voyez le résultat attendu, tout est prêt !
+
+![2b95dcd-6. Confirm](/images/platform/v2/zapier-comment-worflows/26c303f216b40be6cb087ef89dfd29b15ab3471f122ffca9bafb6d73ea729416.webp)
+
+### 6.5. Finalisation {#6-5-finishing-up}
+
+Félicitations ! Le plus dur est fait !
+
+Pour terminer, cliquez sur « **Finish** », nommez votre Zap et activez-le ! Désormais, tout commentaire laissé dans cette même Team suivra votre workflow et sera traduit dynamiquement.
+
+![a35d3b5-6. All Done](/images/platform/v2/zapier-comment-worflows/3eeb71698cb39348baed2981fa9e3816b0583a8f67c6347b8454fdb7030b4704.webp)

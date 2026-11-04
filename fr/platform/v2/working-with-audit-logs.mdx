@@ -1,0 +1,134 @@
+---
+title: "Utiliser les journaux d’audit"
+---
+
+## Présentation {#overview}
+
+Frame.io prend en charge et conserve des journaux d’audit (Audit Logs) pour la grande majorité des activités effectuées dans ses applications. Cela inclut à la fois les opérations CRUD de base sur les ressources principales et certaines abstractions spécifiques (par exemple `AssetVersioned`).
+
+<Warning>
+
+**Les journaux d’audit sont tronqués après 30 jours**
+
+Les journaux d’audit de Frame.io sont disponibles via l’API sur une période glissante de 30 jours, après quoi ils sont déplacés vers un stockage à froid. Par conséquent, si vous souhaitez conserver un long historique des événements Frame.io, veillez à stocker les données historiques des journaux de manière indépendante.
+
+</Warning>
+
+### Portée et permissions {#scope-and-permissions}
+
+Seuls les administrateurs de compte (Account Admins) peuvent accéder aux journaux d’audit d’un compte, et tous les appels à l’endpoint des journaux d’audit doivent être limités à un `account_id` comme suit :
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### Réponses {#responses}
+
+Les réponses des journaux d’audit ont toutes un format similaire :
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**N’oubliez pas la pagination !**
+
+Les données de réponse des journaux d’audit peuvent être assez volumineuses : assurez-vous donc de bien maîtriser la [pagination](/fr/platform/v2/key-concepts#pagination) !
+
+</Info>
+
+## Filtres {#filters}
+
+Les journaux d’audit prennent en charge divers filtres, notamment des plages de dates. Contrairement aux endpoints de [recherche](/fr/platform/v2/search-for-assets) de Frame.io, les filtres ne peuvent être envoyés que sous forme de paramètres de chaîne de requête `GET`.
+
+Les filtres suivent tous le même format :
+
+### GET + chaîne de requête {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**Une valeur par type de filtre**
+
+Actuellement, les journaux d’audit prennent en charge une seule valeur par type de filtre. Si vous fournissez deux filtres du même type (par exemple `filter[action]=ActionOne&filter[action]=ActionTwo`), le second filtre est prioritaire.
+
+</Info>
+
+### Principaux types de filtres {#key-filter-types}
+
+Les principaux types de filtres permettant de trier et de parcourir les journaux d’audit sont les suivants :
+
+| Type de filtre | Description | Exemples de valeurs |
+| --- | --- | --- |
+| `item_type` | Filtre toutes les ressources d’un même type. | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Filtre une ressource unique et spécifique, par exemple un asset ou une présentation. | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | Filtre une action unique, généralement associée à un `item_type` | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | Filtre selon l’ID d’un utilisateur spécifique (acteur). | *&lt;user-id>* |
+| `team_id` | Filtre les activités associées à une seule équipe. Ce filtre n’est utile que pour les comptes comportant plusieurs équipes. | *&lt;team-id>* |
+| `inserted_at` | Filtre les événements d’audit survenus avant ou après une date et heure spécifiques. Doit être au format ISO-8601, en UTC. | *2022-08-25T00:00:00Z* |
+
+### Types d’éléments et actions {#item-types-and-actions}
+
+| Ressource | Actions |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## Exemples de filtres {#filter-examples}
+
+Les filtres suivent tous un format similaire, comme décrit ci-dessus. Voici quelques exemples ciblant des cas d’usage spécifiques pour vous aider à démarrer.
+
+| Scénario | Chaîne de requête |
+| --- | --- |
+| Actions effectuées par un seul utilisateur. | `?filter[actor_id]=<user-id>` |
+| Toute l’activité sur une présentation spécifique. | `?filter[item_id]=<presentation-id>` |
+| Commentaires laissés par un utilisateur. | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| Toute l’activité des Review Links d’une équipe. | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## Plages de dates {#date-ranges}
+
+Les plages de dates constituent un cas un peu particulier, car il faut spécifier à la fois la `value` de date et heure `inserted_at` et l’opération (`op`) à appliquer à cette date et heure.
+
+Par conséquent, les requêtes de plage de dates comportent toujours deux éléments de filtre, chacun étant lui-même imbriqué à côté d’un paramètre `[inserted_at]`.
+
+Les opérations prises en charge sont les suivantes :
+
+- **gt** : supérieur à
+- **gte** : supérieur ou égal à
+- **lt** : inférieur à
+- **lte** : inférieur ou égal à
+
+### Exemples de plages de dates {#date-range-examples}
+
+| Scénario | Chaîne de requête |
+| --- | --- |
+| Tous les enregistrements des journaux d’audit à partir d’une date. | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| Tous les assets importés par un utilisateur spécifique jusqu’à une date. | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

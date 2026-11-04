@@ -1,0 +1,216 @@
+---
+title: "Guide pratique : organiser les assets"
+sidebarTitle: "Organiser les assets"
+---
+
+## Introduction {#introduction}
+
+Dans ce guide, nous verrons comment, et dans quelle mesure, vous pouvez contrôler *l’emplacement* où les assets de votre intégration sont importés.
+
+## De quoi ai-je besoin ? {#what-will-i-need}
+
+Si vous n’avez pas lu le guide [Implémenter C2C : configuration](/fr/camera-to-cloud/implementing-c2c-setting-up), jetez-y un rapide coup d’œil avant de continuer !
+
+Vous aurez également besoin de l’`access_token` obtenu lors du guide d’authentification et d’autorisation [C2C matériel](/fr/platform/v2/implementing-c2c-authentication-and-authorization-hardware) ou [Application C2C](/fr/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application).
+
+## Structure des dossiers d’assets {#asset-folder-structure}
+
+Par défaut, les assets sont créés selon la structure de dossiers suivante :
+
+`Cloud Devices` > `{YYYY}_{MM}_{DD}` > `{ASSET_TYPE}` > `{YOUR_DEVICE}` > `{ASSET_NAME}`
+
+Où `{ASSET_TYPE}` vaut `VIDEO`, `AUDIO` ou `DATA` (configuré par canal pour votre modèle d’appareil), `{YOUR_DEVICE}` est le nom de l’appareil de projet connecté au projet de l’utilisateur, et `{ASSET_NAME}` est le nom de l’asset que vous avez importé, c’est-à-dire l’asset lisible dans Frame.io.
+
+### Routage par extension {#extension-routing}
+
+Vous pouvez configurer votre appareil pour diriger différents assets vers des dossiers `{ASSET_TYPE}` personnalisés en fonction de l’extension de fichier dans `{ASSET_NAME}`. Supposons par exemple que votre intégration produise plusieurs types de fichiers, chacun ayant une provenance spécifique. Vous pouvez nous demander de mapper ces assets de la manière suivante :
+
+```text
+.mov -> VIDEO
+.mp4 -> VIDEO
+.raw -> STILLS
+.jpeg -> STILLS
+.pdf -> CAMERA REPORTS
+.las -> LiDAR Scans
+```
+
+Désormais, lorsque vous créez l’asset suivant :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_codes]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "IMAGE_0001.jpeg", 
+            "filetype": "image/jpeg", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation de `/v2/assets` est [disponible ici](/fr/camera-to-cloud/api-reference/device-asset-create)
+
+</Info>
+
+… il sera dirigé vers un emplacement tel que : `Cloud Devices` > `2022_04_01` > `STILLS` > `MY_DEVICE` > `IMAGE_0001.jpeg`.
+
+Si le fichier s’appelait plutôt `A001_C001.mov`, il serait dirigé vers : `Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `A001_C001.mov`.
+
+### Chemins d’importation tokenisés {#tokenized-upload-paths}
+
+Certaines intégrations peuvent souhaiter mieux contrôler la structure de dossiers créée par leur appareil. De notre côté, chez [Frame.io](http://frame.io/), nous devons garantir une certaine cohérence dans la manière dont les fichiers sont importés dans [Frame.io](http://frame.io/) depuis un appareil C2C, et notamment offrir aux clients de [Frame.io](http://frame.io/) des garanties sur la partie de leur projet avec laquelle un appareil C2C peut interagir. C’est pourquoi nous permettons aux intégrateurs de personnaliser l’emplacement d’importation de leurs assets à l’intérieur du dossier `{YOUR_DEVICE}`, mais pas d’importer des assets en dehors de ce dossier.
+
+Pour importer dans une structure de dossiers personnalisée, vous devrez travailler avec votre Partner Manager. Les structures de dossiers personnalisées reposent sur un ensemble de métadonnées tokenisées qui doivent être fournies lors de la création de l’asset. Prenons un exemple simple :
+
+Supposons que nous disposions d’un rig de caméra 3D dont les valeurs `reel_name` sont `"A001"`, `"A002"`, `"A003"`, etc., et les valeurs `clip_number` sont `"C001"`, `"C002"`, etc. Nous voulons créer un dossier pour chaque clip et y placer les fichiers de l’œil gauche et de l’œil droit, de sorte que les fichiers apparaissent ainsi dans un projet :
+
+![Chemin de dossier tokenisé - exemple de rig 3D](/images/camera-to-cloud/how-to-organize-assets/e40b09128d1cbf3c876fd14169a6406642d50d13ce7ab802baff4bbaf50bfd4a.webp)
+
+Pour cela, nous devons configurer deux paramètres :
+
+- Les champs de métadonnées obligatoires
+- Le chemin de fichier tokenisé
+
+Les champs de métadonnées obligatoires sont une simple liste de clés qui doivent être définies lors de la création d’un asset pour votre intégration :
+
+```text
+[reel_name, clip_number]
+```
+
+Vous pouvez ensuite utiliser n’importe laquelle de ces clés pour créer un chemin délimité par des `/`, en utilisant `{field_name}` pour indiquer où la valeur d’un champ doit être insérée :
+
+```text
+REEL_{reel_name}/{reel_name}_{clip_number}
+```
+
+Ces deux paramètres devront être transmis à notre équipe chez [Frame.io](http://frame.io/) afin d’être ajoutés aux informations de votre intégration. Une fois cette configuration effectuée, lorsque vous créez un asset, ces valeurs devront être fournies à la racine de la charge utile pour que la création de l’asset réussisse :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_LEFT.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10,
+            "metadata": {
+              "reel_name": "A001",
+              "clip_number": "C001"
+            },
+        }
+__JSON__
+} | python -m json.tool
+```
+
+L’exemple ci-dessus crée un fichier dont le chemin complet ressemble à : `Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `REEL_A001` > `A001_C001` > `A001_C001_LEFT.mp4`
+
+<Danger>
+
+**Erreurs de métadonnées**
+
+Si votre appareil n’a pas été explicitement configuré pour autoriser ces champs, vous recevrez une erreur en effectuant le même appel. De même, si vous avez configuré des champs de métadonnées obligatoires, vous DEVEZ les fournir dans la charge utile de création de l’asset, faute de quoi une erreur sera renvoyée.
+
+</Danger>
+
+La charge utile accepte toute valeur JSON valide. Les valeurs qui ne sont pas des chaînes sont rendues de la manière suivante :
+
+- **entiers** : rendus en base 10 : `10` -> `"10"`
+- **flottants** : utilisent la représentation la plus courte selon l’algorithme décrit dans « Printing Floating-Point Numbers Quickly and Accurately », dans les Proceedings of the SIGPLAN ‘96 Conference on Programming Language Design and Implementation.
+- **booléens** : `true` et `false` sont rendus sous la forme `"true"` et `"false"`
+- **null** : rendu sous la forme d’une chaîne vide. Si `reel_name` était défini sur `null`, le premier dossier personnalisé serait rendu sous la forme `REEL_`
+
+De manière générale, nous vous conseillons de limiter vos valeurs à des chaînes et de formater les autres valeurs comme bon vous semble (par exemple, les entiers sont toujours affichés sans zéros de tête, ce que vous voudrez peut-être modifier).
+
+En règle générale, n’utilisez que des champs qui ont une valeur valide pour chaque clip ; si un champ n’a pas toujours une valeur valide, prévoyez une façon de représenter les valeurs non définies ou nulles.
+
+## Empilement de versions {#version-stacking}
+
+[Frame.io](http://frame.io/) prend en charge les [piles de versions](https://support.frame.io/en/articles/4431-version-stacking-and-comparison), un moyen de regrouper dans l’interface plusieurs itérations d’un même contenu. L’API C2C permet aux appareils d’importer de nouvelles itérations d’un asset, qui seront placées dans une pile de versions avec ses versions précédentes.
+
+Pour créer une pile de versions, vous devez fournir un `autoversion_id` qui identifie la pile de versions à laquelle appartiennent les assets. Cette valeur peut être n’importe quoi : un UUID, un nom de fichier, etc. Veillez à n’utiliser que des valeurs qui ne seront jamais répétées involontairement dans un dossier d’assets. Par exemple, si votre intégration est susceptible de créer plusieurs fois le même nom de fichier, le nom de fichier n’est *pas* un bon candidat pour `autoversion_id`.
+
+Nous fournissons un autoversion_id de la manière suivante :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v01.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Désormais, chaque fois que vous importez un nouvel asset avec le même autoversion_id, l’asset sera ajouté comme dernière version dans une pile avec l’asset d’origine :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v02_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+*Les assets ne s’empilent que s’ils sont importés dans le même dossier* ; vous devrez donc garder quelques points à l’esprit si vous souhaitez implémenter l’empilement de versions :
+
+- Les métadonnées tokenisées doivent aboutir au même dossier parent pour que la pile de versions soit créée.
+- Comme la date de création fait partie du chemin du fichier, les nouvelles versions créées après minuit UTC risquent de ne pas s’empiler correctement, sauf si vous fournissez un offset correspondant à l’heure de création de l’importation d’origine.
+
+Ce second point est important. Supposons qu’une nouvelle version de l’asset soit créée 48 heures après l’importation initiale. Pour qu’elle s’empile avec l’asset d’origine, nous devons fournir un offset situé 48 heures dans le passé : 172800 secondes.
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v03_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 172800,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Si l’asset actuel *avait dû* être importé dans `2022_04_03`, il sera désormais importé dans `2022_04_01` et s’empilera avec le bon asset.
+
+## Et ensuite {#next-up}
+
+C’est le dernier guide pour créer une excellente intégration C2C ! Prenez un moment pour vous féliciter. Offrez-vous peut-être un en-cas. Il ne vous reste plus qu’à passer en revue la checklist de l’intégrateur, qui résume tout ce dont vous avez besoin pour créer une intégration à toute épreuve.
+
+Si ce n’est pas déjà fait, nous vous encourageons à contacter notre équipe, puis à passer au guide suivant. Nous avons hâte d’avoir de vos nouvelles !
