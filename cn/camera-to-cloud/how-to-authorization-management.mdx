@@ -1,0 +1,164 @@
+---
+title: "操作指南：管理授权"
+sidebarTitle: "管理授权"
+---
+
+## 概述 {#overview}
+
+本指南概述了在 Frame.io 中管理设备授权令牌的流程，包括令牌刷新、撤销以及安全存储实践。
+
+## 前提条件 {#prerequisites}
+
+请查看 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，以确保配置正确。
+
+所需的基本要素：
+
+- 由 Frame.io 颁发的有效 `client_secret`
+- 为您分配的 `client_id`，详见[认证与授权指南](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)
+- 有效的 `access_token` 和 `refresh_token` 凭据
+
+## 了解授权令牌 {#understanding-authorization-tokens}
+
+我们之前的[设备认证](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)指南概述了通过用户认证获取初始授权令牌的过程。
+
+访问令牌的有效期约为 8 小时。为了避免频繁地重新配对设备，我们使用 `offline` scope，在授权的同时获取一个刷新令牌。该刷新令牌可在访问令牌过期时用于生成新的访问令牌。
+
+刷新令牌的有效期为 14 天。有意限制访问令牌的有效期，可以最大程度地减少令牌泄露带来的潜在漏洞，从而增强安全性。请注意，如果在刷新令牌过期之前未续订授权，则需要用户重新进行认证。
+
+## 访问令牌续订流程 {#access-token-renewal-process}
+
+访问令牌过期后，API 请求将收到以下响应：
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+执行以下命令以获取新令牌：
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/auth/token` 的详细文档可[在此处](/cn/camera-to-cloud/api-reference/authentication/auth-device-token)查看
+
+</Info>
+
+此实现需要多个认证因素以增强安全性。未经授权的一方必须同时获取 `refresh_token` 和 `client_secret`，才能成功冒充您的集成。
+
+续订成功后会生成以下响应：
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+令牌刷新成功后，您之前的凭据将失效。请确保妥善存储新的授权令牌。
+
+尝试重复使用已过期的刷新令牌会得到以下结果：
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+这表示该令牌之前已被处理过，不再有效。
+
+<Danger>
+
+**刷新期间收到 401**
+
+如果在令牌刷新期间收到 `401 Not Authorized` 响应，则表示凭据已失效，需要重新进行授权流程。
+
+</Danger>
+
+## 处理刷新响应失败 {#handling-failed-refresh-responses}
+
+由于 `refresh_token` 值只能使用一次，如果未能获取刷新响应（无论是由于网络中断还是系统关机），都必须重新启动完整的认证/授权流程。
+
+这一安全协议虽然可能带来不便，但对于维护系统完整性至关重要。
+
+## 令牌撤销流程 {#token-revocation-process}
+
+某些情况下可能需要终止对 Frame.io 的访问，例如项目完成或应用程序重置。在停止当前授权时，请执行正确的撤销流程。
+
+执行以下命令以撤销授权：
+
+<Info>
+
+**重新授权**
+
+撤销后，您必须按照[认证与授权指南](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)中的说明重新启动认证与授权流程。
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]'
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/auth/revoke` 的完整文档可[在此处](/cn/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)查看
+
+</Info>
+
+系统会返回不含负载的标头。`200` 状态码表示成功：
+
+```text
+HTTP/2 200
+...
+```
+
+撤销后，需要 `access_token` 认证的 Frame.io 操作将返回 `Not Authorized`。要恢复访问，需要将设备重新配对到项目。
+
+## 令牌存储实现 {#token-storage-implementation}
+
+要在系统重启后保持持久授权，需要安全地存储令牌。请遵守以下基本准则：
+
+**实施用户访问控制：** 将令牌的可见性和访问权限仅限于应用程序进程。
+
+**启用存储加密：** 对存储的令牌（包括 `client_secret` 和授权凭据）进行加密。切勿以明文格式保存授权密钥。
+
+**保持凭据分离：** 虽然我们的演示 Python 应用程序将存储合并在一起，但生产环境应将授权令牌与 `client_secret` 分开存储。请考虑以下因素：
+
+- `client_secret` 和 `client_id` 是永久性的设备凭据——一旦丢失，将导致设备永久失效
+- 授权令牌在设备运行期间会定期更新
+- 分离存储可确保令牌存储损坏时只需重新配对设备，而无需完全重置认证
+
+虽然 SQLite 提供了理想的令牌存储能力，但至少应将授权数据与核心凭据分开存储。
+
+## 后续步骤 {#next-steps}
+
+感谢您的持续推进，欢迎继续阅读[连接状态与心跳指南](/cn/camera-to-cloud/how-to-heartbeats-connection-info-and-status)。如有任何问题或疑虑，请联系我们的团队。

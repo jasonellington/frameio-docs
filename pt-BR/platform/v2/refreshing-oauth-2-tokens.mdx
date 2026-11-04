@@ -1,0 +1,171 @@
+---
+title: "Atualizar tokens do OAuth 2"
+---
+
+<Warning>
+
+**Este guia pressupõe que você já criou um app OAuth2**
+
+Se ainda não criou, consulte [este](https://developer.frame.io/oauth-2-applications/building-an-oauth-2-app) guia e volte aqui depois de capturar o `access_token` e o `refresh_token` de uma concessão de credenciais OAuth 2 bem-sucedida.
+
+</Warning>
+
+## Noções básicas de atualização de tokens {#basics-of-token-refresh}
+
+Supondo que você tenha incluído o scope ***offline*** na sua solicitação de credenciais OAuth2.0, uma autenticação bem-sucedida pelo aplicativo Accounts do Frame.io retornará um payload semelhante ao seguinte:
+
+```json
+{
+  "access_token":"BEARER_TOKEN",
+  "expires_in":3600,
+  "refresh_token":"REFRESH_TOKEN",
+  "scope":"account.read offline",
+  "token_type":"bearer"
+}
+```
+
+O `access_token` é um bearer token que pode ser usado para agir em nome do usuário autenticado; ele expira após 3600 segundos (uma hora) e, depois disso, o `refresh_token` pode ser usado para obter um novo `access_token`. O refresh token, por sua vez, expira após 30 dias; nesse momento, o usuário precisará fazer login do zero, gerando um novo par de tokens de acesso/atualização; e assim por diante.
+
+Se você não solicitar explicitamente o scope *offline*, não receberá um `refresh_token` e, portanto, após uma hora, terá que autenticar o usuário completamente de novo.
+
+### Capturar o refresh token após uma autenticação bem-sucedida {#capturing-the-refresh-token-on-successful-authentication}
+
+Nem é preciso dizer que você não pode usar um `refresh_token` que não tem, então certifique-se de que seu app:
+
+- Solicite o scope **offline**
+- Capture o `refresh_token` retornado em um callback bem-sucedido.
+
+Por conveniência, o callback dos nossos [guias de apps OAuth 2](https://developer.frame.io/oauth-2-applications/building-an-oauth-2-app) é reproduzido aqui, com uma chamada `os` para guardar o refresh token. Observe que são fornecidos dois exemplos: um com PKCE configurado (sem cabeçalho de autenticação básica) e outro sem (com cabeçalho de autenticação básica).
+
+### Sem PKCE {#without-pkce}
+
+```python title="Python"
+def callback():
+  # Where `request` refers to our initial call to the auth URL
+  state = request.args.get('state')
+  scope = request.args.get('scope')
+  code = request.args.get('code')
+  error = request.args.get('error')
+
+  if error:
+    return "Error: " + error
+
+  # Set up for client authorization and set up the data you need to send.
+  client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET)
+
+  post_data = {
+    "grant_type": "authorization_code",
+    "code": code,
+    "redirect_uri": REDIRECT_URI,
+    "state": state,
+    "scope": SCOPE
+  }
+
+  # Send a POST request with the data you need to receive an access token. 
+  response = requests.post(TOKEN, auth=client_auth, data=post_data)    
+	# Stash the refresh token for later
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+### Com PKCE {#with-pkce}
+
+```python title="Python"
+def callback():
+  # Where `request` refers to our initial call to the auth URL
+  state = request.args.get('state')
+  scope = request.args.get('scope')
+  code = request.args.get('code')
+  error = request.args.get('error')
+
+  if error:
+    return "Error: " + error
+
+  # If using PKCE, you must include the CLIENT_ID in your request body  
+  post_data = {
+    "grant_type": "authorization_code",
+    "code": code,
+    "redirect_uri": REDIRECT_URI,
+    "state": state,
+    "scope": SCOPE
+    "client_id": CLIENT_ID 
+  }
+
+  # Send a POST request with the data you need to receive an access token.
+  # If using PKCE, use the below request with no auth
+  response = requests.post(TOKEN_URL, data=post_data)
+  # Stash the refresh token for later
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+## Executar uma atualização {#executing-a-refresh}
+
+A atualização em si é uma única chamada para a URL de token do Frame.io:
+
+- Método: POST
+- URL: **[https://applications.frame.io/oauth2/token](https://applications.frame.io/oauth2/token)**
+- `Content-Type`: *application/x-www-form-urlencoded*
+
+Uma atualização sempre incluirá pelo menos os três atributos a seguir em seus dados de formulário:
+
+- `grant_type`: *refresh_token*
+- `scope`: &lt;SCOPES>
+- `refresh_token`: &lt;REFRESH_TOKEN>
+
+Se estiver usando PKCE, você precisará incluir o `client_id` do seu app nesses dados de formulário; caso contrário, precisará incluir um cabeçalho de autenticação Basic com o `client_id` e o `client_secret` do seu app como Username e Password, respectivamente.
+
+### Sem PKCE {#without-pkce-1}
+
+Assim como ao [fazer o callback de autenticação inicial](https://developer.frame.io/oauth-2-applications/building-an-oauth-2-app#the-callback) sem PKCE, essa atualização padrão exigirá fornecer seu `client_id` e `client_secret` como Username e Password em um cabeçalho de autenticação Basic.
+
+```python title="Python"
+def refresh():
+  # Fetch the refresh token, assuming we have it
+  REFRESH_TOKEN = os.environ.get('REFRESH_TOKEN')
+
+  client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID,CLIENT_SECRET)
+  post_data = {
+    "grant_type": "refresh_token",
+    "scope": SCOPE,
+    "refresh_token": REFRESH_TOKEN
+    # if using PKCE, you will need to include your client_id as below
+    # "client_id": CLIENT_ID 
+  }
+
+  response = requests.post(TOKEN_URL, auth=client_auth, data=post_data)
+  # Catch + stash a new Refresh Token
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+### Com PKCE {#with-pkce-1}
+
+Novamente, estamos reproduzindo as regras do nosso ciclo `/callback` inicial:
+
+- Não incluímos um cabeçalho `Authorization`
+- Precisamos incluir o `client_id` no payload
+
+```python title="Python"
+def refresh():
+  # Fetch the refresh token, assuming we have it
+  REFRESH_TOKEN = os.environ.get('REFRESH_TOKEN')
+
+  post_data = {
+    "grant_type": "refresh_token",
+    "scope": SCOPE,
+    "refresh_token": REFRESH_TOKEN
+    "client_id": CLIENT_ID 
+  }
+
+  response = requests.post(TOKEN_URL, data=post_data)
+  # Catch + stash a new Refresh Token
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+Parabéns! Agora você consegue lidar com todo o ciclo de vida dos tokens de um aplicativo cliente OAuth2.0.

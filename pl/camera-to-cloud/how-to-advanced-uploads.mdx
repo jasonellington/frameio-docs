@@ -1,0 +1,599 @@
+---
+title: "Instrukcja: przesyłanie (zaawansowane)"
+sidebarTitle: "Przesyłanie (zaawansowane)"
+---
+
+## Wprowadzenie {#introduction}
+
+Niezawodne przesyłanie zasobów to podstawowa funkcja każdej integracji C2C. Ten przewodnik przedstawia zaawansowane techniki i dobre praktyki tworzenia solidnego, odpornego i wydajnego systemu przesyłania, który dobrze sprawdza się nawet w trudnych warunkach.
+
+## Wymagania wstępne {#prerequisites}
+
+Jeśli jeszcze tego nie zrobiono, przed kontynuowaniem zapoznaj się z przewodnikiem [Implementing C2C: Setting Up](/pl/camera-to-cloud/implementing-c2c-setting-up).
+
+Będziesz potrzebować tokenu `access_token` uzyskanego podczas [procesu uwierzytelniania i autoryzacji](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Nadal będziemy używać [tego samego zasobu testowego](https://f.io/Rq1q5CzB) co w [przewodniku po podstawowym przesyłaniu](/pl/camera-to-cloud/how-to-basic-upload).
+
+## Zaawansowane parametry zasobów {#advanced-asset-parameters}
+
+Podczas tworzenia zasobów w Frame.io możesz użyć kilku zaawansowanych parametrów, aby dostosować sposób przesyłania. Parametr `offset` jest szczególnie ważny dla prawidłowej integracji.
+
+### Offset — obsługa wstrzymanych urządzeń {#offset---handling-paused-devices}
+
+Podanie dokładnej wartości `offset` ma kluczowe znaczenie. Ten parametr określa, kiedy dany plik multimedialny został utworzony, i gwarantuje, że Twoje urządzenie nie prześle treści, które nie powinny zostać udostępnione. Gdy urządzenie zostaje wstrzymane w Frame.io, użytkownik sygnalizuje, że multimedia utworzone w czasie wstrzymania nie powinny być przesyłane. Więcej szczegółów znajdziesz w naszym [przewodniku po funkcji wstrzymywania](/pl/camera-to-cloud/how-to-heartbeats-connection-info-and-status#managing-the-paused-status).
+
+### Dodatkowe zalety parametru offset {#additional-benefits-of-the-offset-parameter}
+
+Parametr `offset` daje jeszcze jedną istotną korzyść przy porządkowaniu multimediów w Frame.io. Podczas przesyłania treści zarejestrowanych wcześniej — na przykład gdy użytkownik podczas odtwarzania wybierze zdjęcie zrobione w poprzednim tygodniu — parametr `offset` sprawia, że te multimedia trafiają do folderów odpowiadających pierwotnej dacie ich zarejestrowania, a nie bieżącej dacie przesłania.
+
+Taki chronologiczny porządek zachowuje logiczną oś czasu w strukturze projektu Frame.io. Bez parametru `offset` archiwalne multimedia byłyby błędnie grupowane z dzisiejszymi treściami, co mogłoby dezorientować montażystów i innych współpracowników.
+
+Możesz zechcieć pozostawić użytkownikom wybór w tej kwestii za pośrednictwem interfejsu. Jeśli użytkownicy wolą porządkować wszystkie przesłane pliki według bieżącej daty niezależnie od momentu zarejestrowania multimediów, możesz po prostu pominąć parametr `offset`, ponieważ jego wartość domyślna to `0`.
+
+Dzięki konstrukcji naszego API Twoje urządzenie nie musi śledzić stanu wstrzymania. Zamiast tego podczas przesyłania pliku wskazujesz, ile sekund temu plik został utworzony. Nasz serwer porównuje tę wartość z okresami wstrzymania i odrzuca przesyłanie, jeśli plik został utworzony podczas wstrzymania.
+
+Aby zademonstrować tę funkcję, wstrzymaj urządzenie z menu z trzema kropkami na karcie C2C Connections.
+
+Teraz spróbuj przesłać zasób:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 0
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Specyfikacja endpointu API**
+
+Dokumentację endpointu `/v2/devices/assets` [znajdziesz tutaj](/pl/camera-to-cloud/api-reference/device-asset-create).
+
+</Info>
+
+Otrzymasz następujący błąd:
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+Jeśli wznowisz działanie urządzenia i ponowisz to samo żądanie, zasób zostanie utworzony.
+
+Jeśli jednak zasób został utworzony w okresie wstrzymania, musisz ustawić `offset` tak, aby odzwierciedlał rzeczywisty moment jego utworzenia:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 60
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Informuje to Frame.io, że zasób został utworzony 60 sekund temu (w czasie wstrzymania), co prawidłowo wywołuje błąd `Channel Paused`.
+
+*Dokładne wartości `offset` są niezbędne*, aby zapobiec przesyłaniu poufnych treści wbrew woli użytkownika, w tym chronionej własności intelektualnej, wrażliwego materiału filmowego lub innych materiałów objętych ograniczeniami.
+
+<Danger>
+
+**Offset a ponowne próby**
+
+Ponawiając nieudane wywołanie tworzenia zasobu, pamiętaj o zaktualizowaniu wartości `offset`. Podczas długotrwałych ponownych prób statyczny offset może wyjść poza odpowiedni okres wstrzymania, co potencjalnie pozwoli na przesłanie plików, które powinny zostać zablokowane.
+
+</Danger>
+
+### Przesyłanie do określonego kanału {#uploading-to-a-specific-channel}
+
+Jeśli Twoje urządzenie ma wiele kanałów, możesz wskazać, którego użyć:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": -10,
+            "channel": 2
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Jeśli kanał nie zostanie określony, domyślnym kanałem jest `0`. Większość integracji nie będzie musiała zmieniać tej wartości.
+
+### Żądanie niestandardowej liczby fragmentów {#requesting-a-custom-chunk-count}
+
+Domyślnie backend Frame.io dzieli pliki na fragmenty (chunki) o rozmiarze około 25 MB. W sieciach o dużym przeciążeniu lepszym rozwiązaniem mogą być mniejsze fragmenty. Możesz zażądać określonej liczby fragmentów za pomocą parametru `parts`:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "name": "C2C_TEST_CLIP.mp4",
+            "filetype": "video/mp4",
+            "filesize": 21136250,
+            "offset": 0,
+            "parts": 4
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Odpowiedź będzie zawierać cztery adresy URL do przesyłania:
+
+```json
+{
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-01-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-02-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-03-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-04-path]"
+    ],
+    ...
+}
+```
+
+Rozmiar fragmentu wyniesie:
+
+```python title="Python"
+math.ceiling(float(21136250) / float(4))
+# 5284063 bytes
+```
+
+Ostatni fragment będzie miał 5 284 061 bajtów (obliczone jako `21136250 - 5284063 * 3`).
+
+Żądając niestandardowej liczby fragmentów, pamiętaj o [ograniczeniach przesyłania wieloczęściowego AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html):
+
+- Każda część musi mieć co najmniej 5 MiB (5 242 880 bajtów), z wyjątkiem ostatniej
+- Części może być maksymalnie 10 000
+
+Jeśli Twoje żądanie narusza te ograniczenia, otrzymasz błąd `500: INTERNAL SERVER ERROR`:
+
+```
+{
+    "code": 500,
+    "errors": [
+        {
+            "code": 500,
+            "detail": "There was a problem with your request",
+            "status": 500,
+            "title": "Something went wrong"
+        }
+    ],
+    "message": "Something went wrong"
+}
+```
+
+Zawsze sprawdzaj, czy niestandardowa liczba części spełnia wymagania S3.
+
+## Wydajne przesyłanie {#uploading-efficiently}
+
+Urządzenia C2C często działają w trudnych warunkach sieciowych, dlatego wydajność ma kluczowe znaczenie. Oto strategie maksymalizacji przepustowości.
+
+### Ponowne wykorzystywanie i pula połączeń TCP {#tcp-connection-reuse/pooling}
+
+Nawiązywanie szyfrowanych połączeń wiąże się ze znacznym narzutem negocjacyjnym. Aby działać wydajnie, ponownie wykorzystuj połączenia TCP przy wysyłaniu wielu żądań. Większość bibliotek HTTP udostępnia abstrakcję `Client` lub `Session`, która utrzymuje trwałe połączenia.
+
+Proces negocjacji nowego połączenia HTTPS obejmuje kryptograficzne uzgadnianie (handshake) i weryfikację certyfikatu. Dzięki ponownemu wykorzystywaniu połączeń ponosisz ten narzut tylko raz, a nie przy każdym żądaniu.
+
+<Info>
+
+**Informacje o uzgadnianiu TCP**
+
+Szczegóły techniczne procesu uzgadniania TLS znajdziesz w [wyjaśnieniu Cloudflare](https://www.cloudflare.com/learning/ssl/what-happens-in-a-tls-handshake/).
+
+</Info>
+
+Aby zademonstrować ponowne wykorzystywanie połączeń za pomocą `curl`, najpierw utwórz nowy zasób w Frame.io zgodnie z opisem w [przewodniku po podstawowym przesyłaniu](/pl/camera-to-cloud/how-to-basic-upload#step-1-creating-an-asset).
+
+Następnie podziel plik na osobne fragmenty do testów:
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk01"
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk02"
+```
+
+Teraz prześlij oba fragmenty przez jedno połączenie TCP, używając parametru `--next` narzędzia curl:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+Porównaj to z osobnymi połączeniami:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+&& curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+<Info>
+
+**Ponowne wykorzystywanie adresów URL fragmentów**
+
+Pod ten sam adres URL fragmentu możesz przesyłać dane wielokrotnie, więc śmiało używaj tych samych adresów w różnych przykładach.
+
+</Info>
+
+W testach ponowne wykorzystywanie połączeń zwykle poprawia wydajność sekwencyjnego przesyłania o 15–20%.
+
+### Przesyłanie równoległe {#parallel-uploads}
+
+Aby uzyskać jeszcze większą przepustowość, przesyłaj wiele fragmentów jednocześnie:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path]\
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+Przy wystarczającej przepustowości łącza przesyłanie równoległe kończy się mniej więcej w czasie najwolniejszego pojedynczego przesyłania.
+
+Dla optymalnej równoległości dobrą praktyczną zasadą są dwa równoczesne przesyłania na jeden rdzeń procesora. Przekroczenie tej proporcji może prowadzić do rywalizacji o zasoby i malejących korzyści.
+
+<Warning>
+
+**Szybkość przesyłania równoległego**
+
+Warunki sieciowe mają znaczący wpływ na wydajność przesyłania równoległego. W niektórych środowiskach przesyłanie sekwencyjne może okazać się szybsze niż równoległe. Zaawansowane implementacje mogą monitorować przepustowość i dynamicznie dostosowywać poziom współbieżności. Zawsze profiluj wydajność w rzeczywistym środowisku produkcyjnym, zamiast polegać na czasach z przykładów.
+
+</Warning>
+
+### Łączenie obu podejść {#combining-both-approaches}
+
+Aby osiągnąć maksymalną wydajność, połącz pulę połączeń z przesyłaniem równoległym. Utwórz wiele procesów, z których każdy korzysta z puli połączeń dla własnej sekwencji przesyłań:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+<Info>
+
+**Funkcje bibliotek HTTP**
+
+Większość bibliotek HTTP udostępnia abstrakcje dla puli połączeń i żądań równoległych. Wypróbuj opcje swojej biblioteki, aby ustalić optymalną konfigurację dla swojego środowiska.
+
+</Info>
+
+## Śledzenie postępu przesyłania {#tracking-upload-progress}
+
+Twoja integracja musi pokazywać użytkownikom podstawowy wskaźnik postępu. Dokładność na poziomie fragmentów jest akceptowalna — przy przesyłaniu w trzech fragmentach postęp może rosnąć od 0% → 33% → 66% → 100% w miarę ukończenia każdego fragmentu.
+
+Bardziej szczegółowe raportowanie postępu zależy od możliwości Twojej biblioteki HTTP. Skontaktuj się z naszym zespołem, jeśli potrzebujesz wskazówek dotyczących implementacji dokładniejszego śledzenia postępu.
+
+## Niezawodne przesyłanie {#uploading-reliably}
+
+Aby zapewnić solidną obsługę błędów, zapoznaj się z naszym [przewodnikiem po błędach](/pl/camera-to-cloud/how-to-handle-errors). Kolejne sekcje zakładają, że wdrożono opisane tam strategie obsługi błędów.
+
+Stworzenie mechanizmu przesyłania o jakości produkcyjnej wymaga uwzględnienia dodatkowych kwestii wykraczających poza obsługę błędów pojedynczych żądań.
+
+### Tworzenie kolejki przesyłania {#creating-an-upload-queue}
+
+W rzeczywistych warunkach Twoje urządzenie może generować multimedia szybciej, niż jest w stanie je przesyłać, albo doświadczać długotrwałych przerw w połączeniu. Wdrożenie systemu kolejkowania oddziela tworzenie multimediów od zarządzania przesyłaniem.
+
+Rozważ architekturę z dwiema kolejkami:
+
+1. **Kolejka multimediów** do rejestrowania plików lokalnych w Frame.io
+2. **Kolejka fragmentów** do przesyłania poszczególnych fragmentów plików
+
+Oto uproszczona implementacja:
+
+```python title="Python"
+# Where we are going to queue new files.
+FILE_QUEUE = Queue()
+
+# Where we are going to queue new chunks.
+CHUNK_QUEUE = Queue()
+
+# The http session that will handle TCP 
+# connection pooling for us.
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Snaps a picture for the user."""
+
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+    FILE_QUEUE.add(file_path)
+
+def task_register_assets():
+    """
+    Pulls snapped pictures from the FILE_QUEUE, registers
+    with Frame.io, and adds the chunks to the CHUNK_QUEUE.
+    """
+    while True:
+        # Get the latest file added to the queue and register 
+        # a C2C Asset for it.
+        new_file = FILE_QUEUE.get()
+        asset = c2c.crete_asset_for_file(HTTP_SESSION, new_file)
+
+        # Calculate the size for each chunk
+        chunk_size = c2c.calculate_chunk_size(asset, new_file)
+
+        # Create a message for each chunk with it's parameters 
+        # and add it to the 
+        # queue.
+        chunk_start = 0
+        for chunk_url in asset.upload_urls:
+            message = {
+                "file_path": new_file,
+                "chunk_url": chunk_url,
+                "chunk_start": chunk_start,
+                "chunk_size": chunk_size,
+            }
+
+            # Put the message in the queue and 
+            CHUNK_QUEUE.put(message)
+            chunk_start += chunk_size
+
+def task_upload_chunk():
+    """Takes a chunks and uploads them."""
+
+    while True:
+        info = CHUNK_QUEUE.get()
+        c2c.upload_chunk(HTTP_SESSION, info)
+
+def launch_upload_tasks():
+    """Lauches our Frame.io upload tasks."""
+    # Create a list to hold all of our tasks.
+    tasks = list()
+
+    # Create one task for registering assets.
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Create 2 tasks per CPU core for uploading chunks.
+    for _ in range(0, GET_CPU_COUNT() * 2):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run these tasks until shutdown
+    run_forever(tasks)
+```
+
+<Warning>
+
+**Obsługa błędów**
+
+W powyższym przykładzie zakładamy, że funkcje wywoływane dla operacji c2c obsługują błędy w sposób opisany w [przewodniku po błędach](/pl/camera-to-cloud/how-to-handle-errors).
+
+</Warning>
+
+### Trwałe kolejkowanie między cyklami zasilania {#persistent-queuing-across-power-cycles}
+
+Kolejka przechowywana w pamięci sprawdza się dobrze, dopóki urządzenie pozostaje włączone, ale co się stanie, jeśli zasilanie zaniknie przed zakończeniem przesyłania? Aby stworzyć naprawdę odporną integrację, musimy zapewnić, że po ponownym uruchomieniu urządzenie wznowi pracę w miejscu, w którym ją przerwało.
+
+Wymaga to zapisywania stanu kolejki w pamięci trwałej między cyklami zasilania. Wbudowana baza danych, taka jak [SQLite](https://www.sqlite.org/index.html), stanowi doskonałą podstawę dla tej funkcjonalności.
+
+Twoja implementacja trwałej kolejki powinna obsługiwać następujące kluczowe operacje:
+
+- Dodawanie nowo utworzonych plików do kolejki przesyłania
+- Śledzenie pomyślnego utworzenia zasobów w Frame.io
+- Rejestrowanie niepowodzeń tworzenia zasobów z powodu błędów
+- Przechowywanie informacji o fragmentach plików dla zadań przesyłania
+- Pobieranie kolejnego fragmentu do przesłania
+- Oznaczanie fragmentów jako pomyślnie przesłanych
+- Rejestrowanie niepowodzeń przesyłania fragmentów
+- Udostępnianie informacji o stanie plików do wyświetlenia użytkownikowi
+
+Oto jak można dostosować poprzedni przykład do korzystania z systemu trwałego przechowywania:
+
+```python title="Python"
+# Our persistence layer for queuing uploads, potentially using SQLite 
+# or another embedded database
+C2C_UPLOAD_STORE = NewC2CUploadStore()
+
+# HTTP session for connection pooling
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Captures an image and adds it to the upload queue."""
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+
+    # Register the file with our persistent store
+    C2C_UPLOAD_STORE.add_file(file_path)
+
+def task_register_assets():
+    """
+    Processes files from persistent storage and registers
+    them with Frame.io for upload.
+    """
+    while True:
+        # Get the next available file from our store
+        file_record = C2C_UPLOAD_STORE.get_file()
+
+        try:
+            # Register the asset with Frame.io
+            asset = c2c.create_asset_for_file(HTTP_SESSION, file_record)
+            chunk_size = c2c.calculate_chunk_size(asset, file_record)
+
+            # Create entries for each chunk in our persistent store
+            chunk_start = 0
+            for chunk_url in asset.upload_urls:
+                message = {
+                    "file_path": file_record,
+                    "chunk_url": chunk_url,
+                    "chunk_start": chunk_start,
+                    "chunk_size": chunk_size,
+                }
+                
+                C2C_UPLOAD_STORE.new_chunk(message)
+                chunk_start += chunk_size
+                
+        except BaseException as error:
+            # Record the error in our persistent store
+            C2C_UPLOAD_STORE.file_asset_create_error(file_record, error)
+        else:
+            # Mark the asset as successfully created
+            C2C_UPLOAD_STORE.file_asset_created(file_record)
+
+def task_upload_chunk():
+    """Uploads individual file chunks from the persistent queue."""
+    while True:
+        # Get the next chunk, marking it as "in progress" to prevent 
+        # other tasks from processing it simultaneously
+        chunk_record = C2C_UPLOAD_STORE.get_chunk()
+
+        try:
+            c2c.upload_chunk(HTTP_SESSION, chunk_record)
+        except BaseException as error:
+            # Record the error for potential retry
+            C2C_UPLOAD_STORE.chunk_error(chunk_record, error)
+        else:
+            # Mark successful completion
+            C2C_UPLOAD_STORE.chunk_success(chunk_record)
+
+def launch_upload_tasks():
+    """Launches Frame.io upload processing tasks."""
+    tasks = []
+
+    # Asset registration task
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Multiple parallel chunk upload tasks
+    worker_count = GET_CPU_COUNT() * 2
+    for _ in range(worker_count):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run indefinitely
+    run_forever(tasks)
+```
+
+Dzięki trwałemu przechowywaniu Twoja integracja staje się odporna na przerwy w zasilaniu. Po ponownym uruchomieniu urządzenie po prostu kontynuuje przetwarzanie od ostatniego zapisanego stanu. Taka architektura stanowi też podstawę do wdrażania bardziej zaawansowanych funkcji, takich jak śledzenie błędów i wykrywanie zablokowanych przesyłań.
+
+### Śledzenie błędów przesyłania {#tracking-upload-errors}
+
+Solidny system przesyłania musi starannie śledzić błędy. Po ponowieniu operacji zgodnie ze strategiami z [przewodnika po błędach](/pl/camera-to-cloud/how-to-handle-errors) zapisz te niepowodzenia w magazynie trwałym. Dzięki temu Twój system może:
+
+1. Obniżać priorytet problematycznych przesyłań, aby nie blokowały całej kolejki
+2. Dostarczać użytkownikom dokładnych informacji o stanie
+3. Umożliwiać interwencję administracyjną w przypadku utrzymujących się problemów
+
+Gdy wystąpi błąd krytyczny, oznacz element, aby zapobiec niepotrzebnym ponownym próbom.
+
+### Zarządzanie zablokowanymi przesyłaniami {#managing-stalled-uploads}
+
+Wdróż zabezpieczenia przed przesyłaniami zablokowanymi na czas nieokreślony. Ustaw maksymalny czas trwania (np. 30 minut), po którym zadanie przesyłania fragmentu powinno zostać przerwane i uruchomione ponownie. Zapobiega to sytuacjom, w których wszystkie procesy przesyłające zostają zablokowane przez operacje, które nie odpowiadają.
+
+### Odzyskiwanie po cichych awariach {#recovering-from-silent-failures}
+
+Awarie systemu, utrata zasilania lub zakończenie procesu mogą uniemożliwić normalne raportowanie błędów. Pobierając elementy z kolejki, zapisuj czas ich pobrania. Jeśli element pozostaje w stanie „w toku” dłużej niż rozsądny próg (np. 30 minut) bez zgłoszenia sukcesu lub niepowodzenia, automatycznie zwróć go do puli dostępnych elementów, aby mógł go przetworzyć inny proces.
+
+### Ograniczanie skutków „zatrutych” przesyłań {#mitigating-poisoned-uploads}
+
+„Zatruty” element kolejki stale kończy się niepowodzeniem z powodu nieodłącznych problemów z danymi lub środowiskiem. Jeśli takie elementy są nieustannie ponownie kolejkowane, mogą skutecznie zablokować cały system przesyłania. Rozważ następujące strategie postępowania w takich przypadkach:
+
+- Po wielu niepowodzeniach obniż priorytet elementu, aby nowsze treści mogły być przetwarzane
+- Śledź zarówno jawne błędy, jak i liczbę prób przetworzenia
+- Stosuj dobre praktyki dotyczące połączeń i autoryzacji, aby odróżniać przejściowe problemy środowiskowe od problemów tkwiących w samym pliku
+- Wdróż stopniowane limity ponownych prób (np. ponawiaj pojedyncze operacje 10 razy w każdej z 3 prób zadania, co daje łącznie 30 prób)
+- Udostępnij interfejs użytkownika do ręcznego resetowania problematycznych przesyłań po rozwiązaniu problemów środowiskowych
+
+„Zatrute” przesyłania mogą wynikać z:
+
+- Uszkodzonych danych pliku powodujących błędy wejścia/wyjścia
+- Katastrofalnych awarii procesu uniemożliwiających raportowanie błędów
+- Błędów, które zwykle można ponowić, ale które są wywoływane przez trwałe warunki leżące u ich podstaw
+
+### Ponowna próba po restarcie systemu {#retry-after-system-restart}
+
+Zanim trwale porzucisz problematyczne przesyłania, oznacz je do jednej ostatniej ponownej próby po następnym restarcie systemu. Pozwala to rozwiązać przypadki, w których przesyłanie kończy się niepowodzeniem z powodu tymczasowych problemów ze stanem systemu, dotyczących pamięci, sterowników lub przydziału zasobów. Jeśli przesyłanie nadal kończy się niepowodzeniem po czystym restarcie, możesz z większą pewnością oznaczyć je jako trwale problematyczne.
+
+## Czyszczenie kolejki {#clearing-your-queue}
+
+Pamiętaj o usuwaniu niedostępnych plików z kolejki. Gdy nośnik zostanie fizycznie wyjęty lub pliki zostaną usunięte, usuń odpowiadające im wpisy z kolejki przesyłania, aby uniknąć niepotrzebnych błędów.
+
+*Co ważne, musisz wyczyścić kolejkę przesyłania przy łączeniu z nowym projektem.* Multimedia zakolejkowane dla jednego projektu nigdy nie powinny pojawić się w innym. Gdy użytkownik sparuje urządzenie z innym projektem, sprawdź, czy projekt się zmienił, a jeśli tak — całkowicie wyczyść istniejącą kolejkę.
+
+## Następne kroki {#next-steps}
+
+Zachęcamy do kontaktu z naszym zespołem w razie jakichkolwiek pytań oraz do przejścia do [przewodnika po zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads). Chętnie wesprzemy Cię w postępach integracji.

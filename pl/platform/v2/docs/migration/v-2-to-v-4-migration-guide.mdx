@@ -1,0 +1,85 @@
+---
+title: "Przewodnik migracji z Frame.io API V3 do V4"
+sidebarTitle: "Przewodnik migracji z V2 do V4"
+---
+
+Poniższy przewodnik pomoże Ci przeprowadzić migrację z Frame.io API V3 (w dokumentacji określanego czasem jako endpoint „legacy” lub „v2”) do Adobe Frame.io API V4. Jego styl i struktura odzwierciedlają przykład migracji API Dropbox, zapewniając kompleksowy przegląd mapowania endpointów, zmian w payloadach, aktualizacji uwierzytelniania i nie tylko.
+
+---
+
+## Lista kontrolna migracji dla deweloperów {#migration-checklist-for-developers}
+
+1. **Określ, jak obecnie korzystasz z V3:**
+
+   - Sporządź listę wszystkich wywołań wykonywanych przez Twoją aplikację (np. tworzenie plików, listowanie folderów, dodawanie komentarzy).
+   - Sprawdź każde z nich w tabeli mapowania, aby znaleźć nowy odpowiednik w V4.
+
+2. **Uzyskaj poświadczenia Adobe IMS (OAuth 2.0):**
+
+   - Utwórz integrację w Adobe Developer Console.
+   - Skonfiguruj poświadczenia klienta OAuth 2.0 i zakres (dostęp do Frame.io).
+   - Zastąp wszystkie stare tokeny deweloperskie Frame.io nowym przepływem tokenów IMS.
+
+3. **Zaktualizuj adresy URL endpointów:**
+
+   - **V3:** `https://api.frame.io/v2/...` z Assetami obsługiwanymi za pomocą `assets/{asset_id}`.
+   - **V4:** `https://api.frame.io/v4/`, a endpointy zawierają `accounts/{account_id}` oraz oddzielne `folders/{folder_id}` / `files/{file_id}`.
+
+4. **Dostosuj payloady żądań i parsowanie odpowiedzi:**
+
+   - V4 zazwyczaj opakowuje dane w obiekt `data` (np. `{"data": {...}}`).
+   - Tworzenie folderów, przesyłanie plików itp. wykorzystują nowe nazwy pól JSON (np. `file_size`, `media_type`).
+   - **Zmiany Team → Workspace:** zastąp `team_id` (V3) przez `workspace_id` (V4).
+
+5. **Przebuduj rejestracje webhooków:**
+
+   - Usuń lub wyłącz stare webhooki V3 (które nie są już wyzwalane w V4).
+   - Zarejestruj nowe webhooki za pomocą `POST /v4/accounts/{account_id}/webhooks`.
+
+6. **Przetestuj obsługę błędów i limity szybkości:**
+
+   - Upewnij się, że Twój kod obsługuje nowe odpowiedzi 4xx/5xx oraz zmiany w formatach żądań i odpowiedzi.
+   - V4 może zwracać inne struktury błędów (np. bardziej ustrukturyzowany JSON, 409 w przypadku konfliktów itp.).
+
+7. **Potwierdź dostęp i uprawnienia:**
+
+   - Sprawdź, czy token Adobe IMS należy do użytkownika (lub konta usługi) z odpowiednimi uprawnieniami do konta/przestrzeni roboczej.
+   - Starsze tokeny V3 z zakresami „na poziomie zespołu” nie są ważne w V4.
+
+8. **Wdróż i monitoruj:**
+
+   - Najpierw przetestuj zaktualizowany kod w środowisku sandbox lub deweloperskim.
+   - Monitoruj logi pod kątem błędów 4xx/5xx lub nieoczekiwanego zachowania; usuń wszelkie problemy przed pełnym wdrożeniem.
+
+---
+
+## Endpointy: mapowanie V3 → V4 {#endpoints-v3-→-v4-mapping}
+
+Poniżej znajduje się zestawienie kluczowych endpointów Frame.io V3 (po lewej) i ich odpowiedników w V4 (po prawej). Ta sekcja jest inspirowana tabelą „v1 → v2 mapping” Dropbox.
+
+> **Wskazówka:** ta tabela koncentruje się na typowych operacjach na plikach, folderach i projektach. Pominięto specjalistyczne endpointy (np. Camera to Cloud).
+
+### OAuth i uwierzytelnianie {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| Token deweloperski (Bearer `<token>`) lub Frame.io OAuth 2.0 z `Authorization: Bearer <token>` | Adobe IMS OAuth 2.0 (wymaga utworzenia projektu w Adobe Developer Console) i użycia: `Authorization: Bearer <adobe_access_token>` |
+
+**Uwaga:** starszych tokenów deweloperskich nie można przekonwertować automatycznie. Musisz zaimplementować nowy przepływ IMS OAuth.<br />
+**Dokumentacja:** [Jak uzyskać token dostępu Adobe Frame.io](https://developer.adobe.com/frameio/api/current/)
+
+### Operacje na folderach i plikach {#folder-and-file-operations}
+
+#### Tworzenie folderu {#create-a-folder}
+
+- **V3 (tworzenie folderu):**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

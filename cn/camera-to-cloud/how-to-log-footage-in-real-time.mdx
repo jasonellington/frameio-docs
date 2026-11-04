@@ -1,0 +1,116 @@
+---
+title: "操作指南：实时记录素材"
+sidebarTitle: "实时记录素材"
+---
+
+## 简介 {#introduction}
+
+实时记录功能允许设备在拍摄现场录制媒体的同时（即在媒体注册到 Frame.io 之前），为同一项目中任意设备生成的所有 C2C 资产登记评论、资产状态及其他数据。
+
+设想一下：导演在 Video Village 观看监视画面时，每当演员表演出色，就可以按下一个按钮；或者一块智能场记板可以在所有资产上标记打板点。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果您还没有阅读 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，请在继续之前快速浏览一下！
+
+您需要使用在硬件设备或 C2C 应用程序认证与授权指南中获得的 `access_token`。
+
+## 时间码要求 {#timecode-requirements}
+
+为了将实时记录事件与资产对齐，我们要求正在拍摄的资产和用于记录的设备都已[同步时间码（jam-sync）或同步锁相（gen-lock）](https://www.bhphotovideo.com/explora/video/tips-and-solutions/timecode-versus-sync-how-they-differ-and-why-it-matters)。录制设备和记录设备都需要将时间码发送到我们的后端，我们会在后端执行时间码同步操作，将记录事件与正确的帧对齐。
+
+## 设置输入配置 {#setting-up-your-input-configurations}
+
+实时记录基于数据模型中的一个新概念：输入（Input）。一个输入代表您设备上的一个物理按钮，可以将其配置为向 Frame.io 发送数据。您首先需要决定允许执行此类操作的按钮数量，然后为每个按钮分配一个从 0 开始的索引。当事件发送到我们的服务器时，该索引将用于识别按下的是哪个按钮。输入直接隶属于通道，因此每条按钮按下消息都需要指向特定的通道端点。有关通道的更多信息，请参阅\[通道管理指南\]。
+
+每个按钮的功能配置由用户通过 Frame.io 的界面完成，从而使集成尽可能简单。除了在您的按钮/触发器等可配置的情况下，能够将某个按钮指定为"Frame.io 操作"之外，您无需在自己这一端提供任何特殊的界面功能。
+
+我们将与您合作，为设备的每个输入确定以下配置：
+
+- 索引：用于识别输入的从 0 开始的整数。
+
+- 显示名称：在 Frame.io 配置界面中向用户显示的输入名称。
+
+- 支持的操作：目前唯一的操作类型是"单击"，但将来我们可能会允许其他操作类型，例如"长按"或"双击"，以便每个输入支持多种操作，每种操作具有不同的含义。
+
+- 按钮颜色：如果您的按钮有对应的颜色，我们可以显示该颜色，帮助用户在配置设备输入设置时辨别方向。
+
+- 默认事件类型：此输入默认生成的事件类型：
+
+  - 评论：此输入生成一条评论
+  - 状态：此输入更新资产状态
+
+- 默认评论文本：此输入生成的评论所使用的默认文本
+
+- 默认状态：当此输入用于设置状态时，用于更新资产的默认状态。可以是：
+
+  - `in_progress`
+  - `needs_review`
+  - `approved`
+
+通过提前提供这些信息，我们可以尽可能降低对您实际设备的要求。
+
+## 发送实时记录事件 {#sending-a-real-time-logging-event}
+
+可以通过以下调用发送实时记录事件
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/channels/{channel_id}/inputs/{input_index}/trigger \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "action_type": "single_press",
+            "offset": 0,
+            "start": {
+                "smpte_timecode": "01:00:00:00",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            },
+            "duration": {
+                "smpte_timecode": "00:00:00:01",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            }
+       }
+__JSON__
+} | python -m json.tool
+```
+
+成功时，您将收到一个负载为空的 `204` 响应。
+
+**URL 参数**
+
+- `channel_id`：此输入所注册到的通道的 UUID。此 ID 可以通过通道创建调用或从 [identity 端点](/cn/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information)获得。
+- `input_index`：发起调用的输入的索引
+
+**JSON 正文**
+
+- `action_type`：要执行的操作类型。目前唯一支持的操作是 `single_press`。
+
+- `offset`：从资产开始处到记录事件位置的偏移量。
+
+- `start`：开始时间，以触发输入时的 [SMPTE 时间码](https://workflow.frame.io/guide/timecode) + 帧率表示。
+
+  - `smpte_timecode`：以 SMPTE 字符串表示的时间码。
+
+  - `rate`：时间码流的帧率。
+
+    - `playback`：帧率的播放速度，以数组中的 `[numerator, denominator]` 对表示。此字段也可以接受字符串格式的分数 `"numerator/denominator"`。23.98 等 NTSC 帧率应以其完整的有理数值发送：\[`24000, 1001]`。
+    - `ntsc`：时间码的 NTSC 标准。可以是“`non_drop"` 或 `null`。如果为 `null`，`playback` 必须表示整数值，例如 `[24, 1]`。如果为 `"non_drop"`，`playback` 必须表示有效的 NTSC 帧率，例如 `[24000, 1001]`。
+
+- `duration`：事件的持续时间，以触发输入时的 [SMPTE 时间码](https://workflow.frame.io/guide/timecode) + 帧率表示。遵循与 `start` 相同的对象定义。对于 `single_press` 事件，必须恰好为 1 帧（`"01:00:00:00"`）。
+
+## 可靠性要求 {#reliability-requirements}
+
+实时上传触发器必须遵循与上传相同的[可靠性准则](/cn/camera-to-cloud/how-to-advanced-uploads#uploading-reliably)，并遵守[设备暂停状态](/cn/camera-to-cloud/how-to-advanced-uploads#offset---handling-paused-devices)。
+
+## 下一步 {#next-up}
+
+如果您还没有联系我们的团队，我们鼓励您与我们联系，然后继续阅读下一篇指南。我们期待收到您的来信！

@@ -1,0 +1,75 @@
+---
+title: "Kluczowe pojęcia"
+---
+
+## Struktura API {#api-structure}
+
+API Frame.io obsługuje typowe mechanizmy, takie jak ograniczanie liczby żądań, paginacja kolekcji zasobów, wersjonowanie i błędy. W tej sekcji opisano szczegóły każdego z nich.
+
+### Organizacja i styl {#organization-and-style}
+
+API jest zorganizowane zgodnie z powszechnymi zasadami [REST](https://restfulapi.net/). Wszystkie żądania powinny być wysyłane przez SSL. Wszystkie treści żądań i odpowiedzi, w tym błędy, są kodowane w formacie JSON.
+
+O ile nie określono inaczej, metody API spełniają następujące zasady:
+
+- Właściwości bez wartości używają `null` zamiast pozostawać niezdefiniowane
+- W nazwach atrybutów stosowana jest konwencja „Snake Case” (np. `first_name`)
+- Znaczniki czasu są zapisywane w formacie ISO-8601 (np. `2016-02-03T16:38:46.985Z`)
+
+### Konwencje ścieżek {#path-conventions}
+
+Accounts > Teams > Projects > Assets > Comments
+
+Ogólnie ścieżki zasobów w API Frame.io są zgodne z powyższym modelem hierarchii, w obrębie jednego poziomu nadrzędnego. Tam, gdzie jest to intuicyjne, API obsługuje samodzielne ścieżki zasobów dla obiektów, które — logicznie rzecz biorąc — mają ściśle określonego właściciela.
+
+Na przykład API Frame.io obsługuje obie poniższe ścieżki:
+
+- `GET /accounts/:id/teams` — zwraca wszystkie zespoły (Teams) danego konta (Account).
+- `GET /teams` — zwraca wszystkie zespoły użytkownika wykonującego wywołanie.
+- `GET /teams/:id` — zwraca szczegóły konkretnego zespołu.
+
+Inny przykład: komentarze (Comments) nie mają większego sensu poza kontekstem swojego zasobu (Asset), dlatego metody pobierania kolekcji komentarzy i ich tworzenia znajdują się w zakresie zasobu. Jednak przy aktualizowaniu lub usuwaniu komentarza kontekst zasobu nie ma tak dużego znaczenia, więc jest pomijany w ścieżce zasobu:
+
+- `GET /assets/:id/comments`
+- `POST /assets/:id/comments`
+- `PUT /comments/:id`
+- `DELETE /comments/:id`
+
+## Zakresy {#scopes}
+
+Niezależnie od tego, czy token jest pobierany przez OAuth2.0, czy bezpośrednio przez [Developer Portal](/pl/platform/v2), wszystkie tokeny API muszą być powiązane z jawną listą „zakresów” (scopes), które oznaczają połączenie zasobu (np. `Asset`) i akcji (np. `create`) i są zapisywane w notacji kropkowej.
+
+Na przykład token z zakresem `asset.create` umożliwia tworzenie nowych zasobów.
+
+Jeśli korzystasz z implementacji z tokenem deweloperskim, zakresy są ustawiane i przypisywane do samego tokenu dostępu. Jeśli korzystasz z aplikacji OAuth, zakresy są definiowane dla aplikacji, a użytkownicy podczas pierwszej interakcji z aplikacją wyrażają zgodę na to, by aplikacja działała w ramach żądanych zakresów.
+
+Dostępne zakresy dla tokenów deweloperskich i aplikacji obejmują poniższe (pamiętaj, że niektóre zakresy nie są dostępne dla wszystkich — zostało to zaznaczone tam, gdzie ma znaczenie).
+
+| Kategoria zakresu | Opis |
+| --- | --- |
+| Accounts, Users i Teams | Pobieranie informacji o kontach i zespołach, do których masz dostęp. Jeśli uwierzytelniony użytkownik jest np. administratorem, może mieć dostęp do informacji o dodatkowych użytkownikach i zespołach na swoim koncie.  <br />**Uwaga**: Aby aktualizować zespoły (np. zarządzać webhookami), musisz mieć rolę Team Manager lub Account Admin. |
+| Projects i Assets | Pobieranie podstawowych informacji o projektach, sprawdzanie lub aktualizowanie członkostwa użytkownika, tworzenie lub aktualizowanie zasobów |
+| Comments | Pobieranie, tworzenie lub usuwanie komentarzy do zasobu albo tworzenie odpowiedzi na konkretny komentarz.<br />**Uwaga:** Żądania aktualizacji lub usunięcia komentarzy musi wykonać autor komentarza. |
+| Review Links | Tworzenie linków do recenzji (Review Links) lub zarządzanie ich ustawieniami.<br />**Uwaga:** Review Links to podstawowa funkcja Frame.io służąca do zbierania zasobów i rozsyłania ich w celu uzyskania opinii za pomocą jednego adresu URL, bez konieczności przyznawania jawnego dostępu do zespołu lub projektu. |
+| Webhooks | Webhooki pozwalają przekształcać zdarzenia zachodzące w Frame.io w powiadomienia, które można wysyłać do systemów zewnętrznych w celu przetwarzania, wywołań zwrotnych API i ostatecznie automatyzacji przepływów pracy. |
+| Audit Logs | Frame.io udostępnia logi zdecydowanej większości działań wykonywanych w swoich aplikacjach. Obejmuje to zarówno podstawowe operacje CRUD na głównych zasobach, jak i niektóre specjalne abstrakcje (np. `AssetVersioned`). Aby uzyskać dostęp do logów, musisz być administratorem. |
+| Presentations | Tworzenie lub edytowanie opcji i zasobów na istniejących stronach prezentacji (Presentation Pages). |
+
+## Paginacja {#pagination}
+
+Metody API zwracające kolekcję wyników są zawsze paginowane. Wszystkie metody zwracające wyniki paginowane obsługują poniższe parametry zapytania i zwracają poniższe atrybuty nagłówka:
+
+| Opis | Parametr zapytania | Atrybut nagłówka |
+| --- | --- | --- |
+| Rozmiar strony | `page_size` | `per-page` |
+| Numer strony | `page` | `page-number` |
+| Liczba stron | N/D | `total-pages` |
+| Łączna liczba | N/D | `total` |
+
+Ponadto wyniki paginowane zawierają nagłówek odpowiedzi `Link` ([zobacz RFC-5988](https://tools.ietf.org/html/rfc5988)) z następującymi informacjami:
+
+- `next` — odpowiedni adres URL jest linkiem do następnej strony.
+- `prev` — odpowiedni adres URL jest linkiem do poprzedniej strony.
+- `last` — odpowiedni adres URL jest linkiem do ostatniej strony.
+
+**Uwaga:** brak zarówno linku `next`, jak i `prev` oznacza, że zwrócona pierwsza strona jest jedyną stroną.

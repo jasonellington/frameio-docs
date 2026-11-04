@@ -1,0 +1,152 @@
+---
+title: "Como gerenciar a autenticação (aplicativo)"
+sidebarTitle: "Como gerenciar a autenticação (aplicativo)"
+---
+
+## Introdução {#introduction}
+
+Neste guia, vamos aprender como atualizar, revogar e armazenar as informações de autorização de um *C2C Application* para o Frame.io.
+
+## Do que vou precisar? {#what-will-i-need}
+
+Se você ainda não leu o guia [Implementando o C2C: configuração](/pt-BR/camera-to-cloud/implementing-c2c-setting-up), dê uma olhada rápida antes de continuar!
+
+Você precisará do `client_id` fornecido pela nossa equipe e do mesmo `device_id` que você usou no [guia de autenticação e autorização](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). O `access_token` e o `refresh_token` também são necessários para concluir este guia.
+
+## Tokens de autorização {#authorization-tokens}
+
+No [guia anterior](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application), aprendemos como *gerar* novos tokens de autorização fazendo o usuário autenticar e autorizar um dispositivo em um projeto.
+
+*Os access tokens duram apenas cerca de 1 hora antes de expirar*. Não queremos que o usuário de um dispositivo precise fazer login a cada 8 horas, então, no guia anterior, solicitamos o escopo `offline` e também obtivemos um *refresh token* ao fazer a autorização com o Frame.io. Os refresh tokens podem ser usados para gerar um novo access token quando o atual expirar.
+
+*Um refresh token é válido por 30 dias*. Ao restringir o tempo de validade de um access_token, limitamos os possíveis problemas que poderiam ocorrer caso ele vazasse. Se a autorização não for atualizada antes de o *refresh token* ser usado, o usuário precisará se autenticar novamente.
+
+## Atualizando seu access token {#refreshing-your-access-token}
+
+Se você fizer uma chamada à nossa API que exija um access token e receber a seguinte resposta:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+… então seu access token expirou!
+
+Para atualizar seu token, faremos a seguinte chamada:
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'scope=offline device.connect asset.create' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Não sabe o que são esses valores?**
+
+Todos esses valores foram gerados no [guia anterior](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). Dê uma olhada se ainda não fez isso e depois volte aqui!
+
+</Info>
+
+Ao usar todos esses valores (em vez de apenas o refresh token), tornamos impossível gerar uma nova autorização apenas a partir de um refresh token vazado. Se alguém quiser gerar um token como se fosse a sua integração, precisará tanto do `refresh_token` *quanto* do `client_id`.
+
+Você deve receber uma resposta como esta:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+Estes são seus novos tokens de autorização. *Depois que você atualizar seus tokens, os tokens antigos deixarão de funcionar*, então mantenha estes à mão!
+
+Se tentarmos usar nosso refresh token antigo para atualizar agora, receberemos um erro:
+
+```json
+{
+    "error": "token_inactive",
+    "error_description": "Token is inactive because it is malformed, expired or otherwise invalid. Token validation failed."
+}
+```
+
+Nosso token já foi atualizado, então usar o refresh token existente é inválido.
+
+<Danger>
+
+**Recebendo um 401 durante uma atualização**
+
+Se você receber uma resposta `401 Not Authorized` ao atualizar seus tokens, seu token não é mais válido e você precisará reiniciar todo o processo de autorização.
+
+</Danger>
+
+## Perdendo uma resposta de atualização {#missing-a-refresh-response}
+
+*Um refresh token só pode ser usado uma vez*. Se você fizer uma chamada ao Frame.io para atualizar um token e perder a resposta, seja por um erro de rede ou por um desligamento inesperado, *você precisará reiniciar todo o fluxo de autenticação/autorização.*
+
+É uma possibilidade infeliz, mas é melhor prevenir do que remediar!
+
+## Revogando tokens {#revoking-tokens}
+
+Em algumas situações, podemos querer "sair" do Frame.io. Um usuário pode decidir, por exemplo, que não quer mais ficar conectado depois de concluir uma filmagem. Revogar a autorização também é uma boa prática se o seu app entrar em um estado inconsistente e precisar ser redefinido do zero. Sempre que você souber que pretende descartar a autorização atual, seu app deve tentar revogá-la.
+
+Para revogar nossa autorização, fazemos a seguinte chamada:
+
+<Info>
+
+**Reautorizando**
+
+Depois de fazer essa chamada, você precisará reiniciar o processo de autenticação e autorização detalhado no [guia anterior](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application).
+
+</Info>
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/revoke \
+    --include \
+    --form 'client_id=[client_id]' \
+    --form 'token=[refresh_token]'
+```
+
+A resposta não conterá um payload. Usamos `--include` no comando para exibir os cabeçalhos retornados, que devem começar com um código de status `200` se a chamada for bem-sucedida:
+
+```text
+HTTP/2 200
+...
+```
+
+Agora que nosso token foi revogado, todas as chamadas ao [Frame.io](http://frame.io/) que exigem um `access_token` retornarão `Not Authorized` e, se o usuário quiser usar a conexão com o Frame.io novamente, precisará fazer login no Frame.io e se conectar a um projeto outra vez.
+
+## Armazenando tokens {#storing-tokens}
+
+Para manter o funcionamento entre ciclos de energia, você precisará armazenar seus cabeçalhos de autorização de forma persistente. Isso pode ser feito em um arquivo, em um banco de dados ou na sua própria nuvem. Aqui estão algumas diretrizes para armazenar tokens de autorização:
+
+**Não permita que o usuário veja ou acesse os tokens**. Seu usuário nunca deve poder visualizar ou recuperar os tokens. Eles devem ser gerenciados pelo seu app e somente por ele.
+
+**Criptografe seus tokens em repouso.** Assim como o `client_id`, os access tokens e refresh tokens devem ser criptografados em repouso sempre que possível para evitar que as chaves sejam roubadas. *As chaves de autorização não devem ser armazenadas em texto simples.*
+
+**Não armazene seus tokens de autorização no mesmo arquivo que o seu client_id.** O app Python de exemplo armazena o `client_id` e o `device_id` no mesmo arquivo que os tokens de autorização. Isso funciona bem para uma demonstração, mas não é uma boa prática para código de produção. `client_id` e `device_id` são valores estáticos de um dispositivo, e *o dispositivo deixará de funcionar se eles forem perdidos.*
+
+Os tokens de autorização não são estáticos e precisarão ser regravados muitas vezes ao longo da vida útil do dispositivo. Se o dispositivo perdesse energia durante a atualização de um arquivo com novos tokens, esse arquivo poderia ser corrompido e o `client_id` poderia ser perdido, fazendo com que o dispositivo não conseguisse mais se autenticar no Frame.io *nunca mais*. Ao separar os tokens, na pior das hipóteses, o usuário precisará fazer login no Frame.io novamente.
+
+O melhor lugar para armazenar tokens seria um banco de dados confiável como o SQLite, mas, no mínimo, os dados de autorização devem ficar separados dos nossos outros valores.
+
+## Próximos passos {#next-up}
+
+Se ainda não fez isso, recomendamos que você entre em contato com nossa equipe e depois siga para o próximo guia. Estamos ansiosos para ter notícias suas!
+

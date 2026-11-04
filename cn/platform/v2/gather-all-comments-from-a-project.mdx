@@ -1,0 +1,156 @@
+---
+title: "收集项目中的所有评论"
+sidebarTitle: "收集项目中的所有评论"
+---
+
+## 概述 {#overview}
+
+评论抓取工具会检索某个 Project 中的所有 Asset，抓取其中的 Comments，并将其输出到一个 .csv 文件中。本演练使用以下资源：
+
+- [Python SDK](https://github.com/Frameio/python-frameio-client) - 该 SDK 会为你处理分页，并设置一个可配合开发者令牌（bearer 身份验证）使用的客户端。
+- [Python 版评论抓取工具](https://github.com/Frameio/comment-scraper-python) - 我们使用的代码示例位于此处。
+
+### 在 Glitch 上试用 {#try-it-on-glitch}
+
+Glitch 是一个简单的工具，可让你设置自己的应用，并使用其服务器测试和运行这些应用。如果你还不熟悉 Glitch，请参阅我们的 [使用 Glitch](/cn/platform/v2/using-glitch) 指南。
+
+如果你想看看评论抓取工具在服务器上的运行效果，我们在 [Glitch](https://glitch.com) 上设置了一个 Flask 应用：[Frame.io Comment Scraper in Python](https://glitch.com/~frameio-comment-scraper)。
+
+### 所需 scope {#required-scopes}
+
+开始本指南之前，你需要确保你的令牌至少包含以下 scope：
+
+| Scope | 原因 |
+| --- | --- |
+| **Projects:** Read | 并非严格必需，但获取 Project 的 `root_asset_id` 时需要。 |
+| **Assets:** Read | 通过 API 遍历 `asset_ids` 时需要 |
+| **Comments:** Read | 检索 Comments 本身时需要。 |
+
+### 1. 准备你的应用 {#1-prepare-your-app}
+
+本指南将采用与 [读取文件树](/cn/platform/v2/reading-the-file-tree) 类似的模式。因此，开始之前你需要：
+
+- 你要遍历的 Project 的 `root_asset_id`
+- 你的 [开发者令牌](https://developer.frame.io/authentication/developer-tokens)
+
+你还需要将 `FrameioClient` 以及一些其他辅助库导入到你的 Python 应用中：
+
+```python title="Python"
+from frameioclient import FrameioClient
+import requests, json, csv, itertools
+
+ROOT_ASSET_ID = "<ROOT_ASSET_ID>"
+TOKEN = "<DEV_TOKEN>"
+```
+
+### 2. 遍历 Project {#2-crawl-the-project}
+
+现在，你需要递归检索所有 Asset，检查它们是否有 Comments，并将所有带评论的 Asset 存入一个列表，以便据此构建 .csv 文件。
+
+在遍历 Project 时，你需要对每个 Asset 进行以下检查：
+
+- 该 Asset 是文件吗？（`"_type": "file"`）。
+
+  - 如果是文件，它有 Comments 吗？
+
+    - **如果有，获取这些评论并添加到你的列表中。**
+
+- 该 Asset 是文件夹吗？（`"_type": "folder"`）
+
+  - **如果是文件夹，则对其子项进行递归。**
+
+- 该 Asset 是 Version Stack 吗？（`"_type": "version_stack"`）
+
+  - **如果是 Version Stack，则获取其所有子项并检查是否有 Comments。**
+
+```python title="Python"
+def all_comments(client, asset_id, comment_list):
+    files = client.get_asset_children(asset_id)
+
+    for asset in files:
+        if asset['type'] == "file":
+            if asset['comment_count'] > 0:
+                asset_parent_id = asset['parent_id']
+                asset_name = asset['name']
+                comments = client.get_comments(asset['id'])
+                my_comment_list = [comment for comment in comments.results]
+                for object in my_comment_list:
+                    object.update({'parent_id':asset_parent_id})
+                    object.update({'name':asset_name})
+                comment_list.append(my_comment_list)
+
+        if asset['type'] == "folder":
+            if asset['item_count'] > 0:
+                all_comments(client, asset['id'], comment_list)
+
+        if asset['type'] == "version_stack":
+            asset_name = asset['name']
+            parent_id = asset['parent_id']
+            vfiles = client.get_asset_children(asset['id'])
+
+            for asset in vfiles.results:
+                asset_name = asset['name']
+                parent_id = asset['parent_id']
+                if asset['type'] == "file":
+                    if asset['comment_count'] > 0:
+                        comments = client.get_comments(asset['id'])
+                        my_comment_list = [comment for comment in comments.results]
+                        for object in my_comment_list:
+                            object.update({'parent_id':parent_id})
+                            object.update({'name':asset_name})
+                        comment_list.append(my_comment_list)
+
+def get_all_project_comments(root_asset_id, token):
+    comment_list = []
+    client = FrameioClient(token)
+
+    all_comments(client, root_asset_id, comment_list)
+
+    return comment_list
+```
+
+<Info>
+
+**别忘了分页**
+
+上面的示例忽略了分页，但在遍历大型集合时，你不应忽略它！请参阅我们的 [关键概念](/cn/platform/v2/key-concepts#pagination) 指南。
+
+</Info>
+
+### 3. 展平你的 Comments 列表 {#3-flatten-your-comments-list}
+
+除非你在遍历过程中已经处理过，否则你需要将列表展平，以便于后续处理。
+
+```python title="Python"
+# The response list comes back as a list of lists.
+# Flatten out responses to a single list so you can build your .csv file.
+
+flat_response_list = list(itertools.chain.from_iterable(responses))
+```
+
+### 4. 筛选列表并创建 .csv {#4-cull-the-list-and-create-your-csv}
+
+列表展平后，你可以使用列表推导式从每条评论中提取你认为有用的元素，然后将它们输出到 .csv 文件中。我们建议至少包含：
+
+- 评论 - `text`
+- 父级 ID - `parent_id`
+- Asset ID - `asset_id`
+- Asset 名称 `name`
+- 所有者 ID - `owner_id`
+- 所有者邮箱 - `owner.email`
+- 时间戳 - `timestamp`
+- 更新时间 - `updated_at`
+
+当你创建好一个新列表，其中包含每个 Asset 在最终输出中所需的内容后，就可以写入 .csv 文件了。
+
+```python title="Python"
+list_for_csv = [[o['text'], o['parent_id'], o['asset_id'], o['name'], o['owner_id'], o['owner']['email'], o['timestamp'], o['updated_at']] for o in flat_response_list]
+
+# Let's write our new list out to a .csv file. We'll add a heading.
+with open("output.csv", 'w') as myfile:
+     wr = csv.writer(myfile, dialect='excel')
+     wr.writerow(['Comment', 'Parent ID', 'Asset ID', 'Asset Name', 'Owner ID', 'Email', 'Timestamp', 'Updated At'])
+     wr.writerows(list_for_csv)
+```
+
+就是这样！现在你已经拥有一个 .csv 文件，其中包含整个 Frame.io Project 中展平后的所有 Comments。

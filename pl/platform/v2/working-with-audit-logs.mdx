@@ -1,0 +1,134 @@
+---
+title: "Praca z dziennikami audytu"
+---
+
+## Przegląd {#overview}
+
+Frame.io obsługuje i prowadzi dzienniki audytu (Audit Logs) dla zdecydowanej większości działań wykonywanych w swoich aplikacjach. Obejmuje to zarówno podstawowe operacje CRUD na głównych zasobach, jak i niektóre specjalne abstrakcje (np. `AssetVersioned`).
+
+<Warning>
+
+**Dzienniki audytu są przycinane po 30 dniach**
+
+Dzienniki audytu Frame.io są dostępne przez API w ruchomym oknie 30 dni, po czym są przenoszone do archiwum (cold storage). Jeśli więc chcesz przechowywać długą historię zdarzeń Frame.io, zadbaj o niezależne zapisywanie historycznych danych dziennika.
+
+</Warning>
+
+### Zakres i uprawnienia {#scope-and-permissions}
+
+Tylko administratorzy konta (Account Admins) mają dostęp do dzienników audytu konta, a wszystkie wywołania punktu końcowego dzienników audytu muszą być ograniczone do `account_id` w następujący sposób:
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### Odpowiedzi {#responses}
+
+Wszystkie odpowiedzi dzienników audytu mają podobny format:
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**Nie zapomnij o paginacji!**
+
+Dane odpowiedzi dzienników audytu mogą być dość obszerne, więc upewnij się, że znasz zasady [paginacji](/pl/platform/v2/key-concepts#pagination)!
+
+</Info>
+
+## Filtry {#filters}
+
+Dzienniki audytu obsługują różne filtry, w tym zakresy dat. W przeciwieństwie do punktów końcowych [wyszukiwania](/pl/platform/v2/search-for-assets) Frame.io filtry można przesyłać wyłącznie jako parametry ciągu zapytania `GET`.
+
+Wszystkie filtry mają ten sam format:
+
+### GET + ciąg zapytania {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**Jedna wartość na typ filtra**
+
+Obecnie dzienniki audytu obsługują jedną wartość na typ filtra. Jeśli podasz dwa filtry tego samego typu (np. `filter[action]=ActionOne&filter[action]=ActionTwo`), pierwszeństwo będzie miał drugi filtr.
+
+</Info>
+
+### Kluczowe typy filtrów {#key-filter-types}
+
+Kluczowe typy filtrów służące do zawężania i przeglądania dzienników audytu to:
+
+| Typ filtra | Opis | Przykładowe wartości |
+| --- | --- | --- |
+| `item_type` | Filtruje wszystkie zasoby jednego typu. | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Filtruje jeden konkretny zasób, np. Asset lub Presentation. | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | Filtruje jedną akcję, zwykle powiązaną z `item_type` | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | Filtruje według ID konkretnego użytkownika (aktora). | *&lt;user-id>* |
+| `team_id` | Filtruje działania powiązane z jednym zespołem. Ten filtr jest przydatny tylko w przypadku kont, które mają wiele zespołów. | *&lt;team-id>* |
+| `inserted_at` | Filtruje zdarzenia audytu, które wystąpiły przed lub po określonej dacie i godzinie. Musi być w formacie ISO-8601, UTC. | *2022-08-25T00:00:00Z* |
+
+### Typy elementów i akcje {#item-types-and-actions}
+
+| Zasób | Akcje |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## Przykłady filtrów {#filter-examples}
+
+Wszystkie filtry mają podobny format, jak opisano powyżej. Poniżej znajduje się kilka przykładów dla konkretnych przypadków użycia, które pomogą Ci zacząć.
+
+| Scenariusz | Ciąg zapytania |
+| --- | --- |
+| Działania wykonane przez jednego użytkownika. | `?filter[actor_id]=<user-id>` |
+| Cała aktywność dotycząca konkretnej prezentacji. | `?filter[item_id]=<presentation-id>` |
+| Komentarze pozostawione przez użytkownika. | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| Cała aktywność linków do recenzji w zespole. | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## Zakresy dat {#date-ranges}
+
+Zakresy dat to nieco szczególny przypadek, ponieważ trzeba określić zarówno wartość daty i godziny `inserted_at` (`value`), jak i operację (`op`) stosowaną do tej daty.
+
+W związku z tym zapytania o zakres dat zawsze mają dwa elementy filtra, z których każdy jest zagnieżdżony obok parametru `[inserted_at]`.
+
+Obsługiwane operacje to:
+
+- **gt**: większe niż
+- **gte**: większe lub równe
+- **lt**: mniejsze niż
+- **lte**: mniejsze lub równe
+
+### Przykłady zakresów dat {#date-range-examples}
+
+| Scenariusz | Ciąg zapytania |
+| --- | --- |
+| Wszystkie rekordy dziennika audytu od określonej daty. | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| Wszystkie zasoby przesłane przez konkretnego użytkownika do określonej daty. | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

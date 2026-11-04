@@ -1,0 +1,151 @@
+---
+title: "Jak zarządzać autoryzacją (aplikacja)"
+sidebarTitle: "Jak zarządzać autoryzacją (aplikacja)"
+---
+
+## Wprowadzenie {#introduction}
+
+Z tego przewodnika dowiesz się, jak odświeżać, unieważniać i przechowywać informacje autoryzacyjne *aplikacji C2C* dla Frame.io.
+
+## Czego będę potrzebować? {#what-will-i-need}
+
+Jeśli nie znasz jeszcze przewodnika [Implementacja C2C: konfiguracja](/pl/camera-to-cloud/implementing-c2c-setting-up), przejrzyj go szybko, zanim przejdziesz dalej!
+
+Potrzebny będzie `client_id` przekazany przez nasz zespół oraz ten sam `device_id`, którego użyto w [przewodniku dotyczącym uwierzytelniania i autoryzacji](/pl/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). Do wykonania kroków z tego przewodnika wymagane są również `access_token` i `refresh_token`.
+
+## Tokeny autoryzacyjne {#authorization-tokens}
+
+W [poprzednim przewodniku](/pl/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) dowiedzieliśmy się, jak *generować* nowe tokeny autoryzacyjne, prosząc użytkownika o uwierzytelnienie i autoryzowanie urządzenia w projekcie.
+
+*Tokeny dostępu są ważne tylko przez ok. 1 godzinę, po czym wygasają*. Nie chcemy, aby użytkownik urządzenia musiał logować się co 8 godzin, dlatego w poprzednim przewodniku poprosiliśmy o zakres `offline` i podczas autoryzacji w Frame.io otrzymaliśmy również *token odświeżania*. Tokenów odświeżania można używać do generowania nowego tokenu dostępu, gdy bieżący wygaśnie.
+
+*Token odświeżania jest ważny przez 30 dni*. Ograniczając czas ważności access_token, ograniczamy potencjalne nadużycia, do których mogłoby dojść w razie jego wycieku. Jeśli autoryzacja nie zostanie odświeżona przed użyciem *tokenu odświeżania*, użytkownik będzie musiał ponownie się uwierzytelnić.
+
+## Odświeżanie tokenu dostępu {#refreshing-your-access-token}
+
+Jeśli wykonasz wywołanie naszego API, które wymaga tokenu dostępu, i otrzymasz następującą odpowiedź:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+… oznacza to, że Twój token dostępu wygasł!
+
+Aby odświeżyć token, wykonamy następujące wywołanie:
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'scope=offline device.connect asset.create' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Nie wiesz, czym są te wartości?**
+
+Wszystkie te wartości zostały wygenerowane w [poprzednim przewodniku](/pl/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). Zajrzyj do niego, jeśli jeszcze tego nie zrobiłeś, a potem wróć tutaj!
+
+</Info>
+
+Używając wszystkich tych wartości (a nie tylko tokenu odświeżania), uniemożliwiamy wygenerowanie nowej autoryzacji wyłącznie na podstawie wykradzionego tokenu odświeżania. Jeśli ktoś chciałby wygenerować token, podszywając się pod Twoją integrację, potrzebowałby zarówno `refresh_token`, *jak i* `client_id`.
+
+Powinieneś otrzymać odpowiedź podobną do tej:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+To są Twoje nowe tokeny autoryzacyjne. *Po odświeżeniu tokenów stare tokeny przestają działać*, więc zachowaj nowe w bezpiecznym miejscu!
+
+Jeśli spróbujemy teraz użyć starego tokenu odświeżania, otrzymamy błąd:
+
+```json
+{
+    "error": "token_inactive",
+    "error_description": "Token is inactive because it is malformed, expired or otherwise invalid. Token validation failed."
+}
+```
+
+Nasz token został już odświeżony, więc użycie dotychczasowego tokenu odświeżania jest nieprawidłowe.
+
+<Danger>
+
+**Błąd 401 podczas odświeżania**
+
+Jeśli podczas odświeżania tokenów otrzymasz odpowiedź `401 Not Authorized`, Twój token nie jest już ważny i musisz rozpocząć proces autoryzacji od nowa.
+
+</Danger>
+
+## Utrata odpowiedzi na odświeżenie {#missing-a-refresh-response}
+
+*Token odświeżania można użyć tylko raz*. Jeśli wyślesz do Frame.io żądanie odświeżenia tokenu i nie otrzymasz odpowiedzi – z powodu błędu sieci lub nieoczekiwanego wyłączenia zasilania – *będziesz musiał ponownie przejść cały przepływ uwierzytelniania i autoryzacji.*
+
+To niefortunna możliwość, ale lepiej dmuchać na zimne!
+
+## Unieważnianie tokenów {#revoking-tokens}
+
+W niektórych sytuacjach możemy chcieć „wylogować się” z Frame.io. Na przykład użytkownik może zdecydować, że po zakończeniu zdjęć nie chce już być połączony. Unieważnienie autoryzacji to także dobra praktyka, gdy aplikacja znajdzie się w nieprawidłowym stanie i trzeba ją zresetować do stanu początkowego. Za każdym razem, gdy wiesz, że zamierzasz porzucić bieżącą autoryzację, aplikacja powinna spróbować ją unieważnić.
+
+Aby unieważnić autoryzację, wykonujemy następujące wywołanie:
+
+<Info>
+
+**Ponowna autoryzacja**
+
+Po wykonaniu tego wywołania musisz ponownie rozpocząć proces uwierzytelniania i autoryzacji opisany w [poprzednim przewodniku](/pl/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application).
+
+</Info>
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/revoke \
+    --include \
+    --form 'client_id=[client_id]' \
+    --form 'token=[refresh_token]'
+```
+
+Odpowiedź nie będzie zawierać payloadu. W poleceniu użyliśmy opcji `--include`, aby wyświetlić zwrócone nagłówki, które powinny zaczynać się od kodu statusu `200`, jeśli wywołanie się powiodło:
+
+```text
+HTTP/2 200
+...
+```
+
+Po unieważnieniu tokenu wszystkie wywołania do [Frame.io](http://frame.io/) wymagające `access_token` będą zwracać `Not Authorized`, a jeśli użytkownik zechce ponownie korzystać z połączenia z Frame.io, będzie musiał zalogować się do Frame.io i ponownie połączyć się z projektem.
+
+## Przechowywanie tokenów {#storing-tokens}
+
+Aby zachować funkcjonalność po wyłączeniu i ponownym włączeniu zasilania, musisz trwale przechowywać nagłówki autoryzacyjne. Można to zrobić w pliku, bazie danych lub we własnej chmurze. Oto kilka wskazówek dotyczących przechowywania tokenów autoryzacyjnych:
+
+**Nie pozwalaj użytkownikowi wyświetlać tokenów ani uzyskiwać do nich dostępu**. Użytkownik nigdy nie powinien mieć możliwości wyświetlenia ani pobrania swoich tokenów. Powinny być zarządzane wyłącznie przez Twoją aplikację.
+
+**Szyfruj przechowywane tokeny.** Podobnie jak w przypadku `client_id`, tokeny dostępu i odświeżania powinny być w miarę możliwości szyfrowane, aby zapobiec kradzieży kluczy. *Kluczy autoryzacyjnych nie należy przechowywać jako zwykłego tekstu.*
+
+**Nie przechowuj tokenów autoryzacyjnych w tym samym pliku co client_id.** Przykładowa aplikacja w Pythonie przechowuje `client_id` i `device_id` w tym samym pliku co tokeny autoryzacyjne. Sprawdza się to w wersji demonstracyjnej, ale nie jest dobrą praktyką w kodzie produkcyjnym. `client_id` i `device_id` to wartości stałe dla urządzenia, a *urządzenie przestanie działać, jeśli zostaną utracone.*
+
+Tokeny autoryzacyjne nie są stałe i będą wielokrotnie nadpisywane w trakcie eksploatacji urządzenia. Gdyby urządzenie straciło zasilanie podczas aktualizowania pliku nowymi tokenami, plik mógłby ulec uszkodzeniu, a `client_id` mógłby zostać utracony, przez co urządzenie *już nigdy* nie mogłoby ponownie uwierzytelnić się w Frame.io. Dzięki oddzieleniu tokenów w najgorszym przypadku użytkownik będzie musiał ponownie zalogować się do Frame.io.
+
+Najlepszym miejscem do przechowywania tokenów byłaby sprawdzona baza danych, taka jak SQLite, ale dane autoryzacyjne powinny być co najmniej oddzielone od pozostałych wartości.
+
+## Co dalej {#next-up}
+
+Jeśli jeszcze tego nie zrobiłeś, zachęcamy do skontaktowania się z naszym zespołem, a następnie przejścia do kolejnego przewodnika. Czekamy na wiadomość od Ciebie!

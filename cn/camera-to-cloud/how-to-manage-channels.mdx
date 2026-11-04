@@ -1,0 +1,182 @@
+---
+title: "操作指南：管理通道"
+sidebarTitle: "管理通道"
+---
+
+如果您的生态系统中有一些设备无法连接到互联网、无法直接与 Frame.io 通信，但可以与您的支持 C2C 的设备通信，会发生什么情况？某些集成可能希望代表这类设备执行操作，例如录音机代表麦克风上传文件，或者摄像机代表配件上的按钮发布实时评论。
+
+这些需求可以通过了解设备的通道来实现。如果您的集成不需要管理子设备，可以跳过本指南。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果您还没有阅读 [实施 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，请在继续之前先快速浏览一下！
+
+您需要在 [设备身份验证与授权指南](/cn/platform/v2/how-to-authorization-management-hardware) 中获得的 `access_token`。
+
+您还需要一份子设备的设备型号 ID（Device Model ID）列表，这些子设备应能够通过您的主设备连接到 Frame.io。
+
+## 什么是通道？ {#what-is-a-channel}
+
+我们在 [架构概览](/cn/camera-to-cloud/integration-architecture) 中简要介绍过通道。每个项目设备至少有一个通道，虽然我们之前一般把它们视为同一事物，但现在需要将这两个概念区分开来。让我们深入了解一下。
+
+项目设备能够直接与 frame.io 通信。通道负责收集需要由项目设备传输的数据。在大多数情况下，ProjectDevice 与第一个通道是同一个东西。以摄像机为例：从概念上讲，项目设备代表摄像机的网卡，负责将数据直接发送到 Frame.io；而通道代表摄像机的 CMOS 传感器，负责收集视频数据并通过网卡（项目设备）发送出去。
+
+最重要的是，项目设备通过 OauthApp 在 Frame 中进行身份验证，而通道则不需要。通道使用其父项目设备的身份验证。
+
+我们的模型允许一个项目设备拥有多个通道，这些通道可能是物理设备的一部分，也可能不是。通道可以是通过 TCP/IP、蓝牙、SDI 等方式与主设备通信的硬件。项目设备充当路由器，将这些数据发送到 frame.io。至于通道如何将数据提供给项目设备，则由您（集成方）决定。
+
+设想一台录音机作为项目设备连接到 Frame.io，并且有多个麦克风分别作为独立通道连接。录音机可以在其主通道上发送混音文件，并在子设备通道上发送各个麦克风的音轨。如何使用通道以及每个通道代表什么，完全由您决定！通道不需要身份验证，设备可以随时添加或移除通道。
+
+由于通道可以属于独立的物理子设备，因此每个通道都会与一个设备型号相关联，就像其他任何硬件或软件集成一样。这使得 frame.io 能够显示子设备的型号（可能与主机设备不同），并允许集成为每个子设备分别定义行为。可以作为通道添加到某个集成的设备型号必须事先定义好。
+
+您可能希望将新通道连接到 C2C 设备的原因有以下几个：
+
+- 根据通道 + 设备型号为集成提供多种配置。这包括资产的固定文件夹结构、令牌化文件夹路径、按文件扩展名路由等。设想一个 DIT 工作站使用不同的通道来上传剪辑代理文件或 Camera Raw 文件。
+- 让 frame.io 中的用户能够看到您的子设备。
+- 通道可以配置人工输入（即按钮），这些按钮可配置用于实时记录功能。
+
+下面让我们更深入地了解如何使用 C2C API 管理通道。
+
+## 列出通道 {#listing-channels}
+
+可以通过 [身份端点](/cn/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) 的 channels 字段获取现有通道的列表。我们来看看响应负载中的 `"channels"` 字段：
+
+```json
+{
+    "_type": "project_device",
+    ...
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+            "external_index": 0,
+            "id": "5919e9bc-7fc2-4629-97e5-852ce27cfa1a",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Host Device",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "online",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        },
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+            "external_index": 0,
+            "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Client Device 01234",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "offline",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        }
+    ],
+    ...
+    "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+    ...
+    "id": "bf30fc66-f126-4336-bdfc-75d3e659b95am"
+}
+```
+
+请注意，第一个通道的 `device_id` 与整个项目设备的 `device_id` 相同。
+
+## 连接通道 {#connecting-a-channel}
+
+我们可以使用以下请求连接一个新通道：
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/connect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'{
+            "client_id": [client_id],
+            "device_model_id": [device_model_id]
+        }
+__JSON__
+    | python -m json.tool
+```
+
+我们会得到以下响应：
+
+```json
+{
+   "_type": "project_device_channel",
+   "actor_id": null,
+   "asset_type": "video",
+   "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+   "external_index": 0,
+   "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+   "inserted_at": "2023-07-14T19:11:43.217565Z",
+   "name": "Test Client Device 01234",
+   "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+   "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+   "real_time_logging_capable": true,
+   "status": "offline",
+   "updated_at": "2023-07-14T19:11:43.217565Z"
+}
+```
+
+该响应与 [身份](/cn/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) 端点中的 channels 字段相对应。
+
+client_id 决定唯一性，因此它必须是一个稳定的值，例如序列号。
+device_model_id 用于告诉 Frame.io 该通道所代表的底层硬件设备类型，例如某个特定型号的麦克风。这些型号将由您的合作伙伴经理预先设置好。
+
+如果某个通道已经声明过，您将收到 409 错误，错误标题为 Already Exists。
+
+如果使用与之前已连接、随后又断开的通道相同的标识符创建通道，则该通道之前的所有用户配置都会被恢复。
+
+## 断开通道 {#disconnecting-a-channel}
+
+断开通道时使用的是 Frame.io 定义的 id，而不是 client_id 或 device_model_id。
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/:channel_id/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+该请求返回 `204` 响应，负载为空。
+
+删除不存在的通道时，您将收到 404 错误。父设备的第一个主通道无法断开。
+
+## 断开所有子设备通道 {#disconnecting-all-sub-device-channels}
+
+您可以使用以下调用断开项目设备上当前所有的子设备通道：
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+该请求返回 `204` 响应，负载为空。即使项目设备没有任何客户端设备通道，此调用也始终会成功。
+
+现在，我们可以使用 [身份](/cn/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) 端点列出所有通道；此时只会保留主机设备的主通道。
+
+## 通道管理流程 {#channel-management-flow}
+
+我们不建议 ProjectDevice 在内部管理通道状态，以避免因在不恰当的时机断电重启而导致的数据完整性问题。例如：
+
+- 在 Channel Connect 调用已被处理之后、但返回的 `id` 尚未写入数据存储之前断电
+- 在设备关机期间，子设备被插入或拔出主机设备。
+
+因此，建议所有主机设备在首次启动时执行以下步骤：
+
+- 调用批量断开通道（Bulk Channel Disconnect）端点，清除所有现有的子设备通道
+- 为当前已连接的每个子设备调用 Channel Connect 端点
+  完成初始设置后，每当有子设备断开时，主机设备必须（MUST）调用 Channel Disconnect 端点；每当添加新的子设备时，必须调用 Channel Connect 端点。主机设备不得（MAY NOT）在每次连接新设备时都清除子设备。
+
+主机设备在管理设备时必须（MUST）正确处理网络状况不佳的情况，并在网络连接恢复后正确添加或移除当前已连接的设备。
+
+## 下一步 {#next-up}
+
+如果您还没有联系我们的团队，我们建议您先与我们联系，然后继续阅读下一篇指南。期待您的来信！

@@ -1,0 +1,80 @@
+---
+title: "OAuth 2 授权码流程"
+---
+
+## 概述 {#overview}
+
+Frame.io 支持创建和管理 OAuth 2 应用。与 [Developer Tokens](/cn/platform/v2/authentication#developer-tokens) 不同，OAuth 2 应用允许任何 Frame.io 用户通过安全登录授予其凭据，之后应用即可代表该用户执行操作。
+
+简单来说，OAuth 2 应用最适合那些个人用户的上下文和访问权限至关重要的集成场景。
+
+## OAuth 2 授权码流程 {#oauth-2-code-flow}
+
+### 基本顺序 {#the-basic-sequence}
+
+从宏观上看，OAuth 2 涉及三方：
+
+1. **User**（在我们的场景中：任何拥有 Frame.io 登录账户的人）
+2. 客户端 **Application**（外部 OAuth2.0 应用）
+3. 凭据 **Server**（在我们的场景中：Frame.io）
+
+OAuth 2 的授权码流程分为四个步骤：
+
+1. **Application** 向 **User** 显示登录界面
+2. **User** 输入其凭据，凭据直接发送到 **Server**
+3. 如果登录成功，**Server** 会返回一个页面，请 **User** 确认是否要向 **Application** 授予一组预先配置的访问 scopes
+4. 如果 **User** 同意，**Server** 会向 **Application** 发送一个 token，该 token 可用于以所请求的 scopes 代表 **User** 执行操作。
+
+通过这种方式，客户端应用可以在获得用户许可的情况下，安全地代表用户执行操作，而且（重要的是）完全不会看到或处理用户的实际凭据。
+
+### 回调周期 {#the-callback-cycle}
+
+上述顺序依赖于服务器（Frame.io）托管的两个服务，每个服务都有自己的路由：
+
+| 服务 | URL | 方法 | 描述 |
+| --- | --- | --- | --- |
+| Auth | `https://applications.frame.io/oauth2/auth` | `GET` | 根据 OAuth 客户端应用的信息，与服务器发起认证流程。 |
+| Token | `https://applications.frame.io/oauth2/token` | `POST` | 根据认证步骤中的信息，代表用户获取 token。 |
+
+OAuth 2 应用在此周期中的作用是向服务器表明自己的身份，并发出这两个请求。
+
+## 快速示例 {#quick-example}
+
+<Info>
+
+**您以前构建过 OAuth 2 应用吗？**
+
+如果您熟悉 OAuth2.0 的其余底层机制，下面的示例可能足以让您入门。如果您需要更多细节，请查看[这里](/cn/platform/v2/building-an-oauth2-app)的详细指南。
+
+</Info>
+
+### 设置您的应用 {#setting-up-your-app}
+
+1. 使用您的 Frame.io 凭据登录 [Frame.io 开发者门户](/cn/platform/v2)，通过左侧的链接导航到 **OAuth Apps**，然后点击 **New** 开始设置您的应用。
+2. 在随后的界面中，为您的应用输入 **Name** 和 **Redirect URI**，选择 **Scopes**，并选择是否使用 **PKCE**。
+3. 保存后，您应该就能看到新的应用配置。
+
+<Info>
+
+**关于 PKCE**
+
+**P**roof **K**ey for **C**ode **E**xchange（读作“pixie”）设置可让您的应用在不提供 `client_secret` 的情况下请求 token。因此，您不会获得 `client_secret`，并且在应用的回调周期中 `POST` 请求 token 时不应包含 `Authorization` header。尽管如此，您**需要在回调中包含 `client_id`**，否则您的请求将被拒绝。
+
+</Info>
+
+#### 何时应该使用 PKCE？ {#when-should-i-use-pkce}
+
+一般来说，使用 PKCE 没有任何负面影响，这也是推荐和首选的方式。开发 OAuth2.0 客户端应用时，您将在以下两种环境之一中实现授权码流程：
+
+- **私有**：您的流程使用服务器端语言（Python、Java）实现，并且您可以在自己控制的服务器中安全地管理 `client_secret`。
+- **公共**：您的流程使用客户端语言（Javascript）实现，或直接在最终用户控制的客户端设备（iOS、Android）上实现。
+
+一般而言，如果您作为应用开发者无法查看和控制与密钥交换相关的所有网络流量，就可以将该应用视为“公共”应用。这意味着除了客户端应用之外，移动设备应用、嵌入式设备或任何位于最终用户网络中的设备（AppleTV、Roku 等）都应被视为公共应用。
+
+在私有环境中，您*可以*使用 PKCE。在公共环境中，您*必须*使用 PKCE。
+
+## 构建您的 OAuth 2 应用 {#building-your-oauth-2-application}
+
+现在您已经在 Frame.io 中有了应用配置，可以开始设置回调服务器，按照上表处理两个关键路由，以完成回调周期。
+
+有关如何构建应用的更多详细信息，请参阅[构建 OAuth 2 应用](/cn/platform/v2/building-an-oauth2-app)。

@@ -1,0 +1,82 @@
+---
+title: "Praca z linkami do recenzji"
+---
+
+## Przegląd {#overview}
+
+Linki do recenzji (Review Links) to podstawowa funkcja Frame.io służąca do zbierania zasobów (Assets) i rozsyłania ich do zaopiniowania za pomocą jednego adresu URL, bez konieczności nadawania jawnego dostępu do zespołu (Team) lub projektu (Project). Zasadniczo są one reprezentacją zasobów z jednego projektu, dlatego w tym przewodniku zakładamy, że:
+
+1. Masz już zasoby pod ręką lub znasz zasady [przesyłania zasobów przez API](/pl/platform/v2/uploading-assets).
+2. Znasz ID projektu, w którym chcesz utworzyć link do recenzji.
+3. Twoim celem jest uzyskanie adresu URL, który możesz udostępnić poza Frame.io (np. przez e-mail, czat lub inny kanał).
+
+### Podstawowe pojęcia {#core-concepts}
+
+Linki do recenzji należą wyłącznie do projektów, a zasób w linku do recenzji jest reprezentowany jako specjalny typ zasobu o nazwie **Review Link Item**, który zawsze zawiera łączone przez niego `review_link_id` i `asset_id`, a także pełny ładunek powiązanego zasobu.
+
+Chociaż elementów Review Link Item nie trzeba śledzić ani zarządzać nimi osobno, jest to przydatna struktura do zrozumienia pełnego procesu opisanego w tym przewodniku. Hierarchia linku do recenzji wygląda zatem następująco:
+
+Project > Review Link > Review Link Item > odwołanie do Asset
+
+### Wymagane zakresy {#required-scopes}
+
+Przed rozpoczęciem pracy z tym przewodnikiem upewnij się, że masz token zawierający co najmniej następujące zakresy:
+
+| Zakres | Powód |
+| --- | --- |
+| **Projects:** Read | Nie jest ściśle wymagany, ale jest potrzebny do pobrania `root_asset_id` projektu. |
+| **Assets:** Read | Nie jest ściśle wymagany, ale jest potrzebny do przechodzenia do `asset_ids` przez API. |
+| **Review Links:** Create, Read, Update | Utworzenie linku do recenzji, dodanie zasobów i pobranie informacji (zwłaszcza w przypadku śledzenia w innym systemie). |
+
+## 1. Zbierz identyfikatory {#1-gather-your-ids}
+
+Aby utworzyć link do recenzji, musisz zebrać:
+
+1. ID projektu
+2. ID jednego lub wielu zasobów w tym projekcie
+
+Jeśli nie masz pod ręką ID projektu, ale masz dostęp do Frame.io i wiesz, którego projektu chcesz użyć, możesz odczytać ID z paska adresu po przejściu do projektu: `https://app.frame.io/projects/<project-id>`.
+
+Podobnie, jeśli nie masz pod ręką ID zasobów, przejdź do wybranych zasobów i skopiuj ID z paska adresu przeglądarki: `https://app.frame.io/player/<asset-id>`.
+
+## 2. Utwórz link do recenzji {#2-create-the-review-link}
+
+Aby utworzyć podstawę linku, musisz określić żądane opcje linku do recenzji i umieścić je w ładunku JSON. Wymagane jest co najmniej podanie wartości `name`.
+
+Oto przykładowy ładunek — dla wygody pokazuje wartości domyślne każdego pola, które zostaną użyte, jeśli podasz tylko `name`:
+
+```json
+{    
+    "name": "New Review Link",
+    "allow_approvals": true,
+    "current_version_only": false,
+    "enable_downloading": true,
+    "expires_at": null,
+    "has_password": false
+}
+```
+
+Teraz wykonaj autoryzowane żądanie `POST` `https://api.frame.io/v2/projects/:id/review_links`, używając swojego ładunku jako treści żądania.
+
+Gratulacje! Właśnie utworzono link do recenzji. W treści odpowiedzi zobaczysz dwa ważne atrybuty:
+
+- **`id`**: To odwołanie do kontenera linku. Zachowaj je, ponieważ będzie potrzebne przy dodawaniu zasobów w następnym kroku.
+- **`short_url`**: To adres URL linku do recenzji, który ostatecznie udostępnisz. Będzie wyglądał mniej więcej tak: `https://f.io/_aBcDeF`
+
+## 3. Dodaj zasoby do linku do recenzji {#3-add-the-assets-to-the-review-link}
+
+Masz już link do recenzji, więc czas dodać do niego zasoby. Zacznij od przygotowania ładunku JSON z tablicą ciągów zawierającą `id` zasobów:
+
+```json
+{
+    "asset_ids":[
+        "<asset-id-1>",
+        "<asset-id-2>",
+        "<asset-id-3>"
+    ]
+}
+```
+
+Teraz wykonaj autoryzowane żądanie `POST` do `https://api.frame.io/v2/review_links/:id/assets`, używając w ścieżce `id` linku do recenzji z kroku 2, a w treści żądania — `id` zasobów.
+
+Gotowe! Możesz teraz udostępnić swój `short_url`.

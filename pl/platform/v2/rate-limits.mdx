@@ -1,0 +1,58 @@
+---
+title: "Limity liczby żądań"
+---
+
+# Przegląd {#overview}
+
+Niezależnie od tego, czy token jest wydawany przez Developer Portal, w ramach przyznania OAuth, czy przez backend Accounts obsługujący własne aplikacje Frame.io, **wszystkie wywołania API do Frame.io podlegają limitom liczby żądań.**
+
+Limity liczby żądań są stosowane do wszystkich żądań API pochodzących od danego użytkownika (niezależnie od użytego tokenu czy metody uwierzytelniania), są stopniowo wyczerpywane i uzupełniane, a ich stan jest odzwierciedlany w nagłówkach odpowiedzi na każde żądanie wysłane do API Frame.io. Każdy endpoint ma skonfigurowane własne limity — od zaledwie `10` żądań na minutę do nawet `100` żądań na sekundę.
+
+Żądania, które przekroczyły limit dla danego endpointu, otrzymają w odpowiedzi błąd HTTP `429`.
+
+## Wyczerpywanie i uzupełnianie {#depletion-and-refill}
+
+API Frame.io stosuje strategię stopniowego ograniczania liczby żądań typu [leaky bucket](https://wikipedia.org/wiki/Leaky_bucket), w której limity odnawiają się stopniowo w przydzielonym oknie czasowym. Innymi słowy, nie ma sztywnej granicy, po której limity dla danego zasobu się odnawiają (jak w strategiach „fixed window” i „sliding window”). Zamiast tego pozostałe limity stale się odnawiają w tempie zależnym od limitu i okna czasowego danego zasobu.
+
+### Wykładnicze wycofywanie {#exponential-backoff}
+
+Zalecana przez nas strategia zarządzania limitami liczby żądań jest zwykle nazywana „wykładniczym wycofywaniem” (exponential backoff).
+
+W skrócie:
+
+- Po otrzymaniu kodu `429` wstrzymaj się na pewien czas (zwykle jedną sekundę)
+- Jeśli otrzymasz kolejny kod `429`, wykładniczo wydłużaj czas oczekiwania, aż działanie wróci do normy
+
+## Nagłówki {#headers}
+
+Odpowiedzi na żądania API zawsze zawierają trzy poniższe nagłówki, z których należy korzystać, aby ograniczać wysyłane żądania:
+
+| Nagłówek | Wartość |
+| --- | --- |
+| `x-ratelimit-limit` | Limit liczby żądań dla tej ścieżki zasobu, mierzony w żądaniach. |
+| `x-ratelimit-remaining` | Liczba żądań pozostałych w bieżącym oknie czasowym. |
+| `x-ratelimit-window` | Okno czasowe limitów dla tej ścieżki zasobu, mierzone w milisekundach (ms). |
+
+### Przykład {#example}
+
+Poniższy przykład pochodzi z odpowiedzi na `GET v2/assets/:id/children`, służące do pobierania zasobów podrzędnych katalogu głównego projektu, folderu lub stosu wersji. Limit dla tej ścieżki wynosi 40 żądań na 60 000 ms (jedną minutę), a po wykonaniu jednego żądania pozostało 39.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Szczegóły {#details}
+
+Limity liczby żądań znacznie się różnią w zależności od ścieżki zasobu w API Frame.io. Poniżej przedstawiono wybrane szczegóły, dla czytelności wyrażone jako zasób i akcja (np. „Assets — Update” zamiast `PUT /assets/:id`).
+
+Z reguły ścieżki zasobów tworzące nowe dane są ograniczone do maksymalnie 100 wywołań na minutę, a ścieżki zasobów pobierające listy zasobów są ograniczone do 200 wywołań na minutę.
+
+| Zasób | Akcja | Limit (żądania) | Okno limitu (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1,000 |
+| **Assets** | `update` | `10` | 1,000 |
+| **Assets** | `read` | `5` | 1,000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60,000 |
+| **Search** | `read` | `200` | 60,000 |

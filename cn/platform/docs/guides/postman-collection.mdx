@@ -1,0 +1,497 @@
+---
+title: "Postman 集合"
+---
+
+本指南介绍官方 Frame.io Developer API Postman 集合的基础知识。该集合包含一组预先构建的请求，可帮助您快速上手 Frame.io V4 API。
+
+该集合涵盖了 V4 API 的全部端点，分为稳定版和实验版两类。稳定版端点已可用于生产环境；实验版端点是较新添加的功能，虽然可以正常使用，但在升级为稳定版之前可能会根据反馈进行调整。
+
+## Postman 入门 {#getting-started-with-postman}
+
+<Tip>
+
+本指南假定您已经为 API 生成了凭据。如果尚未生成，请先从[这里](/cn/platform/docs/quick-start)开始
+
+</Tip>
+
+<Steps>
+
+<Step title="创建 Postman 账户并选择使用方式">
+
+在 [postman.com](http://auth.postman.com/__redirect/login) 创建您的 Postman 账户，并选择使用方式。您可以在[这里](https://www.postman.com/downloads/)下载 Postman 应用，也可以使用网页版 Postman。
+
+</Step>
+
+<Step title="导入 Frame.io Developer API Postman 集合">
+
+<CardGroup cols={2}>
+
+<Card title="Frame.io Developer API 集合" icon="terminal" iconType="solid" href="https://www.postman.com/adobe/workspace/frame-io-v4-public-api/collection/33150877-924315f2-cc62-45f5-8153-77ff2aaa9067?action=share&creator=33150877&active-environment=33150877-cffd66a8-23bd-4c50-8891-29157ead1185">
+
+在此 Fork 或下载
+
+</Card>
+
+</CardGroup>
+
+</Step>
+
+</Steps>
+
+### 设置环境 {#setting-up-your-environment}
+
+Frame.io Developer API 集合带有一个默认<Tooltip tip="一组可在发送请求时引用的变量。有关环境的更多信息，请参阅 Postman 文档 **[此处](https://learning.postman.com/docs/sending-requests/variables/managing-environments)**">环境</Tooltip>，其中定义了多个环境变量。`BASE_URL` 和 `IMS_BASE_URL` 的值是固定的。其他环境变量可根据您的账户信息进行配置。
+
+<Frame>
+
+![alt image](/images/platform/docs/guides/postman-collection/0780e30f05ff2cee570d698b9adc209f24326281b60e23968e5d78e66c5c9b43.webp)
+![alt image](/images/platform/docs/guides/postman-collection/663c863cbbec947567616faf433d79e3900e70ace3d8d9d26299ee20e204c064.webp)
+
+</Frame>
+
+下表说明了集合的 Default 和 Stage 环境中的各个变量：
+
+| 变量 | 说明 | 获取方式 | 环境 |
+| --- | --- | --- | --- |
+| `BASE_URL` | 所有 V4 API 请求的基础 URL | 已预先配置，请勿修改 | Default |
+| `IMS_BASE_URL` | Adobe IMS 身份验证基础 URL | 已预先配置，请勿修改 | Default, Stage |
+| `IMS_CLIENT_ID` | 您的 Frame.io 应用 Client ID | **[Adobe Developer Console](https://developer.adobe.com/developer-console/)** 中的凭据页面 | Stage |
+| `IMS_CLIENT_SECRET` | 您的 Frame.io 应用 Client Secret | **[Adobe Developer Console](https://developer.adobe.com/developer-console/)** 中的凭据页面 | Stage |
+| `FOLDER_ID` | 目标文件夹的唯一 ID | 在文件夹响应对象中返回 | Default |
+| `WEBHOOK_ID` | 已配置 webhook 的唯一 ID | 在 webhook 响应对象中返回 | Default |
+| `ASSET_ID` | 文件或文件夹资产的唯一 ID | 在文件或文件夹响应对象中返回 | Default |
+| `SHARE_ID` | 分享链接的唯一 ID | 在分享响应对象中返回 | Default |
+
+---
+
+### 设置授权 {#setting-up-authorization}
+
+<Tip>
+
+本指南使用 OAuth 2.0 对 Frame.io V4 API 进行身份验证。有关其他身份验证方式（例如 Server-to-Server (S2S)）的信息，请参阅[身份验证指南](/cn/platform/docs/guides/authentication/overview)。
+
+</Tip>
+
+应将 `IMS_CLIENT_ID` 和 `IMS_CLIENT_SECRET` 环境变量设置为从 [Adobe Developer Console](https://developer.adobe.com/console) 中项目的 **Credential details** 获取的值。
+
+<Frame>
+
+![alt image](/images/platform/docs/guides/postman-collection/8f77af2f98d46f52b5d9da85adb48ee8f383f326edc8103f291f192deb4d9dba.webp)
+
+</Frame>
+
+在项目的 **Credential details** 部分，将 **Redirect URI** 和 **Redirect URL Pattern** 设置为 Postman 的公共回调端点：
+
+**Redirect URI**
+
+```
+https://oauth/pstmn.io/v1/callback
+```
+
+**Redirect URI Pattern**
+
+```
+https://oauth\\.pstmn\\.io
+```
+
+设置并保存环境变量后，下一步是配置授权设置。为此，请点击左侧边栏顶部的 **Collections** 图标，打开集合浏览器。
+
+在集合浏览器中，选择 Frame.io V4 Developer API 集合的根节点（通常名为 **‘Frame.io Developer API Collection’**，后接您的 fork 名称），然后选择 **Authorization** 选项卡。
+![alt image](/images/platform/docs/guides/postman-collection/518e800fde27188c25a4f8438a552fca3cb37a27af7a810f9a93ab959b786615.webp)
+
+集合中已预先配置了 OAuth <Tooltip tip="有关 OAuth 作用域的更多信息，请参阅 IMS 文档 **[此处](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#scopes)**">作用域</Tooltip>。设置好环境变量后，使用 **Get New Access Token** 按钮启动 OAuth 2.0 流程。这将打开一个浏览器窗口来完成身份验证过程，并将令牌返回给 Postman。
+
+要验证授权配置，请在 Users 文件夹中选择 **`GET user details`** 请求，然后点击 **Send**。
+
+返回 **`200 OK`** 响应即表示您的集合配置正确，并且您已通过正确账户的身份验证。如果遇到错误，请参阅入门指南的**[此部分](/cn/platform/docs/getting-started#errors)**，了解有关错误和警告的信息。
+
+**响应示例**
+
+```
+{
+  "data": {
+    "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+    "email": "user_email@example.com",
+    "id": "00000000-1111-2222-3333-444444444444",
+    "name": "Name"
+  }
+}
+```
+
+---
+
+## 获取您的 Account ID {#obtaining-your-account-id}
+
+`account_id` 是大多数 V4 API 端点必需的路径参数，测试其他请求时也会用到它。您可以使用集合 **Accounts** 文件夹中的 **`GET List accounts`** 请求获取 `account_id`。**[API 参考](/cn/platform/api-reference/accounts/index)**
+
+**响应示例**
+
+```
+{
+  "data": [
+    {
+      "created_at": "2023-09-25T19:18:29.614189Z",
+      "display_name": "Integration Account",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "roles": [
+        "admin"
+      ],
+      "storage_limit": 300,
+      "storage_usage": 300,
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "image": null
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts"
+  }
+}
+```
+
+<Tip>
+
+如果您有多个 Frame.io 账户，每个账户都会作为单独的对象出现在响应中
+
+</Tip>
+
+获取 Account ID 后，从响应中复制 `id` 值并将其保存为环境变量。在后续请求中，您将使用 `{{ACCOUNT_ID}}` 将其作为 `account_id` <Tooltip tip="有关发送请求参数的更多信息，请参阅 **[Postman 文档](https://learning.postman.com/docs/sending-requests/create-requests/parameters#send-request-parameters)**">路径参数</Tooltip>引用。
+
+---
+
+## Workspace 和 Project 操作 {#workspace-and-project-operations}
+
+您的 Frame.io 文件存储在文件夹中，这些文件夹按 Workspace 内的 Project 进行组织。有关 V4 资源层级结构的完整概述，请参阅**[本指南](/cn/platform/docs/getting-started#resource-hierarchy)**。
+
+### 列出 Workspace {#listing-workspaces}
+
+**Workspaces** 文件夹中的 **`GET list workspaces`** 请求会调用 **[`/v4/accounts/:account_id/workspaces`](/cn/platform/api-reference/workspaces/index)**，并返回您的账户有权访问的 Workspace 列表。
+
+某些 Project 操作需要将 `workspace_id` 作为路径参数，因此如果您计划列出或获取 Project，请先保存您的 Workspace ID。
+
+请求成功后将返回 **`200 OK`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+  "data": [
+    {
+      "account_id": "11111111-2222-3333-4444-555555555555",
+      "created_at": "2024-01-25T19:18:29.614189Z",
+      "id": "88888888-bbbb-4444-aaaa-ffffffffffff",
+      "name": "My Workspace",
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "creator": {
+        "active": true,
+        "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+        "email": "user_email@example.com",
+        "id": "196C1A5777BF4CV00A49411B@176719f5667d82g5594324.e",
+        "name": "Name"
+      }
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts/123/workspaces"
+  }
+}
+```
+
+---
+
+### 创建 Workspace {#creating-a-workspace}
+
+**`POST create workspace`** 请求会调用 **[`/v4/accounts/:account_id/workspaces`](/cn/platform/api-reference/workspaces/create)**，为您的账户创建新的 Workspace。
+
+在请求编辑器中，选择 **Body** 选项卡，在 `data` 对象中设置 Workspace 的名称。
+
+请求成功后将返回 **`201 Created`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+  "data": {
+    "account_id": "11111111-2222-3333-4444-555555555555",
+    "created_at": "2024-01-25T19:18:29.614189Z",
+    "id": "77777777-999-4444-8888-000000000000",
+    "name": "My New Workspace",
+    "updated_at": "2024-02-07T16:44:41.986478Z"
+  }
+}
+```
+
+---
+
+### 更新 Workspace {#updating-a-workspace}
+
+**`PATCH update workspace`** 请求会调用 **[`/v4/accounts/:account_id/workspaces/:workspace_id`](/cn/platform/api-reference/workspaces/update)**，以更新 Workspace 的名称。
+
+在请求编辑器中，选择 **Body** 选项卡，在 `data` 对象中设置 Workspace 的新名称。
+
+请求成功后将返回 **`200 OK`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+    "data": {
+        "id": "77777777-9999-4444-8888-000000000000",
+        "name": "New Workspace Name",
+        "updated_at": "2026-05-01T02:42:00.462467Z",
+        "account_id": "11111111-2222-3333-4444-555555555555",
+        "created_at": "2025-09-22T19:17:02.565496Z"
+    }
+}
+```
+
+---
+
+### 创建 Project {#creating-a-project}
+
+**`POST create project`** 请求会调用 **[`/v4/accounts/:account_id/workspaces/:workspace_id/projects`](/cn/platform/api-reference/projects/create)**，在指定的 Workspace 中创建新的 Project。
+
+在请求编辑器中，选择 **Body** 选项卡，在 `data` 对象中设置 Project 的名称。可选的 `restricted` 属性是一个布尔值，用于创建受限 Project。
+
+请求成功后将返回 **`201 Created`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+    "data": {
+        "id": "fd26defb-8bdf-5c39-9746-24d38f109cc3",
+        "name": "test",
+        "status": "active",
+        "restricted": true,
+        "updated_at": "2026-05-01T03:39:58.910884Z",
+        "storage": 0,
+        "workspace_id": "77777777-999-4444-8888-000000000000",
+        "created_at": "2026-05-01T03:39:58.853797Z",
+        "root_folder_id": "d4fca8b4-5fd8-4a94-90aa-de13de4b2021",
+        "view_url": "https://next.frame.io/project/fd26defb-8bdg-5c39-9746-24d38f109cc3"
+    }
+}
+```
+
+从响应中复制 **`root_folder_id`**，并将其设置为 **`FOLDER_ID`** 环境变量的值。本指南的其余部分会用到它。
+
+<Tip>
+
+您可以随后使用 **Project Permissions** 文件夹中的 **`PATCH Update user role in a Project`** 请求，将用户添加到新创建的受限 Project 中。（**[API 参考](/cn/platform/docs/guides/postman-collection)**）
+
+</Tip>
+
+---
+
+## 文件夹和文件操作 {#folder-and-file-operations}
+
+### 列出文件夹子项 {#listing-folder-children}
+
+**`GET list folder children`** 请求会调用 **[`/v4/accounts/:account_id/folders/:folder_id/children`](/cn/platform/api-reference/folders/index)**，列出指定文件夹中的子项。在本例中，即设置为 **`FOLDER_ID`** 环境变量的项目根文件夹。
+
+您可以使用以下可选查询参数来细化响应：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| **`page_size`** | Integer | 限制返回的文件夹数量 <br />**1-100，默认为 50** |
+| **`type`** | String | 按资源类型筛选文件夹子项：**`file`** 或 **`folder`** |
+| **`after`** | String | 用于返回分页结果的请求的不透明游标。<br />**它由系统自动生成，并在上一次响应的 `links` 对象中返回。** 它并非供人阅读。 |
+| **`include_total_count`** | Boolean | 返回所有实体的总数 <br />**默认为 False** |
+| **`include`** | Enum | 为每个返回的对象附加额外数据，例如 `creator`、`project`、`media_links`。<br />有关受支持参数的完整列表，请参阅 **[API 参考](/cn/platform/api-reference/folders/index#request.query.include)** |
+
+请求成功后将返回 **`200 OK`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+  "data": [
+    {
+      "type": "file",
+      "created_at": "2023-09-25T19:18:29.614189Z",
+      "file_size": 1137444,
+      "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+      "media_type": "image/png",
+      "name": "asset.png",
+      "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+      "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+      "status": "created",
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+      "creator": {
+        "active": true,
+        "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+        "email": "user_email@example.com",
+        "id": "196C1A5666BF4EB00A49411B@176719f5667c82b4494214.e",
+        "name": "Jon Doe"
+      },
+      "media_links": {
+        "high_quality": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN"
+        },
+        "original": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "inline_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=inline%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragSDFXDFh&1Key-Pair-Id=KKI497NESTHMN"
+        },
+        "thumbnail": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "url": "https://picture2.frame.io/image/s3://frameio-assets-development/image/cd58cb8e-24b3-4498-8d0f-9532fcd04d11/image_full.png?alg=HS256&sig=0_u7w_wz2MwQHOXp000ibbQSMRijujyaUu8V3YYPxu4&exp=1729857600"
+        }
+      },
+      "metadata": [
+        {
+          "field_type": "select",
+          "field_definition_id": "b859ccec-9536-4bf2-bc6f-5e9206e26606",
+          "field_definition_name": "Fields definition name",
+          "mutable": true,
+          "value": [
+            {
+              "display_name": "Display name",
+              "id": "212add59-6527-4fd2-ac30-55ea94a8b5f8"
+            }
+          ],
+          "field_options": [
+            {
+              "display_name": "Display name",
+              "id": "212add59-6527-4fd2-ac30-55ea94a8b5f8"
+            },
+            {
+              "display_name": "Display name 2",
+              "id": "c6eb873f-125b-4317-b857-1a22eb3dbf22"
+            }
+          ]
+        }
+      ],
+      "project": {
+        "created_at": "2024-01-25T19:18:29.614189Z",
+        "description": "Project Description",
+        "id": "e0e30b1d-c3aa-44ee-926e-c6c326fb10dc",
+        "name": "My Project",
+        "root_folder_id": "be733511-6f15-4d97-8ee7-bc23b2fb0bd7",
+        "status": "active",
+        "storage": 15000,
+        "updated_at": "2024-02-07T16:44:41.986478Z",
+        "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/",
+        "workspace_id": "91b10e83-5874-44de-9b57-41c937b87256",
+        "owner": {
+          "active": true,
+          "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "email": "user_email@example.com",
+          "id": "196C1A5666BF4EB00A49411B@176719f5667c82b4494214.e",
+          "name": "Jon Doe"
+        },
+        "restricted": false
+      }
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts/123/folders/123/folders"
+  },
+  "total_count": 10
+}
+```
+
+<Tip>
+
+**\{'t': '#frag', 'p': \{\}, 'c': \{'t': 'p', 'p': \{\}, 'c': \['测试 ', \{'t': 'strong', 'p': \{\}, 'c': \{'t': 'code', 'p': \{\}, 'c': 'after'\}\}, ' 参数'\]\}\}**
+
+如果您要测试分页结果，请在响应中找到 **`links`** 对象：
+
+- 从 **`next`** 属性的 URL 中，仅复制 **`after=`** 之后的字符串值
+- 在下一次请求中将其设置为 **`after`** 查询参数的值。
+- **注意避免双重编码！** 如果 URL 包含编码字符（例如 %3D%3D），请将其替换为原始字符（**==**）。Postman 会按字面解释您的输入，并可能对这些字符进行双重编码，从而导致 **`422`** 错误
+
+</Tip>
+
+---
+
+### 创建文件 - 本地上传 {#creating-a-file-local-upload}
+
+**`POST create file - local upload`** 请求会调用 **[`/v4/accounts/:account_id/folders/:folder_id/files/local_upload`](/cn/platform/api-reference/files/create-local-upload)**，将本地文件上传到指定文件夹。
+
+根据文件大小，本地上传需要两个或更多请求。首次测试时，请使用较小的文件（小于 10 MB），以便将流程限制为单个上传 URL。
+
+<Steps>
+
+<Step title="创建占位文件资源">
+
+在请求编辑器中，选择 **Body** 选项卡，在 `data` 对象中设置名称和文件大小（以**字节**为单位）。请求成功后将返回 **`201 Created`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+  "data": {
+    "created_at": "2023-09-25T19:18:29.614189Z",
+    "file_size": 1137444,
+    "media_type": "image/png",
+    "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+    "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+    "status": "created",
+    "type": "file",
+    "updated_at": "2024-02-07T16:44:41.986478Z",
+    "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+    "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+    "name": "asset.png",
+    "upload_urls": [
+      {
+        "size": 20000000,
+        "url": "https://my.fileupload.url.dev"
+      }
+    ]
+  }
+}
+```
+
+此调用已在指定文件夹中创建了一个占位文件资源。在下一步中，使用响应中 `upload_urls` 数组里的预签名上传 URL 完成上传。
+
+</Step>
+
+<Step title="上传文件内容">
+
+点击响应中 `upload_urls` 数组里的 URL，在 Postman 中打开新的请求选项卡。将请求方法更改为 **`PUT`**。在请求编辑器中，选择 **Headers** 选项卡，为请求添加以下请求头：
+
+- **`x-amz-acl`:`private`**
+- **`Content-Type`**：必须与文件名中指定的扩展名类型完全匹配（例如，名为 **`IMG.png`** 的文件必须使用 **`image/png`**）
+
+![alt image](/images/platform/docs/guides/postman-collection/86ddb4aebecaffdee01cf07be3c2e7af0b616285721ec8ef412575114a916b21.webp)
+在请求编辑器中选择 **Body** 选项卡，然后点击 **binary** 选项选择您的文件。选择后，点击 **Send** 完成请求。请求成功后将返回 **`200 OK`** 状态，确认文件已上传。
+
+</Step>
+
+</Steps>
+
+文件上传后，Frame.io 媒体管线会自动处理转码和缩略图生成。对于较大的文件，文件从 **`created`** 状态变为 **`ready`** 状态可能需要一些时间。
+
+---
+
+### 创建文件 - 远程上传 {#creating-a-file-remote-upload}
+
+**`POST create file - remote upload`** 请求会调用 **[`/v4/accounts/:account_id/folders/:folder_id/files/remote_upload`](/cn/platform/api-reference/files/create-remote-upload)**，使用提供的源 URL 将外部文件拉取到指定文件夹中。
+
+在请求编辑器中，选择 **Body** 选项卡，在 `data` 对象中设置文件的名称和源 URL。
+
+请求成功后将返回 **`202 Accepted`** 状态，响应正文类似于以下示例。
+
+**响应示例**
+
+```
+{
+  "data": {
+    "created_at": "2023-09-25T19:18:29.614189Z",
+    "file_size": 1137444,
+    "media_type": "image/png",
+    "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+    "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+    "status": "created",
+    "type": "file",
+    "updated_at": "2024-02-07T16:44:41.986478Z",
+    "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+    "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+    "name": "asset.png"
+  },
+  "links": {
+    "status": "/v4/accounts/fb4dd62f-8a89-4e98-8fa1-ad4b29a0094f/files/eab70952-966c-4d99-949b-f0a947ca5754/status"
+  }
+}
+```

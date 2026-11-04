@@ -1,0 +1,674 @@
+---
+title: "Python SDK do Frame.io — Guia de autenticação"
+sidebarTitle: "Python SDK"
+---
+
+Este guia explica como se autenticar na API do Frame.io usando o **Python SDK do Frame.io** (`frameio`). A API V4 do Frame.io usa o [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/), a plataforma de identidade OAuth 2.0 da Adobe.
+
+Esta é uma referência independente para desenvolvedores Python. Todos os exemplos de código e fluxos abaixo se aplicam apenas ao pacote `frameio`.
+
+---
+
+## Tipos de autenticação no Python SDK {#authentication-types-in-the-python-sdk}
+
+O Python SDK oferece suporte a quatro opções de autenticação:
+
+| Método | Caso de uso | Interação do usuário? | Exige client secret? |
+| --- | --- | --- | --- |
+| **Token estático** | Scripts rápidos, testes ou quando você já tem um token | Não | Não |
+| **Server-to-Server** | Serviços de backend, cron jobs, automação | Não | Sim |
+| **Web App** | Apps no lado do servidor (Flask, Django, FastAPI) | Sim | Sim |
+| **SPA (PKCE)** | Apps de navegador, CLIs ou qualquer app que não possa armazenar um secret | Sim | Não |
+
+**Server-to-Server** permite que seu app atue como uma conta de serviço, sem interação do usuário. Está disponível apenas para contas do Frame.io V4 administradas pelo [Adobe Admin Console](https://adminconsole.adobe.com/).
+
+**Web App** e **SPA** permitem que seu app atue como um usuário específico. Ambos usam o Adobe IMS internamente: o usuário autoriza seu app, e o SDK troca o código resultante por tokens. O Python SDK cuida do fluxo `/authorize/v2` e `/token/v3` do IMS para você. Para Web App, você precisa de um client secret; para SPA, você usa [PKCE](https://datatracker.ietf.org/doc/html/rfc7636).
+
+<Note>
+
+A [credencial Native App](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-native-app-credential) da Adobe exige manipuladores de esquemas de URI personalizados (por exemplo, `adobe+<hash>://…`) que interceptam os redirecionamentos no nível do sistema operacional. O Python não tem uma forma padrão de registrar esses manipuladores, portanto o Python SDK não oferece uma classe `NativeAppAuth`. Para apps Python interativos, use `WebAppAuth` com um servidor de callback local (por exemplo, Flask ou FastAPI). Para cargas de trabalho não interativas, use `ServerToServerAuth`.
+
+</Note>
+
+---
+
+## Usuários de conta de serviço {#service-account-users}
+
+Ao usar a autenticação Server-to-Server, sua aplicação atua como um **usuário de conta de serviço**, um tipo de conta distinto que pode executar ações em nome do serviço. Esses usuários ficam visíveis para os outros usuários no Frame.io: quando uma conta de serviço executa uma ação, o nome dela é exibido na interface.
+
+Você pode conceder e revogar o acesso de contas de serviço pelo [Adobe Admin Console](https://adminconsole.adobe.com/) e pelo [Developer Console](https://developer.adobe.com/console). Os nomes das contas de serviço são gerenciados na interface do Frame.io. Por padrão, sua primeira conexão S2S se chama **Service Account User**, a segunda **Service Account User 2** e assim por diante.
+
+<Info>
+
+Consulte [Automate your setup using Frame.io server to server support](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html) para mais informações.
+
+</Info>
+
+---
+
+## Início rápido {#quick-start}
+
+### Pré-requisitos {#prerequisites}
+
+1. **Credenciais** do [Adobe Developer Console](https://developer.adobe.com/console):
+
+   - **Client ID** — obrigatório para todos os fluxos OAuth
+   - **Client Secret** — obrigatório para os fluxos Server-to-Server e Web App
+   - **Redirect URI** — obrigatório para os fluxos Web App e SPA; deve estar registrado no seu projeto da Adobe
+
+2. **Instale o SDK:**
+
+```bash
+pip install frameio
+```
+
+### Como escolher um método {#choosing-a-method}
+
+- **Nenhum usuário envolvido?** Use **Server-to-Server** (`ServerToServerAuth`).
+- **Há um usuário envolvido e você pode armazenar um secret?** Use **Web App** (`WebAppAuth`).
+- **Há um usuário envolvido, mas você não pode armazenar um secret?** Use **SPA** (`SPAAuth`).
+
+---
+
+## Token de acesso {#access-token}
+
+Se você já tem um token de acesso (de outro sistema OAuth ou de uma troca anterior, por exemplo, pelo nosso [API Explorer](/pt-BR/platform/api-reference/accounts/index?explorer=true)), pode passá-lo diretamente:
+
+```python
+from frameio import Frameio
+
+client = Frameio(token="YOUR_ACCESS_TOKEN")
+```
+
+Essa é a abordagem mais simples, mas o token acabará expirando e o SDK não o atualizará para você.
+
+### Tokens de desenvolvedor legados {#legacy-developer-tokens}
+
+Para contas migradas para o V4 que ainda não são administradas pelo [Adobe Admin Console](https://adminconsole.adobe.com/), você pode continuar usando os Legacy Developer Tokens do [site para desenvolvedores do Frame.io](https://developer.frame.io/app/tokens). Você deve incluir o cabeçalho `x-frameio-legacy-token-auth` e defini-lo como `true`:
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers={"x-frameio-legacy-token-auth": "true"},
+)
+```
+
+Os tokens de desenvolvedor legados não expiram, mas são um mecanismo de transição. Para novas integrações e cargas de trabalho em produção, recomendamos usar um dos fluxos OAuth 2.0 abaixo. Consulte o [Guia de migração](/pt-BR/platform/docs/resources/migration#authentication) para mais detalhes.
+
+---
+
+## Server-to-Server (Client Credentials) {#server-to-server-client-credentials}
+
+Use esta opção para serviços de backend e scripts que precisam de acesso ao Frame.io sem interação do usuário. Este fluxo está disponível apenas para contas do Frame.io V4 administradas pelo [Adobe Admin Console](https://adminconsole.adobe.com/). Sua aplicação se autentica como um [usuário de conta de serviço](#service-account-users), sem nenhuma pessoa envolvida no processo.
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+
+client = Frameio(token=auth.get_token)
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+from frameio import AsyncFrameio
+from frameio.auth import AsyncServerToServerAuth
+
+auth = AsyncServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+
+client = AsyncFrameio(token=auth.get_token)
+```
+
+</Tab>
+
+</Tabs>
+
+Pronto. `auth.get_token` é uma função que o SDK chama a cada solicitação. Se o token atual ainda for válido, ela retorna imediatamente. Se ele estiver prestes a expirar, ela primeiro obtém um novo, de forma totalmente transparente.
+
+### Como funciona {#how-it-works}
+
+Suas credenciais de cliente (client ID + secret) **nunca expiram**. Você só as rotaciona manualmente por boas práticas de segurança. O S2S oferece acesso à API efetivamente permanente e ininterrupto, sem nenhuma intervenção manual.
+
+Internamente:
+
+1. Na primeira chamada à API, `get_token` solicita um novo token de acesso ao Adobe IMS usando o grant `client_credentials`.
+2. O token é armazenado em cache na memória. Cada token de acesso expira (normalmente em 24 horas), mas isso é tratado para você.
+3. Quando um token em cache entra no buffer de atualização (padrão: 60 segundos antes de expirar), o SDK obtém um novo automaticamente usando as mesmas credenciais de cliente.
+4. Nenhum token de atualização é envolvido. As próprias credenciais de cliente são o secret de longa duração e sempre podem ser usadas para gerar um novo token de acesso.
+
+### Autenticação explícita {#explicit-authentication}
+
+Se quiser obter o token antecipadamente (por exemplo, para falhar rapidamente na inicialização em caso de credenciais incorretas):
+
+```python
+auth = ServerToServerAuth(client_id="...", client_secret="...")
+auth.authenticate()  # raises AuthenticationError if credentials are invalid
+client = Frameio(token=auth.get_token)
+```
+
+---
+
+## Web App (Authorization Code) {#web-app-authorization-code}
+
+Use esta opção para aplicações no lado do servidor em que os usuários fazem login com o Adobe ID. Este fluxo exige um client secret, que deve ser armazenado com segurança no seu servidor.
+
+<Steps>
+
+<Step title="Redirecione o usuário para o Adobe IMS">
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+from frameio.auth import WebAppAuth
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+# Generate a cryptographically random state value to prevent CSRF attacks
+import secrets
+state = secrets.token_urlsafe(32)
+
+authorization_url = auth.get_authorization_url(state=state)
+# Store `state` in the user's session, then redirect them to `authorization_url`
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+from frameio.auth import AsyncWebAppAuth
+
+auth = AsyncWebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+# get_authorization_url is synchronous (no I/O needed)
+import secrets
+state = secrets.token_urlsafe(32)
+
+authorization_url = auth.get_authorization_url(state=state)
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Processe o callback">
+
+Quando o Adobe IMS redirecionar o usuário de volta para o seu `redirect_uri`, extraia os parâmetros `code` e `state`. Verifique se o state corresponde ao que você armazenou e, em seguida, troque o código por tokens:
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+# In your callback handler (e.g. a Flask/FastAPI route):
+auth.exchange_code(code=request.args["code"])
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+# In your async callback handler (e.g. a FastAPI route):
+await auth.exchange_code(code=request.query_params["code"])
+```
+
+</Tab>
+
+</Tabs>
+
+Isso troca o código de autorização por um token de acesso e um token de atualização, armazenando ambos internamente.
+
+</Step>
+
+<Step title="Use o cliente">
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+from frameio import Frameio
+
+client = Frameio(token=auth.get_token)
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+from frameio import AsyncFrameio
+
+client = AsyncFrameio(token=auth.get_token)
+```
+
+</Tab>
+
+</Tabs>
+
+Pronto. A partir deste ponto, `get_token` gerencia o ciclo de vida do token automaticamente. Quando o token de acesso estiver perto de expirar, o SDK usará o token de atualização para obter um novo. Nenhuma interação do usuário é necessária.
+
+</Step>
+
+</Steps>
+
+### Exemplo completo com Flask {#full-flask-example}
+
+```python
+import secrets
+from flask import Flask, redirect, request, session
+from frameio import Frameio
+from frameio.auth import WebAppAuth
+
+app = Flask(__name__)
+app.secret_key = secrets.token_bytes(32)
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="http://localhost:5000/callback",
+)
+
+@app.route("/login")
+def login():
+    state = secrets.token_urlsafe(32)
+    session["oauth_state"] = state
+    return redirect(auth.get_authorization_url(state=state))
+
+@app.route("/callback")
+def callback():
+    if request.args.get("state") != session.pop("oauth_state", None):
+        return "Invalid state parameter", 403
+
+    auth.exchange_code(code=request.args["code"])
+
+    client = Frameio(token=auth.get_token)
+    accounts = client.accounts.index()
+    return f"Authenticated — {len(accounts.data)} account(s) accessible."
+```
+
+---
+
+## Single Page App / PKCE (Authorization Code + PKCE) {#single-page-app-/-pkce-authorization-code-+-pkce}
+
+Use esta opção para aplicações baseadas em navegador, apps de desktop ou ferramentas de CLI que não podem armazenar um client secret com segurança. Este fluxo usa [PKCE (RFC 7636)](https://datatracker.ietf.org/doc/html/rfc7636) para proteger a troca do código de autorização.
+
+<Steps>
+
+<Step title="Gere a URL de autorização">
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+from frameio.auth import SPAAuth
+
+auth = SPAAuth(
+    client_id="YOUR_CLIENT_ID",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+import secrets
+state = secrets.token_urlsafe(32)
+
+result = auth.get_authorization_url(state=state)
+# result.url            -> redirect the user here
+# result.code_verifier  -> store this securely until the callback
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+from frameio.auth import AsyncSPAAuth
+
+auth = AsyncSPAAuth(
+    client_id="YOUR_CLIENT_ID",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+# get_authorization_url is synchronous (no I/O needed)
+import secrets
+state = secrets.token_urlsafe(32)
+
+result = auth.get_authorization_url(state=state)
+```
+
+</Tab>
+
+</Tabs>
+
+`get_authorization_url` retorna um `AuthorizationUrlResult` que contém a URL completa (com o `code_challenge` do PKCE incorporado) e o `code_verifier` de que você precisará na próxima etapa.
+
+</Step>
+
+<Step title="Troque o código usando o verifier">
+
+Quando o usuário for redirecionado de volta:
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+auth.exchange_code(
+    code="CODE_FROM_CALLBACK",
+    code_verifier=result.code_verifier,
+)
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+await auth.exchange_code(
+    code="CODE_FROM_CALLBACK",
+    code_verifier=result.code_verifier,
+)
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Use o cliente">
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+from frameio import Frameio
+
+client = Frameio(token=auth.get_token)
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+from frameio import AsyncFrameio
+
+client = AsyncFrameio(token=auth.get_token)
+```
+
+</Tab>
+
+</Tabs>
+
+Pronto. A atualização funciona da mesma forma que no Web App — o SDK usa o token de atualização automaticamente. A diferença é que nenhum client secret é enviado durante a atualização, pois o fluxo SPA foi projetado para clientes públicos.
+
+</Step>
+
+</Steps>
+
+---
+
+## Uso assíncrono {#async-usage}
+
+Cada classe de autenticação tem uma contraparte assíncrona com o prefixo `Async`. Os exemplos de código acima incluem as abas **Sync** e **Async** quando aplicável.
+
+| Sync | Async |
+| --- | --- |
+| `ServerToServerAuth` | `AsyncServerToServerAuth` |
+| `WebAppAuth` | `AsyncWebAppAuth` |
+| `SPAAuth` | `AsyncSPAAuth` |
+
+A API é idêntica. `get_authorization_url` continua síncrono (sem I/O), enquanto `exchange_code`, `refresh`, `revoke` e `get_token` são todos `async`. Use as classes assíncronas com `AsyncFrameio`.
+
+### Atualização manual do token {#manual-token-refresh}
+
+Nos fluxos Web App e SPA, o SDK atualiza os tokens automaticamente por meio de `get_token`. Se você precisar de controle explícito, pode chamar `refresh()` diretamente:
+
+<Tabs>
+
+<Tab title="Sync">
+
+```python
+auth.refresh()  # fetches a new access token using the refresh token
+```
+
+</Tab>
+
+<Tab title="Async">
+
+```python
+await auth.refresh()
+```
+
+</Tab>
+
+</Tabs>
+
+Isso é útil quando você quer forçar uma atualização antes de uma operação crítica, em vez de depender do buffer de atualização automática.
+
+---
+
+## Persistência de tokens {#token-persistence}
+
+Todas as classes de autenticação oferecem suporte a `export_tokens()` e `import_tokens()` para persistir o estado dos tokens entre reinicializações. Nos fluxos Web App e SPA, isso é especialmente importante, pois, por padrão, os tokens de acesso e de atualização ficam na memória — se a sua aplicação for reiniciada, os usuários precisarão se autenticar novamente, a menos que você os persista. No Server-to-Server, a persistência é opcional (as credenciais de cliente sempre podem gerar um novo token), mas importar um token em cache evita uma ida e volta extra na inicialização.
+
+### Exportar e importar {#export-and-import}
+
+```python
+# After exchange_code(), save the token state
+token_data = auth.export_tokens()
+# token_data is a dict: {"access_token": "...", "refresh_token": "...", "expires_at": 1234567890.0}
+# Save it to your database, file, or secret store
+
+# On next startup, restore it
+auth.import_tokens(token_data)
+client = Frameio(token=auth.get_token)
+# The SDK will automatically refresh if the token is near expiry
+```
+
+### Persistência automática com `on_token_refreshed` {#automatic-persistence-with-on_token_refreshed}
+
+Para persistir os tokens automaticamente sempre que forem atualizados, use o callback `on_token_refreshed`:
+
+```python
+import json
+from pathlib import Path
+
+TOKEN_FILE = Path("tokens.json")
+
+def save_tokens(tokens: dict):
+    TOKEN_FILE.write_text(json.dumps(tokens))
+
+auth = WebAppAuth(
+    client_id="...",
+    client_secret="...",
+    redirect_uri="...",
+    on_token_refreshed=save_tokens,
+)
+
+# On startup, restore if available
+if TOKEN_FILE.exists():
+    auth.import_tokens(json.loads(TOKEN_FILE.read_text()))
+```
+
+O callback recebe um dict com o mesmo formato de `export_tokens()` e é acionado após cada atualização de token bem-sucedida.
+
+Nas classes assíncronas, `on_token_refreshed` pode ser uma função comum ou uma função `async`. Ambas são suportadas.
+
+---
+
+## Revogar tokens {#revoking-tokens}
+
+Para desconectar um usuário e invalidar os tokens dele no Adobe IMS:
+
+```python
+auth.revoke()
+```
+
+Isso faz uma solicitação de revogação de melhor esforço (best-effort) ao Adobe IMS para o token de acesso e o token de atualização e, em seguida, limpa todo o estado local dos tokens. Depois da revogação, o usuário precisará se autenticar novamente.
+
+<Tip>
+
+Nas classes assíncronas, use `await auth.revoke()`.
+
+</Tip>
+
+---
+
+## Tratamento de erros {#error-handling}
+
+Todos os erros de autenticação herdam de `FrameioAuthError`, então você pode capturá-los de forma ampla ou tratar casos específicos:
+
+```python
+from frameio.auth import (
+    FrameioAuthError,
+    AuthenticationError,
+    TokenExpiredError,
+    ConfigurationError,
+    NetworkError,
+    RateLimitError,
+)
+
+try:
+    auth.exchange_code(code="...")
+except TokenExpiredError:
+    # The refresh token has expired; redirect the user to sign in again
+    pass
+except AuthenticationError as e:
+    # Token exchange failed
+    print(f"Error: {e.error_code} - {e.error_description}")
+except NetworkError:
+    # Timeout or connection failure (after retries)
+    pass
+except RateLimitError as e:
+    # 429 from Adobe IMS; retry after e.retry_after seconds
+    pass
+except FrameioAuthError:
+    # Catch-all for any other auth error
+    pass
+```
+
+### Referência de erros {#error-reference}
+
+| Exceção | Quando é lançada |
+| --- | --- |
+| `ConfigurationError` | Configuração ausente ou inválida (por exemplo, `client_id` vazio, redirect URI sem HTTPS) |
+| `AuthenticationError` | Troca ou atualização de token rejeitada pelo Adobe IMS (tem `.error_code` e `.error_description`) |
+| `TokenExpiredError` | O próprio token de atualização expirou; o usuário precisa se autenticar novamente |
+| `NetworkError` | Timeout HTTP ou falha de conexão após todas as novas tentativas |
+| `RateLimitError` | O Adobe IMS retornou 429; verifique `.retry_after` para orientação sobre o back-off |
+| `PKCEError` | Falha na verificação PKCE (fluxo SPA) |
+
+### Como lidar com tokens de atualização expirados em produção {#handling-expired-refresh-tokens-in-production}
+
+<Warning>
+
+Nos fluxos Web App e SPA, o token de atualização acabará expirando. Quando isso acontecer, `get_token` lançará `TokenExpiredError`. Você deve capturar esse erro e redirecionar o usuário pelo fluxo de autorização novamente.
+
+</Warning>
+
+```python
+from frameio.auth import TokenExpiredError
+
+try:
+    client = Frameio(token=auth.get_token)
+    assets = client.files.list(project_id="...")
+except TokenExpiredError:
+    # Clear persisted tokens and redirect user to login
+    auth.revoke()
+    return redirect("/login")
+```
+
+---
+
+## Referência de configuração {#configuration-reference}
+
+Todas as classes de autenticação aceitam estes parâmetros opcionais:
+
+<AccordionGroup>
+
+<Accordion title="Referência de parâmetros">
+
+| Parâmetro | Padrão | Descrição |
+| --- | --- | --- |
+| `scopes` | Padrões específicos de cada fluxo | Escopos OAuth separados por espaços. O padrão do S2S é `openid AdobeID frame.s2s.all`; o padrão dos fluxos voltados ao usuário é `openid email profile offline_access additional_info.roles`. |
+| `ims_base_url` | `https://ims-na1.adobelogin.com` | URL base do Adobe IMS. Substitua para ambientes de staging ou que não sejam de produção. |
+| `http_client` | `None` | `httpx.Client` (ou `httpx.AsyncClient`) personalizado para proxy, mTLS ou pool de conexões. |
+| `timeout` | `30` | Timeout das solicitações HTTP, em segundos, para chamadas ao endpoint de token. |
+| `max_retries` | `2` | Número máximo de novas tentativas para falhas transitórias (5xx, timeouts). As novas tentativas por limite de taxa (429) são contabilizadas separadamente. |
+| `refresh_buffer` | `60` | Segundos antes da expiração do token para acionar a atualização proativa. |
+| `on_token_refreshed` | `None` | Callback acionado após cada atualização de token bem-sucedida. Recebe um dict com `access_token`, `refresh_token` e `expires_at`. |
+
+</Accordion>
+
+</AccordionGroup>
+
+### Ambientes de staging {#staging-environments}
+
+Aponte para uma instância de staging do Adobe IMS substituindo `ims_base_url`. O SDK também exporta `DEFAULT_IMS_BASE_URL` (`https://ims-na1.adobelogin.com`) caso você precise referenciar o valor de produção programaticamente.
+
+```python
+auth = ServerToServerAuth(
+    client_id="...",
+    client_secret="...",
+    ims_base_url="https://ims-na1-stg1.adobelogin.com",
+)
+```
+
+### Cliente HTTP personalizado {#custom-http-client}
+
+Para suporte a proxy ou configuração TLS personalizada:
+
+```python
+import httpx
+
+http_client = httpx.Client(
+    proxy="http://corporate-proxy:8080",
+    verify="/path/to/custom-ca-bundle.pem",
+)
+
+auth = ServerToServerAuth(
+    client_id="...",
+    client_secret="...",
+    http_client=http_client,
+)
+```
+
+---
+
+## Thread safety {#thread-safety}
+
+As classes de autenticação síncronas são totalmente thread-safe. Quando várias threads chamam `get_token` simultaneamente e é necessária uma atualização, apenas uma thread executa a atualização. As outras aguardam e recebem o mesmo resultado. Nenhum bloqueio externo é necessário.
+
+As classes assíncronas oferecem a mesma garantia usando `asyncio.Lock`, sendo seguras para corrotinas concorrentes dentro de um único event loop.

@@ -1,0 +1,216 @@
+---
+title: "Przewodnik: Organizowanie zasobów"
+sidebarTitle: "Organizowanie zasobów"
+---
+
+## Wprowadzenie {#introduction}
+
+W tym przewodniku dowiemy się, w jaki sposób i w jakim stopniu możemy kontrolować, *gdzie* przesyłane są zasoby z Twojej integracji.
+
+## Czego będę potrzebować? {#what-will-i-need}
+
+Jeśli nie zapoznałeś się jeszcze z przewodnikiem [Implementacja C2C: Konfiguracja](/pl/camera-to-cloud/implementing-c2c-setting-up), rzuć na niego okiem, zanim przejdziesz dalej!
+
+Będziesz również potrzebować `access_token` otrzymanego podczas pracy z przewodnikiem po uwierzytelnianiu i autoryzacji [sprzętu C2C](/pl/platform/v2/implementing-c2c-authentication-and-authorization-hardware) lub [aplikacji C2C](/pl/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application).
+
+## Struktura folderów zasobów {#asset-folder-structure}
+
+Domyślnie zasoby są tworzone w następującej strukturze folderów:
+
+`Cloud Devices` > `{YYYY}_{MM}_{DD}` > `{ASSET_TYPE}` > `{YOUR_DEVICE}` > `{ASSET_NAME}`
+
+Gdzie `{ASSET_TYPE}` to `VIDEO`, `AUDIO` lub `DATA` (konfigurowane dla modelu Twojego urządzenia osobno dla każdego kanału), `{YOUR_DEVICE}` to nazwa urządzenia projektu połączonego z projektem użytkownika, a `{ASSET_NAME}` to nazwa przesłanego zasobu, będącego faktycznym odtwarzalnym zasobem we Frame.io.
+
+### Kierowanie według rozszerzeń {#extension-routing}
+
+Możesz skonfigurować swoje urządzenie tak, aby kierowało różne zasoby do niestandardowych folderów `{ASSET_TYPE}` na podstawie rozszerzenia pliku w `{ASSET_NAME}`. Załóżmy na przykład, że Twoja integracja tworzy kilka różnych typów plików, z których każdy ma określone pochodzenie. Możesz poprosić nas o mapowanie tych zasobów w następujący sposób:
+
+```text
+.mov -> VIDEO
+.mp4 -> VIDEO
+.raw -> STILLS
+.jpeg -> STILLS
+.pdf -> CAMERA REPORTS
+.las -> LiDAR Scans
+```
+
+Teraz, gdy utworzysz następujący zasób:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_codes]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "IMAGE_0001.jpeg", 
+            "filetype": "image/jpeg", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Specyfikacja endpointu API**
+
+Dokumentację dla `/v2/assets` [znajdziesz tutaj](/pl/camera-to-cloud/api-reference/device-asset-create)
+
+</Info>
+
+… zostanie on skierowany do lokalizacji takiej jak: `Cloud Devices` > `2022_04_01` > `STILLS` > `MY_DEVICE` > `IMAGE_0001.jpeg`.
+
+Gdyby plik nazywał się `A001_C001.mov`, zostałby skierowany do: `Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `A001_C001.mov`.
+
+### Tokenizowane ścieżki przesyłania {#tokenized-upload-paths}
+
+Niektóre integracje mogą chcieć mieć większą kontrolę nad strukturą folderów tworzoną przez ich urządzenie. Z kolei my w [Frame.io](http://frame.io/) musimy zapewnić pewien poziom spójności w sposobie przesyłania plików do [Frame.io](http://frame.io/) z urządzenia C2C, a w szczególności dać klientom [Frame.io](http://frame.io/) gwarancje co do tego, z którą częścią ich projektu urządzenie C2C może wchodzić w interakcję. W tym celu pozwalamy integratorom dostosowywać lokalizacje przesyłania zasobów w obrębie folderu `{YOUR_DEVICE}`, ale nie pozwalamy na przesyłanie zasobów poza ten folder.
+
+Aby przesyłać pliki do niestandardowej struktury folderów, musisz współpracować ze swoim opiekunem partnera (Partner Manager). Niestandardowe struktury folderów to zestaw tokenizowanych metadanych, które muszą zostać dostarczone podczas tworzenia zasobu. Zróbmy prosty przykład:
+
+Załóżmy, że mamy zestaw kamer 3D, który ma wartości `reel_name`, takie jak `"A001"`, `"A002"`, `"A003"` itd., oraz wartości `clip_number`, takie jak `"C001"`, `"C002"` itd. Chcemy utworzyć foldery dla każdego klipu i umieścić w nich pliki dla lewego i prawego oka, tak aby pliki wyglądały w projekcie następująco:
+
+![Tokenizowana ścieżka folderu — przykład zestawu 3D](/images/camera-to-cloud/how-to-organize-assets/e40b09128d1cbf3c876fd14169a6406642d50d13ce7ab802baff4bbaf50bfd4a.webp)
+
+Aby to zrobić, musimy skonfigurować dwa ustawienia:
+
+- Wymagane pola metadanych
+- Tokenizowaną ścieżkę pliku
+
+Wymagane pola metadanych to prosta lista kluczy, które muszą zostać ustawione podczas tworzenia zasobu w Twojej integracji:
+
+```text
+[reel_name, clip_number]
+```
+
+Następnie możesz użyć dowolnego z tych kluczy do utworzenia ścieżki rozdzielanej znakiem `/`, używając `{field_name}` do wskazania, gdzie powinna zostać wstawiona wartość pola:
+
+```text
+REEL_{reel_name}/{reel_name}_{clip_number}
+```
+
+Oba te ustawienia należy przekazać naszemu zespołowi w [Frame.io](http://frame.io/), aby dodać je do szczegółów Twojej integracji. Po ich skonfigurowaniu, podczas tworzenia zasobu te wartości będą musiały zostać podane na najwyższym poziomie ładunku, aby utworzenie zasobu zakończyło się powodzeniem:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_LEFT.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10,
+            "metadata": {
+              "reel_name": "A001",
+              "clip_number": "C001"
+            },
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Powyższe żądanie utworzy plik z pełną ścieżką taką jak: `Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `REEL_A001` > `A001_C001` > `A001_C001_LEFT.mp4`
+
+<Danger>
+
+**Błędy metadanych**
+
+Jeśli Twoje urządzenie nie zostało wyraźnie skonfigurowane tak, aby zezwalać na te pola, przy próbie wykonania tego samego wywołania otrzymasz błąd. Podobnie, jeśli skonfigurujesz wymagane pola metadanych, MUSISZ podać je w ładunku tworzenia zasobu, w przeciwnym razie zostanie zwrócony błąd.
+
+</Danger>
+
+Ładunek akceptuje dowolną prawidłową wartość JSON. Wartości niebędące ciągami znaków są renderowane w następujący sposób:
+
+- **liczby całkowite**: Renderowane w systemie dziesiętnym: `10` -> `"10"`
+- **liczby zmiennoprzecinkowe**: Używana jest najkrótsza reprezentacja zgodnie z algorytmem opisanym w „Printing Floating-Point Numbers Quickly and Accurately” w Proceedings of the SIGPLAN ‘96 Conference on Programming Language Design and Implementation.
+- **wartości logiczne**: `true` i `false` są renderowane jako `"true"` i `"false"`
+- **null**: Renderowane jako pusty ciąg znaków. Gdyby `reel_name` miało wartość `null`, pierwszy niestandardowy folder zostałby wyrenderowany jako `REEL_`
+
+Ogólnie zalecamy ograniczenie wartości do ciągów znaków i formatowanie pozostałych wartości według własnego uznania (na przykład liczby całkowite zawsze będą wypisywane bez zer wiodących, co możesz chcieć zmienić).
+
+Generalnie należy używać tylko pól, które mają prawidłową wartość dla każdego klipu; jeśli pole nie zawsze ma prawidłową wartość, powinieneś mieć plan, jak reprezentować wartości nieustawione lub null.
+
+## Stosy wersji {#version-stacking}
+
+[Frame.io](http://frame.io/) obsługuje [stosy wersji](https://support.frame.io/en/articles/4431-version-stacking-and-comparison) — sposób grupowania wielu iteracji tej samej treści w interfejsie użytkownika. API C2C pozwala urządzeniom przesyłać nowe iteracje zasobu, które zostaną umieszczone w stosie wersji razem z jego poprzednimi wersjami.
+
+Aby utworzyć stos wersji, musisz podać `autoversion_id`, które identyfikuje, do którego stosu wersji należą zasoby. Ta wartość może być dowolna: UUID, nazwa pliku itp. Uważaj, aby używać tylko wartości, które nigdy nie zostaną niezamierzenie powtórzone w folderze zasobów. Na przykład, jeśli Twoja integracja może utworzyć tę samą nazwę pliku więcej niż raz, nazwa pliku *nie* jest dobrym kandydatem na `autoversion_id`.
+
+Podajemy autoversion_id w następujący sposób:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v01.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Teraz za każdym razem, gdy przesyłasz nowy zasób z tym samym autoversion_id, zostanie on dodany jako najnowsza wersja w stosie z oryginalnym zasobem:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v02_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+*Zasoby zostaną zgrupowane w stos tylko wtedy, gdy zostaną przesłane do tego samego folderu*, dlatego jeśli chcesz zaimplementować stosy wersji, musisz pamiętać o kilku rzeczach:
+
+- Tokenizowane metadane muszą prowadzić do tego samego folderu nadrzędnego, aby stos wersji mógł zostać utworzony.
+- Ponieważ data utworzenia jest częścią ścieżki pliku, nowe wersje utworzone po północy UTC mogą nie zostać prawidłowo zgrupowane, chyba że podasz przesunięcie (offset) względem czasu utworzenia oryginalnego przesłanego pliku.
+
+Ten drugi punkt jest ważny. Załóżmy, że 48 godzin po pierwszym przesłaniu tworzona jest nowa wersja zasobu. Aby zgrupować ją z oryginalnym zasobem, musimy podać przesunięcie wynoszące 48 godzin wstecz: 172800 sekund.
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v03_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 172800,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Jeśli bieżący zasób *zostałby* przesłany do `2022_04_03`, teraz zostanie przesłany do `2022_04_01` i zgrupowany z właściwym zasobem.
+
+## Co dalej {#next-up}
+
+To ostatni przewodnik dotyczący tworzenia świetnej integracji C2C! Poświęć chwilę, aby pogratulować sobie! Może zjedz coś dobrego. Pozostało już tylko przejrzeć listę kontrolną integratora, w której znajdziesz podsumowanie wszystkiego, co jest potrzebne do stworzenia niezawodnej integracji.
+
+Jeśli jeszcze tego nie zrobiłeś, zachęcamy do kontaktu z naszym zespołem, a następnie do przejścia do kolejnego przewodnika. Czekamy na wiadomość od Ciebie!

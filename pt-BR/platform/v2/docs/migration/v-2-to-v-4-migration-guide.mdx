@@ -1,0 +1,85 @@
+---
+title: "Guia de migração da API do Frame.io V3 → V4"
+sidebarTitle: "Guia de migração da V2 para a V4"
+---
+
+O guia a seguir ajudará você a migrar da API do Frame.io V3 (às vezes chamada de endpoint "legacy" ou "v2" na documentação) para a API Adobe Frame.io V4. Ele segue o estilo e a estrutura do exemplo de migração da API do Dropbox, oferecendo uma visão abrangente dos mapeamentos de endpoints, alterações de payload, atualizações de autenticação e muito mais.
+
+---
+
+## Checklist de migração para desenvolvedores {#migration-checklist-for-developers}
+
+1. **Identifique seu uso atual da V3:**
+
+   - Liste todas as chamadas que seu app faz (por exemplo, criar arquivos, listar pastas, adicionar comentários).
+   - Compare cada uma com a tabela de mapeamento para encontrar o novo equivalente na V4.
+
+2. **Obtenha credenciais do Adobe IMS (OAuth 2.0):**
+
+   - Crie uma integração no Adobe Developer Console.
+   - Configure as credenciais de cliente OAuth 2.0 e o escopo (acesso ao Frame.io).
+   - Substitua quaisquer tokens de desenvolvedor antigos do Frame.io pelo seu novo fluxo de token do IMS.
+
+3. **Atualize as URLs dos seus endpoints:**
+
+   - **V3:** `https://api.frame.io/v2/...` com assets manipulados usando `assets/{asset_id}`.
+   - **V4:** `https://api.frame.io/v4/`, e os endpoints incluem `accounts/{account_id}` e `folders/{folder_id}` / `files/{file_id}` separados.
+
+4. **Ajuste os payloads das solicitações e o parsing das respostas:**
+
+   - A V4 normalmente encapsula os dados em um objeto `data` (por exemplo, `{"data": {...}}`).
+   - Criação de pastas, uploads de arquivos etc. usam novos nomes de campos JSON (por exemplo, `file_size`, `media_type`).
+   - **Mudanças de Team → Workspace:** substitua `team_id` (V3) por `workspace_id` (V4).
+
+5. **Refaça os registros de webhooks:**
+
+   - Exclua ou desative seus webhooks antigos da V3 (que não são mais disparados na V4).
+   - Registre novos webhooks em `POST /v4/accounts/{account_id}/webhooks`.
+
+6. **Teste o tratamento de erros e os limites de taxa:**
+
+   - Garanta que seu código trate as novas respostas 4xx/5xx e as mudanças nos formatos de solicitação/resposta.
+   - A V4 pode retornar estruturas de erro diferentes (por exemplo, JSON mais estruturado, 409 para conflitos etc.).
+
+7. **Confirme o acesso e as permissões:**
+
+   - Verifique se o token do Adobe IMS pertence a um usuário (ou conta de serviço) com as permissões corretas de conta/workspace.
+   - Tokens legados da V3 com escopos de "nível de equipe" não são válidos na V4.
+
+8. **Implante e monitore:**
+
+   - Teste primeiro seu código atualizado em um ambiente sandbox ou de desenvolvimento.
+   - Monitore os logs em busca de erros 4xx/5xx ou comportamentos inesperados; corrija quaisquer problemas antes da implantação completa.
+
+---
+
+## Endpoints: mapeamento V3 → V4 {#endpoints-v3-→-v4-mapping}
+
+Abaixo está uma comparação lado a lado dos principais endpoints da V3 do Frame.io (à esquerda) e seus equivalentes na V4 (à direita). Esta seção foi inspirada na tabela de "mapeamento v1 → v2" do Dropbox.
+
+> **Dica:** esta tabela se concentra em operações típicas de arquivos, pastas e projetos. Endpoints especializados (por exemplo, Camera to Cloud) foram omitidos.
+
+### OAuth e autenticação {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| Developer Token (Bearer `<token>`) ou OAuth 2.0 do Frame.io com `Authorization: Bearer <token>` | OAuth 2.0 do Adobe IMS (é necessário criar um projeto no Adobe Developer Console) e usar: `Authorization: Bearer <adobe_access_token>` |
+
+**Observação:** tokens de desenvolvedor legados não podem ser convertidos automaticamente. Você precisa implementar o novo fluxo OAuth do IMS.<br />
+**Documentação:** [Como obter um token de acesso do Adobe Frame.io](https://developer.adobe.com/frameio/api/current/)
+
+### Operações com pastas e arquivos {#folder-and-file-operations}
+
+#### Criar uma pasta {#create-a-folder}
+
+- **V3 (Criar pasta):**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

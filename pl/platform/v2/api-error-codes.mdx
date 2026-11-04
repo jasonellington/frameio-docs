@@ -1,0 +1,37 @@
+---
+title: "Kody błędów API"
+---
+
+API Frame.io może zwracać następujące typowe błędy:
+
+| Kod | Szczegóły | Przyczyna(-y) |
+| --- | --- | --- |
+| `401` | **Unauthorized** — Nieprawidłowy token API. Upewnij się, że używasz uwierzytelniania Bearer Token i przekazujesz token w nagłówku Authorization. |  |
+| `402` | **Usage exceeded** — Przekroczono limity Twojego planu Frame.io. |  |
+| `403` | **Forbidden** — Nie masz dostępu do tego zasobu. Zwracany zarówno w przypadku braku dostępu użytkownika, jak i niewystarczającego zakresu tokena. |  |
+| `404` | **Not Found** — Nie znaleziono zasobu. | Zasób został przeniesiony lub usunięty. |
+| `422` | **Invalid arguments** — Co najmniej jeden z podanych parametrów był nieprawidłowy. |  |
+| `429` | **Rate Limited** — Osiągnięto limit liczby żądań do API. |  |
+| `500` | **Server Error** — Nasz serwer nie potrafi zinterpretować Twojego żądania lub nie był w stanie go zrealizować w dostępnym czasie (30 sekund). | Nieprawidłowo sformułowany adres URL lub treść żądania albo brak możliwości realizacji z innego powodu. |
+
+# Rozwiązywanie typowych błędów {#troubleshooting-common-errors}
+
+Podczas wykonywania typowych zadań przy użyciu prawidłowego tokena API najczęściej występują błędy `403`, `404` i `500`.
+
+Błąd **403** zwykle wskazuje na jeden z trzech scenariuszy:
+
+1. Token użyty w żądaniu i/lub użytkownik, do którego należy token, nie ma wystarczającego dostępu do obszaru konta Frame.io, w którym znajduje się żądany zasób.
+2. Token nie ma wystarczających zakresów (Scopes) dla żądanego zasobu. Na przykład: wywołanie `GET /comments/` bez zakresu `comments.read`.
+3. Problem z ruchem sieciowym uniemożliwia API Frame.io przetworzenie żądania.  *Jeśli podejrzewasz, że Twoje żądania są blokowane przez problem z ruchem sieciowym, skontaktuj się z działem obsługi klienta.*
+
+Błąd **404** zwykle oznacza, że zasób już nie istnieje — został przeniesiony lub usunięty.
+
+Błąd **500** zwykle wskazuje na nieprawidłowo sformułowany adres URL lub treść żądania, ale może również wystąpić, gdy nie jesteśmy w stanie zrealizować żądania w dostępnym czasie (30 s).
+
+# Ograniczanie liczby żądań {#rate-limiting}
+
+API Frame.io stosuje limity liczby żądań dla każdego tokena. Domyślny limit dla tokena wynosi 50 wywołań na sekundę. Niektóre metody mają niższe limity (np. POST `/assets/:id/children` jest ograniczony do 5 zasobów na sekundę).
+
+Wszystkie limity mogą ulec zmianie, a po ich osiągnięciu zwracany jest błąd HTTP 429. Do obsługi ograniczania liczby żądań zalecamy stosowanie wykładniczego wycofywania (exponential back-off).
+
+Zapoznaj się z [naszym przewodnikiem](/pl/platform/v2/rate-limits) dotyczącym limitów liczby żądań, aby dowiedzieć się więcej.

@@ -1,0 +1,221 @@
+---
+title: "操作指南：上传（基础）"
+sidebarTitle: "上传（基础）"
+---
+
+## 简介 {#introduction}
+
+现在，我们已经到达集成之旅中一个激动人心的里程碑：将资产上传到 Frame.io。本指南将引导您完成基本的上传流程。
+
+## 前提条件 {#prerequisites}
+
+如果您尚未阅读，请在继续之前先查看 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要使用在[认证与授权流程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)中获得的 `access_token`。
+
+在本指南中，我们将使用一个示例测试资产，可通过[此 Frame.io 链接](https://f.io/Rq1q5CzB)获取。请下载此文件以便跟随我们的示例操作，这样您就可以与示例命令中的值保持一致。
+
+## 第 1 步：创建资产 {#step-1-creating-an-asset}
+
+让我们上传[示例文件](https://f.io/Rq1q5CzB)，假设它是在 10 秒前创建的。首先，我们需要在 Frame.io 中创建一个资产引用：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/assets` 的文档可[在此处找到](/cn/camera-to-cloud/api-reference/device-asset-create)。虽然旧版端点 `/v2/assets` 仍然可用，但我们建议新的集成使用 `/v2/devices/assets`。
+
+</Info>
+
+<Info>
+
+**JSON 编码**
+
+与我们之前使用的认证端点不同，此端点接受 `application/json` 编码，而不是 `form/multipart`。它也接受 `application/x-www-form-urlencoded`。
+
+</Info>
+
+<Info>
+
+**命令语法**
+
+本示例使用 [heredoc](https://linuxize.com/post/bash-heredoc/) 以可读的多行格式向 `curl` 提供 JSON 负载。`--data-binary @-` 参数指示 `curl` 从 stdin 读取原始数据。如需进一步了解此方法，请参阅[此处](https://unix.stackexchange.com/questions/88490/how-do-you-use-output-redirection-in-combination-with-here-documents-and-cat)。
+
+</Info>
+
+让我们来看看 JSON 负载中的参数：
+
+`name`：在 Frame.io 中显示的资产名称。它不需要与磁盘上的文件名一致。
+
+`filetype`：文件的 [MIME 类型](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types)。大多数编程语言都提供用于检测 MIME 类型的工具（示例：[Go](https://golangcode.com/get-the-content-type-of-file/)、[Python](https://docs.python.org/3/library/mimetypes.html)）。
+
+`filesize`：以字节为单位的文件大小。我们的示例文件约为 21.1 MB。
+
+`offset`：自文件创建以来经过的秒数。如果省略，则默认为 0。必须提供此参数，因为它有助于判断文件是否应由于设备暂停而被拒绝。我们将在[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)中详细介绍这一点。
+
+响应将类似于以下内容（省略了部分字段）：
+
+```json
+{
+    "_type": "file",
+    ...
+    "id": "9a280f99-8f4f-46b0-a4b4-ec4c2f95138e",
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ],
+    ...
+}
+```
+
+此时，我们只是告知了 Frame.io 我们打算上传一个文件，实际的文件数据尚未传输。如果您查看项目中设备对应的文件夹，会看到一个处于"上传中"状态的占位资产。
+
+`upload_urls` 字段包含我们将要上传文件分块的 URL。对于我们的测试文件，应该会收到两个上传 URL。
+
+## 第 2 步：将文件拆分为分块 {#step-2-splitting-the-file-into-chunks}
+
+响应中包含多个上传 URL。向 Frame.io 上传时，我们会将文件拆分为多个分块并分别上传，这样做有以下几个好处：
+
+- **更高的可靠性**：如果某个分块上传失败，我们无需重新开始整个上传
+- **更快的上传速度**：我们可以并行上传多个分块（详见[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)）
+
+要确定最佳分块大小，请使用以下公式：
+
+```python title="Python"
+# We use math.ceil() to ensure we get the upper bound in the division
+chunk_size = math.ceil(float(file.size) / float(len(response.upload_urls)))
+```
+
+对于我们的示例文件，计算如下：
+
+```python title="Python"
+math.ceil(21136250 / 2)
+# 10568125
+```
+
+这意味着每个分块应为 10,568,125 字节。分块大小通常以约 25MB 为目标，具体计算方法详见[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)。
+
+<Info>
+
+**最后一个分块的大小**
+
+由于文件大小很少能被整除，最后一个分块可能会小于计算出的 `chunk_size`。您的实现在读取文件分块时应考虑到这一点。
+
+</Info>
+
+在本演示中，我们将使用 [head](https://man7.org/linux/man-pages/man1/head.1.html) 和 [tail](https://man7.org/linux/man-pages/man1/tail.1.html) 命令来提取文件分块。
+
+## 第 3 步：上传分块 {#step-3-uploading-the-chunks}
+
+上传第一个分块：
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Info>
+
+**命令语法**
+
+`--data-binary @-` 参数指示 `curl` 使用来自 stdin 的原始数据，这些数据由 `head` 命令提供。
+
+</Info>
+
+该请求需要以下标头：
+
+`content-type`：与创建资产时使用的 MIME 类型值相同
+
+`x-amz-acl`：用于 AWS S3 权限，始终设置为 `private`
+
+上传成功后会返回：
+
+```text
+HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+...
+```
+
+同样，上传第二个分块：
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+两个上传都完成后，您的资产应该就可以在 Frame.io 中播放了！🎉
+
+<Warning>
+
+**上传错误**
+
+上传分块时，您是将数据直接发送到 AWS S3，而不是 Frame.io 的 API。因此，错误响应将遵循 AWS S3 的格式，而不是标准的 Frame.io 错误格式。我们将在[错误处理指南](/cn/camera-to-cloud/how-to-handle-errors)中介绍如何处理 S3 错误。
+
+</Warning>
+
+<Info>
+
+**分块顺序**
+
+虽然按顺序上传分块在概念上更简单，但实际上分块可以按任意顺序上传。无论上传顺序如何，系统都会正确地组装它们。
+
+</Info>
+
+## 综合运用 {#putting-it-all-together}
+
+以下是完整上传流程的简化版类 Python 伪代码示例：
+
+```python title="Python"
+file = open("~/Downloads/C2C_TEST_CLIP.mp4")
+mimetype = mimetypes.for_file("~/Downloads/C2C_TEST_CLIP.mp4")[0]
+created_at = time.ctime(file.stat.ST_CTIME)
+
+asset = c2c.asset_create(
+    name="C2C_TEST_CLIP.mp4", 
+    filetype=mimetype, 
+    filesize=file.size,
+    offset=datetime.now() - created_at,
+    channel=0,
+)
+
+chunk_size = math.ceil(float(file.size) / float(len(asset.upload_urls)))
+
+for chunk_url in asset.upload_urls:
+   chunk = file.read(bytes=chunk_size)
+   c2c.upload_chunk(chunk, chunk_url, mimetype)
+```
+
+此示例演示了不含错误处理和并行上传的基本流程，这些内容将在[错误处理](/cn/camera-to-cloud/how-to-handle-errors)和[高级上传](/cn/camera-to-cloud/how-to-advanced-uploads)指南中介绍。
+
+## 后续步骤 {#next-steps}
+
+恭喜您成功将第一个资产上传到 Frame.io！[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)将介绍更复杂的技术以及生产就绪实现的要求。
+
+如有任何问题，欢迎联系我们的团队，并继续阅读[实时上传指南](/cn/camera-to-cloud/how-to-upload-realtime)，了解如何在资产创建过程中进行上传。

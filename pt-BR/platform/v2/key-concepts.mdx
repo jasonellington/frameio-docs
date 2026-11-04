@@ -1,0 +1,75 @@
+---
+title: "Conceitos-chave"
+---
+
+## Estrutura da API {#api-structure}
+
+A API do Frame.io oferece suporte a conceitos comuns como limitação de taxa, paginação para coleções de recursos, versionamento e erros. Esta seção descreve os detalhes de cada um.
+
+### Organização e estilo {#organization-and-style}
+
+A API é organizada em torno de princípios [REST](https://restfulapi.net/) comuns. Todas as solicitações devem ser feitas por SSL. Todos os corpos de solicitação e resposta, incluindo erros, são codificados em JSON.
+
+Salvo indicação em contrário, os métodos da API seguem estas regras:
+
+- Propriedades sem valor usam `null` em vez de ficarem indefinidas
+- "Snake Case" é usado para nomes de atributos (por exemplo, `first_name`)
+- Os timestamps são apresentados no formato ISO-8601 (por exemplo, `2016-02-03T16:38:46.985Z`)
+
+### Convenções de caminho {#path-conventions}
+
+Accounts > Teams > Projects > Assets > Comments
+
+Em geral, os caminhos de recursos na API do Frame.io seguem o modelo hierárquico acima, até um nível de pai. Quando for intuitivo, a API oferece suporte a caminhos de recursos independentes para objetos que, logicamente falando, pertencem estritamente a um pai.
+
+Por exemplo, a API do Frame.io oferece suporte a ambos os caminhos a seguir:
+
+- `GET /accounts/:id/teams` — retorna todos os Teams de uma Account.
+- `GET /teams` — retorna todos os Teams do User que faz a chamada.
+- `GET /teams/:id` — retorna detalhes sobre um Team específico.
+
+Outro exemplo: Comments não significam muito fora do contexto do seu Asset, por isso os métodos de listagem e criação de Comments ficam dentro do escopo do Asset. No entanto, ao atualizar ou excluir um Comment, o contexto do Asset não é tão relevante e é omitido do caminho do recurso:
+
+- `GET /assets/:id/comments`
+- `POST /assets/:id/comments`
+- `PUT /comments/:id`
+- `DELETE /comments/:id`
+
+## Scopes {#scopes}
+
+Seja obtendo um token via OAuth2.0 ou diretamente pelo [Portal do desenvolvedor](/pt-BR/platform/v2), todos os tokens da API devem estar associados a uma lista explícita de "scopes", que se referem a uma combinação de um recurso (por exemplo, `Asset`) e uma ação (por exemplo, `create`), e são expressos em notação de ponto.
+
+Por exemplo, um token com o scope `asset.create` seria capaz de criar novos Assets.
+
+Se você estiver usando uma implementação com um token de desenvolvedor, os scopes são definidos e atribuídos ao próprio token de acesso. Se estiver usando um aplicativo OAuth, os scopes são definidos para o aplicativo e, quando os usuários interagem com o aplicativo pela primeira vez, eles concordam em conceder ao aplicativo permissão para agir com os scopes solicitados.
+
+Os scopes disponíveis para tokens de desenvolvedor e aplicativos incluem os seguintes (observe que alguns scopes não estão disponíveis para todos, e isso é indicado quando for o caso).
+
+| Categoria de scope | Descrição |
+| --- | --- |
+| Accounts, Users e Teams | Obtenha informações sobre as Accounts e os Teams aos quais você tem acesso. Se o User autenticado for um administrador, etc., ele poderá ter acesso a informações sobre Users e Teams adicionais em sua conta.  <br />**Observação**: para atualizar Teams (por exemplo, gerenciar webhooks), você precisa ter a função de Team Manager ou Account Admin. |
+| Projects e Assets | Obtenha informações básicas sobre Projects, verifique ou atualize a participação do User, crie ou atualize Assets |
+| Comments | Obtenha, crie ou exclua comentários em um Asset, ou crie respostas a um Comment específico.<br />**Observação:** solicitações para atualizar ou excluir comentários devem ser feitas pelo criador do comentário. |
+| Review Links | Crie ou gerencie configurações de Review Links.<br />**Observação:** os Review Links são um recurso central do Frame.io para reunir Assets e enviá-los para feedback por meio de uma única URL, sem exigir acesso explícito ao Team ou ao Project. |
+| Webhooks | Os webhooks oferecem uma forma de transformar eventos que ocorrem dentro do Frame.io em notificações que podem ser enviadas a sistemas externos para processamento, callback de API e, em última instância, automação de workflows. |
+| Audit Logs | O Frame.io expõe logs para a grande maioria das atividades realizadas em seus aplicativos. Isso inclui tanto operações CRUD básicas em recursos centrais quanto algumas abstrações especiais (por exemplo, `AssetVersioned`). Você precisa ser Admin para acessar os logs. |
+| Presentations | Crie ou edite opções e Assets em Presentation Pages existentes. |
+
+## Paginação {#pagination}
+
+Os métodos da API que retornam uma coleção de resultados são sempre paginados. Todos os métodos que retornam resultados paginados respondem aos seguintes parâmetros de consulta e retornam os seguintes atributos de cabeçalho:
+
+| Descrição | Parâmetro de consulta | Atributo de cabeçalho |
+| --- | --- | --- |
+| Tamanho da página | `page_size` | `per-page` |
+| Número da página | `page` | `page-number` |
+| Número de páginas | N/A | `total-pages` |
+| Contagem total | N/A | `total` |
+
+Além disso, os resultados paginados incluem um cabeçalho de resposta `Link` ([consulte a RFC-5988](https://tools.ietf.org/html/rfc5988)) com as seguintes informações:
+
+- `next` — a URL correspondente é o link para a próxima página.
+- `prev` — a URL correspondente é o link para a página anterior.
+- `last` — a URL correspondente é o link para a última página.
+
+**Observação:** quando nem o link `next` nem o `prev` estão presentes, isso indica que a primeira página retornada é a única página.

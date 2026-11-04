@@ -1,0 +1,286 @@
+---
+title: "Como autorizar (hardware)"
+sidebarTitle: "Como autorizar (hardware)"
+---
+
+## Introdução {#introduction}
+
+Neste guia, vamos aprender como autenticar e autorizar um dispositivo de hardware Camera to Cloud (C2C) em um projeto do [Frame.io](http://frame.io/). Vamos abordar tanto o método de pareamento tradicional, com inserção manual do código, quanto o novo método de pareamento por QR code, que oferece uma experiência do usuário aprimorada.
+
+## Do que vou precisar? {#what-will-i-need}
+
+Se você ainda não leu o guia Antes de começar a implementar, dê uma olhada rápida antes de continuar!
+
+Além disso, você deve ter recebido da nossa equipe um `client_secret` que será usado para identificar sua integração. Se você não recebeu um `client_secret`, consulte esta introdução ao ecossistema C2C e entre em contato com nossa equipe.
+
+### Pré-requisitos para o pareamento por QR code {#prerequisites-for-qr-code-pairing}
+
+Antes de começar com o pareamento por QR code, verifique se os seguintes pré-requisitos foram atendidos:
+
+- **Ativação da feature flag**: uma feature flag específica (`v4.c2c_qr_code_activate`) precisa estar habilitada na sua conta do [Frame.io](http://frame.io/). Essa feature flag permite acesso ao método de pareamento baseado em QR code. Seu ponto de contato designado no [Frame.io](http://frame.io/) pode ajudar a ativar esse recurso na conta de sua escolha.
+- **Compatibilidade da câmera**: verifique se o hardware da sua câmera está atualizado para oferecer suporte à geração de QR code durante o processo de pareamento do dispositivo.
+
+## Percorrendo o fluxo de autenticação de hardware {#walking-through-the-hardware-auth-flow}
+
+Vamos garantir que temos uma compreensão geral da experiência do usuário esperada para o fluxo de autorização que queremos implementar. Confira os recursos a seguir para ver esse fluxo do ponto de vista do usuário:
+
+- Artigo de suporte sobre como adicionar novos dispositivos de hardware.
+- Vídeo de treinamento sobre como autorizar um Teradek Cube.
+
+O fluxo de autorização de hardware foi projetado para tirar o máximo possível de detalhes das mãos de quem implementa e, portanto, da interface do dispositivo. Com esse fluxo, você não precisa se preocupar com:
+
+- Redirecionamento para um navegador.
+- Processamento do login/autenticação do usuário no [Frame.io](http://frame.io/).
+- Listagem/seleção da conta e do projeto aos quais se conectar.
+- Quaisquer elementos de interface além de exibições básicas de informações.
+
+### Aprimorando a experiência do usuário com o pareamento por QR code {#enhancing-the-user-experience-with-qr-code-pairing}
+
+À medida que cresce a demanda por eficiência e facilidade de uso, os usuários esperam cada vez mais interações fluidas com seus dispositivos. O processo atual de pareamento de câmeras com o serviço C2C do Frame.io exige várias etapas, incluindo a inserção manual de um código de pareamento. Embora funcional, esse processo pode ser simplificado.
+
+Ao aproveitar QR codes — de forma semelhante às experiências de pareamento de dispositivos vistas em serviços de streaming como Netflix ou Disney+ —, podemos simplificar o processo, eliminar erros causados pela inserção manual e reduzir o tempo necessário para parear uma câmera.
+
+## Identificação do dispositivo (client_id) {#device-identification-client_id}
+
+Ao se conectar ao Camera to Cloud, cada dispositivo de hardware físico precisará se identificar de forma exclusiva para que possamos listar as conexões de dispositivos no projeto de um usuário.
+
+Para dispositivos de hardware, chamamos isso de `client_id` do dispositivo, dependendo do padrão de autorização que você escolher usar. Ao configurar sua implementação, você deve pensar em como fará isso. Você pode usar um número de série do dispositivo de hardware, um UUID ou alguma string de identificação exclusiva.
+
+Cuidado para não vazar informações de identificação pessoal. O e-mail do usuário, por exemplo, não é um valor válido para usar como `client_id`.
+
+Da mesma forma, certifique-se de que o identificador exclusivo pertence a você. Se você estiver implementando a API do C2C como um dispositivo de software, não use o endereço MAC do dispositivo, por exemplo. O endereço MAC não pertence ao seu software e também pode ser considerado uma informação de identificação pessoal.
+
+Se você não tiver certeza de qual valor gostaria de usar, podemos discutir essa escolha juntos e garantir que seja escolhido um valor adequado que torne a integração o mais fácil possível.
+
+## Etapa 1: solicitando um código de dispositivo {#step-1-requesting-a-device-code}
+
+Vamos começar a implementar. A primeira coisa que precisamos fazer é solicitar um código de dispositivo para fornecer ao usuário. Fazemos isso chamando o endpoint `/v2/auth/device/code`:
+
+### Método de pareamento tradicional {#traditional-pairing-method}
+
+```
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'scope=asset_create offline' \
+    | python -m json.tool
+```
+
+### Habilitando o pareamento por QR code {#enabling-qr-code-pairing}
+
+Para habilitar o pareamento baseado em QR code, é necessária uma pequena alteração na chamada à API. Especificamente, dois novos cabeçalhos precisam ser adicionados à solicitação de código de dispositivo. Isso permite que os dispositivos direcionem diretamente para a página de pareamento, simplificando o processo.
+
+```
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --header "x-client-version: 2.0.0" \
+    --header "x-client-platypus-enabled: true" \  # New header to enable QR code
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'scope=asset_create offline' \
+    | python -m json.tool
+```
+
+**Observação:** estamos usando dados de formulário aqui, em vez de dados JSON. Os endpoints de autenticação do C2C aceitam apenas dados de formulário. Depois que você estiver autenticado, outros endpoints aceitarão payloads JSON, mas os endpoints de autenticação retornarão um erro se payloads JSON forem enviados.
+
+#### Parâmetros do payload {#payload-parameters}
+
+- **client_id**: um identificador exclusivo para o dispositivo de hardware físico. É preciso garantir que esse valor seja exclusivo para o dispositivo. Pode ser um número de série ou um UUID gerado aleatoriamente.
+- **client_secret**: será fornecido a você pelo suporte do [Frame.io](http://frame.io/) e identifica o modelo do seu dispositivo. Esse valor deve ser mantido em segredo do usuário e criptografado em repouso.
+- **scope**: as permissões que estamos solicitando, separadas por espaços. Dispositivos de hardware só podem solicitar os dois escopos a seguir:
+- `asset_create`: permite que o dispositivo crie e faça upload de assets.
+- `offline`: permite que o dispositivo atualize sua própria autorização usando um refresh token. Os tokens de autorização expiram após 8 horas, então, sem esse escopo, o usuário precisaria reautorizar o dispositivo a cada 8 horas.
+
+Na prática, os dispositivos quase sempre vão querer solicitar os dois escopos.
+
+### Entendendo a resposta da API {#understanding-the-api-response}
+
+Ao fazermos a solicitação, receberemos uma resposta semelhante à seguinte:
+
+#### Resposta do pareamento tradicional {#traditional-pairing-response}
+
+```
+{
+  "device_code": "[device_code]",
+  "expires_in": 120,
+  "interval": 5,
+  "name": "MyDevice-[client_id]",
+  "user_code": "573131"
+}
+```
+
+#### Resposta do pareamento por QR code {#qr-code-pairing-response}
+
+```
+{
+  "device_code": "[device_code]",
+  "expires_in": 120,
+  "interval": 5,
+  "name": "MyDevice-[client_id]",
+  "user_code": "573131",
+  "verification_uri": "https://next.frame.io/pair",
+  "verification_uri_complete": "https://next.frame.io/pair/573131"
+}
+```
+
+#### Detalhamento da resposta {#response-breakdown}
+
+- **device_code**: o código do dispositivo deve ficar oculto do usuário e é usado para identificar esta solicitação de autorização ao fazer polling para verificar se o usuário inseriu o código com sucesso.
+- **expires_in**: o número de segundos até este código expirar.
+- **interval**: quanto tempo se deve esperar entre as solicitações de polling para verificar se o usuário inseriu o código.
+- **name**: o nome do dispositivo que estamos tentando conectar.
+- **user_code**: o código de seis dígitos que o usuário vai inserir no [Frame.io](http://frame.io/) para parear o dispositivo com um projeto.
+- **verification_uri**: esta é a URL que os usuários vão digitar manualmente caso o QR code não seja escaneado. Ela deve ser concisa e fácil de lembrar.
+- **verification_uri_complete**: esta URL contém o código de pareamento e se destina à transmissão não textual (por exemplo, o QR code). Ao ser escaneada, ela leva o usuário automaticamente à experiência de pareamento, para escolher uma conta e um projeto aos quais conectar o dispositivo.
+
+### Exibindo o QR code para o usuário {#displaying-the-qr-code-to-the-user}
+
+Agora que temos o `verification_uri_complete`, podemos gerar um QR code a partir dessa URL e exibi-lo ao usuário na tela do dispositivo. Isso permite que o usuário simplesmente escaneie o QR code com o celular ou a câmera, simplificando o processo de pareamento.
+
+#### Exemplo: tela da câmera exibindo o QR code {#example-camera-screen-with-qr-code-displayed}
+
+*Inserir imagem ou ilustração de uma tela de câmera exibindo o QR code.*
+
+Se o usuário não conseguir escanear o QR code por algum motivo, você também deve exibir o `user_code` e o `verification_uri` para que ele possa inserir o código de pareamento manualmente como alternativa. Você também pode exibir o `verification_uri` como um QR code estático para o usuário escanear com seus dispositivos móveis.
+
+Se a sua integração for um app em um dispositivo móvel, exibir o `verification_uri_complete` como um hiperlink para os usuários tocarem é indispensável para facilitar a conexão, já que o usuário não consegue escanear o QR code com o mesmo dispositivo em que o app está.
+
+## Etapa 2: fazendo polling da autorização do usuário {#step-2-polling-for-user-authorization}
+
+Depois de entregarmos o código de pareamento ou exibirmos o QR code ao usuário, precisamos verificar se ele o inseriu. Para isso, podemos fazer a seguinte solicitação:
+
+```
+curl -X POST https://api.frame.io/v2/auth/token \
+    --form 'client_id=[client_id]' \
+    --form 'device_code=[device_code]' \
+    --form 'grant_type=urn:ietf:params:oauth:grant-type:device_code' \
+    | python -m json.tool
+```
+
+### Parâmetros do payload {#payload-parameters-1}
+
+- **client_id**: o mesmo `client_id` enviado na etapa 1.
+- **device_code**: o `device_code` retornado por `/v2/auth/device/code`.
+- **grant_type**: o tipo de concessão de autorização que nosso sistema OAuth está emitindo. Esse valor será sempre `urn:ietf:params:oauth:grant-type:device_code`.
+
+Nas primeiras vezes em que fizermos essa solicitação, provavelmente receberemos uma resposta como esta:
+
+```
+{
+  "error": "authorization_pending"
+}
+```
+
+Mas não se preocupe! Esse não é um erro fatal. Significa apenas que o usuário ainda não inseriu o código de usuário na interface do Frame.io. Tudo o que precisamos fazer é continuar o polling até que ele o faça.
+
+Se, em vez disso, recebermos um erro como este:
+
+```
+{
+  "error": "expired_token"
+}
+```
+
+Isso significa que nosso código expirou antes que o usuário pudesse inseri-lo. Nesse caso, devemos gerar um novo código de pareamento ou QR code usando a etapa 1, exibi-lo ao usuário e retomar o polling.
+
+Por fim, devemos receber uma resposta como:
+
+```
+{
+  "access_token": "[access_token]",
+  "expires_in": 28800,
+  "refresh_token": "[refresh_token]",
+  "token_type": "bearer"
+}
+```
+
+Se o payload da sua resposta estiver assim: parabéns! Você autorizou seu primeiro dispositivo Camera to Cloud. Reserve um momento para comemorar!
+
+Depois de comemorar, vamos analisar esse payload de resposta para garantir que o entendemos:
+
+- **access_token**: esta é sua chave para o restante do backend do [Frame.io](http://frame.io/). Precisaremos adicioná-lo ao cabeçalho das demais solicitações que faremos nestes tutoriais.
+- **expires_in**: o número de segundos até o `access_token` expirar. Quando o tempo do token acabar, ele precisará ser atualizado, o que abordaremos em um tutorial futuro.
+- **refresh_token**: um token que podemos usar para gerenciar nosso `access_token`. Ele será usado com mais frequência para atualizar nossa autorização, mas também pode ser usado para revogá-la.
+- **token_type**: será sempre `bearer` para a API do C2C e não exige nenhuma ação.
+
+## Juntando as etapas {#putting-the-steps-together}
+
+Agora que sabemos quais chamadas precisamos fazer, vamos juntá-las em um pseudocódigo semelhante a Python. Lembre-se de que nosso código de dispositivo pode expirar, então precisamos lidar com essa possibilidade ao montar nossa lógica:
+
+```python title="Python"
+def authorize_with_frame():
+    """
+    Handles authorizing our device with Frame.io.
+    """
+
+    # Our client ID can be a serial number, UUID, or some other unique string.
+    client_id = THIS_DEVICE.get_serial_number()
+
+    while True:
+        # Make the call to Frame.io to get our device codes.
+        pairing_codes = c2c.get_device_codes(client_id)
+
+        # We need to keep track of how long we have been polling for
+        polling_started = datetime.now()
+
+        # Now we are going to poll for authorization until the user enters the code.
+        while True:
+
+            # Re-write this output each time we poll. Note: This message will only update once
+            # per `interval` (e.g., 5 seconds), so if a smooth countdown is desired, that will
+            # need a different implementation.
+            print(
+                f"\rPAIRING CODE: {pairing_codes.user_code}, "
+                f"EXPIRES IN: {pairing_codes.expires_in - (datetime.now() - polling_started).seconds} seconds"
+            )
+
+            # Wait for `interval` before polling each time.
+            sleep(pairing_codes.interval)
+
+            # Make a call to Frame.io to see if the user has entered the code and authorized
+            # the device.
+            authorization, error = c2c.poll_for_authorization(
+                client_id, pairing_codes.device_code
+            )
+
+            if error and error.message == "authorization_pending":
+                # If the authorization is pending, try again.
+                continue
+            elif error and error.message == "expired_token":
+                # If the pairing codes have expired, break to generate new codes.
+                break
+            elif error:
+                # If we get another error, we should raise it. (advanced error handling will
+                # be covered in another tutorial)
+                raise Exception(error.message)
+
+            return authorization
+```
+
+**Observação:** neste pseudocódigo, adicionamos um loop externo para lidar com o caso em que os códigos de pareamento expiram e precisamos solicitar novos.
+
+A última coisa que devemos fazer é buscar no [Frame.io](http://frame.io/) as informações sobre o projeto ao qual nos conectamos e exibi-las ao usuário, como uma camada extra de confirmação de que o dispositivo foi pareado com o projeto pretendido. Mostraremos isso no próximo tutorial.
+
+## Solução de problemas {#troubleshooting}
+
+Se você chegou até aqui, algo deu errado! O que seria de uma integração com terceiros sem algum tipo de erro? Esta seção lista um conjunto de problemas comuns e orienta você pelas etapas com maior probabilidade de resolvê-los. Dê uma olhada na lista a seguir e veja se algo corresponde ao problema que você está enfrentando.
+
+Se você não encontrar uma solução aqui, adoraríamos saber qual problema você encontrou para que possamos adicioná-lo aqui.
+
+- **Não vejo um botão "Connect Device"**: se você acessar o painel de gerenciamento do C2C e não vir um botão "Connect Device", uma de duas coisas está acontecendo:
+- ~~**O C2C não está habilitado para sua conta**: se a tela estiver em branco e houver uma mensagem informando que o C2C não está disponível para sua conta, o gerente da conta precisa habilitá-lo para o seu projeto nas configurações da conta.~~
+- **Você não é um gerente de dispositivos**: se a tela estiver em branco e houver uma mensagem sobre falta de permissões, o gerente da conta precisa alterar as permissões de quem pode conectar dispositivos C2C ou adicionar você a uma função que tenha essas permissões.
+- **Você já tem um dispositivo conectado**: depois que o primeiro dispositivo é conectado, o grande botão azul "Add New Device" desaparece e, em vez disso, você precisa acessar o menu de três pontos no canto superior direito do painel C2C Connections.
+- **Erro Invalid Client**: `invalid_client` é retornado quando as informações que você fornece sobre o dispositivo não correspondem a nada que temos registrado. Isso provavelmente significa que seu `client_secret` está incorreto.
+- **Erro Bad Request**: `bad_request` é retornado quando os dados da solicitação estão malformados de alguma forma. Verifique se você não digitou errado o nome de algum campo ou se esqueceu de adicionar um campo obrigatório.
+
+## Próximos passos {#next-up}
+
+Se ainda não fez isso, recomendamos que você entre em contato com nossa equipe e depois siga para o próximo guia: LINK. Estamos ansiosos para ter notícias suas!
+
+---
+
+## Parking lot {#parking-lot}
+
+A fazer
+Adicionar uma alternativa para parceiros que não conseguem gerar um QR code dinâmico
+ou seja, fazer com que exibam "Acesse `**verification_uri**` para inserir este código" como plano B

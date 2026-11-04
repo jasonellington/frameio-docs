@@ -1,0 +1,132 @@
+---
+title: "Zapier 中的 Webhooks"
+---
+
+## 概述 {#overview}
+
+在本指南中，您将为 Frame.io 中的某个 Team 创建一个 Webhook 事件，并用它将 payload 发送到 [Zapier](https://zapier.com)。在这个场景中，Zapier 充当中介——它可以“捕获”来自 Frame.io 的 hook，然后使用该 hook 中的数据与其他系统进行交互。
+
+在许多情况下，Frame.io 的 Zapier 集成支持原生“Triggers”，无需手动管理 webhook 即可从 Frame.io 获取数据（例如在创建 Asset 时）。在本指南中，我们将重点介绍一个目前没有原生 Trigger 支持的工作流：在 Frame.io 中创建新 Project 时做出响应。
+
+首先，我们将设置一个 webhook，在 Frame.io 的某个 Team 中创建新 Project 时触发通知。然后，我们将使用 Frame.io 的 Zapier 应用捕获该通知，并将该 Project 的一些信息传送到 Google Sheet 中。
+
+<Info>
+
+**跟着操作**
+
+本指南需要在 Frame.io 和 Zapier 之间来回切换。为获得最佳效果，我们建议在跟随操作时将两个应用并排打开。
+
+</Info>
+
+### 您需要准备的内容 {#things-you’ll-need}
+
+开始之前，您需要准备三样东西：
+
+1. Frame.io 账户访问权限（以便创建 Token）
+2. Frame.io 中某个 Team 的 Team Manager 或 Admin 访问权限（以便创建 Webhook）
+3. 一个 Zapier 账户。
+
+要验证前两项，请前往 [developer.frame.io](/cn/platform/v2) 并登录。如果您没有看到“Tokens”和“Webhooks”菜单项（如下所示），请联系您的 Frame.io 客户代表。
+
+![Tools on Frame.io Developer Site](/images/platform/v2/webhooks-in-zapier/532acdfe86b5d1062e4c0910d46f517391c6d3ce397a444c9a7c70d4844777c6.webp)
+
+## 第 1 步：创建 API token {#step-1-create-an-api-token}
+
+要完成本指南，您需要一个 API token，其 [scope](/cn/platform/v2/authentication) 需与我们将要发送的 Webhook 的 scope 相匹配。如果您已经有一个连接到 Zapier 且包含以下 scope 的 token，可以直接使用它。如果没有：
+
+为新 Token 指定一个描述性名称，并选择以下 scope：
+
+- **Projects:** Read
+
+## 第 2 步：在 Zapier 中创建 Webhook {#step-2-create-a-webhook-in-zapier}
+
+**在 Zapier 中：** 选择“**Webhooks by Zapier**”触发器应用，并选择“**Catch Hook**”作为所需的触发操作。
+
+![Trigger selection in Zapier](/images/platform/v2/webhooks-in-zapier/4548e8f93431a9ffad637e3085f495a91ba3afb3493c4e7922a3791ff72c2660.webp)
+
+保存后，跳过下一个可选步骤，您应该会看到一个界面，其中有一个以 `https://hooks.zapier.com/...` 开头的 URL
+
+![Enter URL in Zapier](/images/platform/v2/webhooks-in-zapier/11e5976804ba8b3a9f980bdfbe603bd5a0b8732b9d9852067fe2f53c0d3c27f3.webp)
+
+**在此界面中：**
+
+1. 复制此 URL
+2. 保持 Zapier 处于打开状态
+3. 在单独的标签页或窗口中返回 Frame.io Developer。
+
+## 第 3 步：在 Frame.io 中设置 Webhook 事件 {#step-3-set-up-the-webhook-event-in-frame-io}
+
+**回到 Frame.io Developer：** 前往 [Webhooks](https://developer.frame.io/webhooks)，然后创建一个新的 Webhook，并提供：
+
+1. 一个描述性名称。
+2. 您在上一步中复制的 URL。
+3. 您希望此 hook 作用的 Team。
+4. 您希望与该 hook 关联的 Frame.io 事件（在本指南中：Projects -> Created）。
+
+![New webhook](/images/platform/v2/webhooks-in-zapier/c72e9b4cb11c6cc2644cfe830e15439ef3c460a52831b286af2db7e31f30b891.webp)
+
+点击 **Create** 按钮保存新的 Webhook，然后返回 Zapier。
+
+## 第 4 步：发送测试 hook {#step-4-send-a-test-hook}
+
+**简要回顾一下，我们现在有：**
+
+1. Frame.io 中的一个 Webhook 配置，当您在特定 Team 中创建 Project 时会触发。
+2. Zapier 中的一个 Webhook 触发器，正在等待来自 Frame.io 的新 Project。
+
+现在，我们将通过创建 Project 来实际向 Zapier 发送数据。
+
+### a) 在 Zapier 中：准备捕获 Webhook {#a-in-zapier-prepare-to-catch-the-webhook}
+
+在第 2 步中仍然打开的界面上，点击“**Ok, I did this.**”。这将让 Zapier 准备好在指定的 URL 上捕获事件。
+
+![webhook](/images/platform/v2/webhooks-in-zapier/991de8bcd401ac6cfa4174f640e7a56bb146a05114524be23cc7759769af492e.webp)
+
+### b) 在 Frame.io 中：创建新 Project {#b-in-frame-io-create-a-new-project}
+
+在已配置的 Team 中新建一个 Project——设置可以随意。
+
+这将触发一个 Webhook 发送出去，随后被 Zapier 捕获。作为响应，您应该会在 Zapier 中看到收到新 hook 的确认信息；如果展开它，您应该会看到来自 Frame.io 的完整 Webhook payload。
+
+**恭喜**！点击 **Continue**，给自己轻轻击个掌吧。现在最难的部分已经完成，我们可以使用 Webhook 来*做*一些事情了！
+
+## 第 5 步：获取您的 Project {#step-5-get-your-project}
+
+### a) 添加 Frame.io 操作 {#a-add-the-frame-io-action}
+
+点击“**+ Add a Step**”，然后搜索 Frame.io。选择 Frame.io 应用后，选择 **Find Project** 操作。然后点击“**Save + Continue**”。
+
+### b) 连接您的 Frame.io 账户 {#b-connect-your-frame-io-account}
+
+在下一个界面中，点击“**Connect an Account**”，然后在随后出现的弹出窗口中输入您的 Frame.io API Token（即您在第 1 步中生成的 token）。如果您在此期间忘记或丢失了 token，不用担心——只需在您的[账户设置](https://app.frame.io/account?k=tokens)中新建一个，并确保选择“**Project**: Read” scope。点击“**Continue**”。
+
+### c) 获取您的 Project {#c-fetch-your-project}
+
+在下一个界面中，点击列表底部 **Project** 字段最右侧的箭头，然后选择 **Use a Custom Value**。
+
+接着，在出现的新字段“Custom Value for Comment ID”中，点击右侧的图标，并从随后出现的下拉菜单中选择 `Resource ID`。
+
+![Fetch project](/images/platform/v2/webhooks-in-zapier/ec47b4df78af3d87eb9f501280dd49092d5d33047d2d89bb79acc03fcf999f38.webp)
+
+<Info>
+
+**这是一种常见模式**
+
+为确保每次事件都使用最新数据，在 Frame.io 和 Zapier 之间设置 webhooks 时，您应始终遵循 **Custom Value** + **Resource ID** 这一模式。这同样适用于原生支持的 Triggers！
+
+</Info>
+
+现在点击“**Continue**”。在下一个界面中，Zapier 确认已获得 Project ID 后，点击“**Fetch + Continue**”；获取完成后，您应该会看到如下所示的界面：
+
+![Fetch complete](/images/platform/v2/webhooks-in-zapier/25b9c67c00d762c5d3719705298368c16fcc8ba0c05869e54a83d283c865fdab.webp)
+
+干得漂亮！现在，您已经在 Zapier 中获得了新 Project 的所有信息，并可以将其传送到任意数量的不同系统，包括：
+
+- Google Sheets
+- Airtable
+- Asana
+- Trello
+- Jira
+  ……以及近 3,000 个其他应用。
+
+构建好 Zap 的其余部分后，只需将其设为“On”，就大功告成了！

@@ -1,0 +1,134 @@
+---
+title: "使用审计日志"
+---
+
+## 概述 {#overview}
+
+Frame.io 为其应用中发生的绝大多数活动提供并维护审计日志（Audit Logs）。这既包括对核心资源的基本 CRUD 操作，也包括一些特殊的抽象操作（例如 `AssetVersioned`）。
+
+<Warning>
+
+**审计日志在 30 天后截断**
+
+Frame.io 审计日志可通过 API 获取滚动 30 天时间窗口内的数据，超过此期限的数据会被移至冷存储。因此，如果您希望保留较长时间的 Frame.io 事件历史记录，请确保自行存储历史日志数据。
+
+</Warning>
+
+### 范围和权限 {#scope-and-permissions}
+
+只有账户管理员（Account Admin）可以访问账户的审计日志，并且对审计日志端点的所有调用都必须限定在某个 `account_id` 范围内，如下所示：
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### 响应 {#responses}
+
+审计日志的响应都具有类似的格式：
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**别忘了分页！**
+
+审计日志的响应数据可能相当冗长，因此请务必熟悉[分页](/cn/platform/v2/key-concepts#pagination)！
+
+</Info>
+
+## 筛选器 {#filters}
+
+审计日志支持多种筛选器，包括日期范围。与 Frame.io 的[搜索](/cn/platform/v2/search-for-assets)端点不同，筛选器只能作为 `GET` 查询字符串参数发送。
+
+所有筛选器都遵循相同的格式：
+
+### GET + 查询字符串 {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**每种筛选器类型仅支持一个值**
+
+目前，审计日志的每种筛选器类型只支持一个值。如果您提供了两个相同类型的筛选器（例如 `filter[action]=ActionOne&filter[action]=ActionTwo`），则以第二个筛选器为准。
+
+</Info>
+
+### 主要筛选器类型 {#key-filter-types}
+
+用于筛选和浏览审计日志的主要筛选器类型如下：
+
+| 筛选器类型 | 描述 | 示例值 |
+| --- | --- | --- |
+| `item_type` | 筛选某一类型的所有资源。 | *Presentation*、*Comment*、*ReviewLink*、*Asset* |
+| `item_id` | 筛选某个特定资源，例如某个 Asset 或 Presentation。 | *&lt;asset-id>*、*&lt;presentation-id>* |
+| `action` | 筛选某个 Action，通常与某个 `item_type` 相关联 | *ProjectCreated*、*AssetVersioned*、*CommentDeleted* |
+| `actor_id` | 筛选特定用户（操作者）的 ID。 | *&lt;user-id>* |
+| `team_id` | 筛选与某个 Team 相关的活动。此筛选器仅在拥有多个 Team 的情况下有用。 | *&lt;team-id>* |
+| `inserted_at` | 筛选在特定日期时间之前或之后发生的审计事件。必须为 ISO-8601 格式的 UTC 时间。 | *2022-08-25T00:00:00Z* |
+
+### 项目类型与操作 {#item-types-and-actions}
+
+| 资源 | 操作 |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## 筛选器示例 {#filter-examples}
+
+如上所述，所有筛选器都遵循类似的格式。以下是一些针对特定用例的示例，可帮助您快速上手。
+
+| 场景 | 查询字符串 |
+| --- | --- |
+| 单个用户执行的操作。 | `?filter[actor_id]=<user-id>` |
+| 特定 Presentation 上的所有活动。 | `?filter[item_id]=<presentation-id>` |
+| 某个用户留下的评论。 | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| 某个 Team 上的所有 Review Link 活动。 | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## 日期范围 {#date-ranges}
+
+日期范围是一种稍微特殊的情况，因为需要同时指定 `inserted_at` 日期时间的 `value`，以及要应用于该日期时间的 `op`（操作）。
+
+因此，日期范围查询始终包含两个筛选器元素，每个元素都嵌套在一个 `[inserted_at]` 参数旁边。
+
+支持的操作包括：
+
+- **gt**：大于
+- **gte**：大于或等于
+- **lt**：小于
+- **lte**：小于或等于
+
+### 日期范围示例 {#date-range-examples}
+
+| 场景 | 查询字符串 |
+| --- | --- |
+| 从某个日期起的所有审计日志记录。 | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| 截至某个日期由特定用户上传的所有 Asset。 | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

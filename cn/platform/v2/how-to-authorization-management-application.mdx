@@ -1,0 +1,151 @@
+---
+title: "操作指南：管理身份验证（应用）"
+sidebarTitle: "操作指南 - 管理身份验证（应用）"
+---
+
+## 简介 {#introduction}
+
+在本指南中，我们将学习如何刷新、撤销和存储 Frame.io 的 *C2C 应用* 授权信息。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果你还没有阅读 [实施 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，请在继续之前快速浏览一下！
+
+你需要我们团队提供给你的 `client_id`，以及你在 [身份验证和授权指南](/cn/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) 中使用的同一个 `device_id`。完成本指南还需要 `access_token` 和 `refresh_token`。
+
+## 授权令牌 {#authorization-tokens}
+
+在 [上一篇指南](/cn/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) 中，我们学习了如何通过让用户进行身份验证并在项目上授权设备来 *生成* 新的授权令牌。
+
+*访问令牌（access token）的有效期仅约 1 小时，之后就会过期*。我们不希望设备用户每 8 小时就得登录一次，因此在上一篇指南中我们请求了 `offline` scope，并在通过 Frame.io 授权时获得了一个 *刷新令牌（refresh token）*。当前访问令牌过期时，可以使用刷新令牌生成新的访问令牌。
+
+*刷新令牌的有效期为 30 天*。通过限制 access_token 的有效时长，我们可以降低令牌泄露时可能造成的危害。如果在 *刷新令牌* 失效之前没有刷新授权，用户将需要重新进行身份验证。
+
+## 刷新访问令牌 {#refreshing-your-access-token}
+
+如果你调用了需要访问令牌的 API，并收到以下响应：
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+……那么说明你的访问令牌已过期！
+
+要刷新令牌，我们将进行以下调用：
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'scope=offline device.connect asset.create' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**不确定这些值是什么？**
+
+所有这些值都是在 [上一篇指南](/cn/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) 中生成的。如果你还没看过，请先阅读，然后再回到这里！
+
+</Info>
+
+通过使用所有这些值（而不仅仅是刷新令牌），我们使得仅凭泄露的刷新令牌无法生成新的授权。如果有人想冒充你的集成生成令牌，他们需要同时拥有 `refresh_token` *和* `client_id`。
+
+你应该会收到如下响应：
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+这些就是你的新授权令牌。*刷新令牌后，旧令牌将不再有效*，因此请务必妥善保存这些新令牌！
+
+如果我们现在尝试使用旧的刷新令牌进行刷新，将会收到错误：
+
+```json
+{
+    "error": "token_inactive",
+    "error_description": "Token is inactive because it is malformed, expired or otherwise invalid. Token validation failed."
+}
+```
+
+我们的令牌已经刷新过了，因此使用现有的刷新令牌是无效的。
+
+<Danger>
+
+**刷新期间收到 401**
+
+如果你在刷新令牌时收到 `401 Not Authorized` 响应，说明你的令牌已失效，你需要重新开始整个授权流程。
+
+</Danger>
+
+## 错过刷新响应 {#missing-a-refresh-response}
+
+*刷新令牌只能使用一次*。如果你调用 Frame.io 刷新令牌后，由于网络错误或意外断电重启而错过了响应，那么 *你将需要重新开始整个身份验证/授权流程。*
+
+这是一种令人遗憾的可能性，但安全总比后悔好！
+
+## 撤销令牌 {#revoking-tokens}
+
+在某些情况下，我们可能希望从 Frame.io "退出登录"。例如，用户可能在完成一次拍摄后决定不再保持连接。如果你的应用进入异常状态并需要重置为初始状态，撤销授权也是一种良好的做法。只要你知道将要丢弃当前授权，你的应用就应尝试撤销它。
+
+要撤销授权，我们进行以下调用：
+
+<Info>
+
+**重新授权**
+
+进行此调用后，你需要重新开始 [上一篇指南](/cn/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) 中详述的身份验证和授权流程。
+
+</Info>
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/revoke \
+    --include \
+    --form 'client_id=[client_id]' \
+    --form 'token=[refresh_token]'
+```
+
+响应中不会包含 payload。我们在命令中使用了 `--include` 来打印返回的标头，如果调用成功，标头应以状态码 `200` 开头：
+
+```text
+HTTP/2 200
+...
+```
+
+现在令牌已被撤销，所有需要 `access_token` 的 [Frame.io](http://frame.io/) 调用都将返回 `Not Authorized`。如果用户希望再次使用 Frame.io 连接，他们需要重新登录 Frame.io 并再次连接到项目。
+
+## 存储令牌 {#storing-tokens}
+
+为了在断电重启后保持功能正常，你需要持久化存储授权信息。可以将其存储在文件、数据库或你自己的云中。以下是存储授权令牌的一些准则：
+
+**不要让用户查看或访问令牌**。绝不应允许用户查看或获取他们的令牌。令牌应仅由你的应用管理。
+
+**对静态存储的令牌进行加密。** 与 `client_id` 一样，访问令牌和刷新令牌在可能的情况下都应加密存储，以防密钥被盗。*授权密钥不应以明文形式存储。*
+
+**不要将授权令牌与 client_id 存储在同一文件中。** 示例 Python 应用将 `client_id` 和 `device_id` 与授权令牌存储在同一文件中。这对于演示来说没有问题，但对于生产代码而言并不是好的做法。`client_id` 和 `device_id` 是设备的静态值，*如果丢失，设备将无法继续工作。*
+
+授权令牌不是静态的，在设备的整个生命周期中需要多次重写。如果设备在用新令牌更新文件时断电，该文件可能会损坏，`client_id` 也可能丢失，导致设备 *再也* 无法在 Frame.io 上重新进行身份验证。通过将令牌分开存储，最坏的情况也只是用户需要重新登录 Frame.io。
+
+存储令牌的最佳位置是 SQLite 等经过验证的数据库，但至少应将授权数据与其他值分开存储。
+
+## 下一步 {#next-up}
+
+如果你还没有联系我们的团队，我们建议你先与我们联系，然后继续阅读下一篇指南。我们期待你的来信！

@@ -1,0 +1,225 @@
+---
+title: "Pesquisar Assets"
+---
+
+# Visão geral {#overview}
+
+A API do Frame.io oferece suporte a uma pesquisa detalhada e facetada de Assets em toda uma Account, espelhando a funcionalidade do aplicativo web. Embora os filtros mais úteis no dia a dia sejam Team, Project e Status, filtros e ordenação podem ser combinados de maneiras únicas para produzir conjuntos extremamente específicos, orientados pela API. Em geral, todos os filtros, exceto `account_id`, `q` (query) e `sort`, seguem a mesma estrutura, e todos são explicados abaixo.
+
+![search-filters.png](/images/platform/v2/search-for-assets/d468e3a3b48184af611e5af020bee1474a328ab3fc5090df704dfd6c9b603ba7.webp)
+
+<Warning>
+
+**Divergência entre os tamanhos de página solicitados e retornados**
+
+Desde março de 2022, há um bug conhecido que afeta a função de paginação da API de pesquisa. Até que esse bug seja corrigido, não recomendamos usar a API de pesquisa para iterar por várias páginas de resultados (ou seja, mais de 100 assets), pois o tamanho de página solicitado pode não corresponder à quantidade real de assets retornados.
+
+</Warning>
+
+## Valores padrão {#defaults}
+
+A solicitação de API para acionar uma pesquisa é sempre a mesma:
+
+É sempre a mesma solicitação
+
+`POST` para `https://api.frame.io/v2/search/library`
+
+Se não forem fornecidos explicitamente, os valores padrão para o ajuste da pesquisa são os seguintes:
+
+| Atributo | Valor padrão | Descrição |
+| :--- | :--- | :--- |
+| `page_size` | 10 | Serão retornados 10 Assets por página. |
+| `page` | 1 | A consulta retornará a primeira página da resposta. |
+| `sort` | `relevance` | "Relevance" tenta ordenar os assets com base em um conjunto de atributos especificamente ajustado. Na ausência de uma consulta, a relevância é fortemente influenciada pela data de envio mais recente. |
+
+## Sobre este guia {#about-this-guide}
+
+Este guia mostra o processo de criação de uma consulta de pesquisa que corresponda a:
+
+- Assets dentro de uma Account
+- Que correspondam à consulta `"moon"`
+- Que estejam em um Project específico
+- Que tenham sido enviados entre 1º e 30 de abril de 2020
+- E que tenham sido marcados como "Approved"
+
+O corpo da nossa pesquisa ficará assim:
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-30T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    },
+    "page_size": 10,
+    "page": 1
+}
+```
+
+### Account, consulta e ordenação {#account-query-and-sort}
+
+A Account (`account_id`), a consulta (`q`) e o `sort` são os três blocos de construção mais básicos, que ficam fora de quaisquer atributos `filter` em uma consulta de pesquisa.
+
+#### Contexto da Account {#account-context}
+
+Tecnicamente, o único atributo de que você precisa para realizar uma pesquisa é um `account_id`. Fazer isso simplesmente trará todos os Assets (incluindo pastas) da Account, com os valores de paginação padrão (10 Assets por página, começando na página 1).
+
+```json
+{
+    "account_id": "<account_id>"
+}
+```
+
+#### Consulta de pesquisa {#search-query}
+
+O próximo atributo mais comum (e útil) a incluir é a própria consulta. Observação: como a pesquisa da API do Frame.io aceita uma consulta nula, não há necessidade de uma consulta curinga (`*`). Ou você está pesquisando algo, ou está solicitando uma ordenação (possivelmente filtrada) de todos os Assets de uma Account.
+
+No nosso caso, vamos pesquisar o termo "moon".
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon"
+}
+```
+
+### Ordenação {#sorting}
+
+![sort.png](/images/platform/v2/search-for-assets/bd057586bfc5499df0b46d41ae74d90e53beb6500bb87f639a730545ccb3f1c8.webp)
+
+O Frame.io oferece suporte a várias opções de ordenação diferentes. A sintaxe da ordem de classificação é semelhante entre as opções:
+
+- Existe uma direção de ordenação padrão
+- Para inverter essa direção, adicione o prefixo negativo `-` ao valor de ordenação
+
+Por exemplo, para ordenar em ordem alfabética inversa (Z a A), você declararia `"sort": "-name"`.
+
+A operação de ordenação padrão é "Relevance". Portanto, ela não precisa ser declarada e será assumida se nenhum atributo `sort` for fornecido.
+
+| Opção de ordenação | Atributo | Direção padrão |
+| :--- | :--- | :--- |
+| **Relevância** | n/a | n/a |
+| **Data de envio** | `inserted_at` | Mais antigos primeiro |
+| **Nome** | `name` | A a Z |
+| **Tamanho** | `filesize` | Menores primeiro |
+| **Quem enviou** | `creator.name` | A a Z |
+
+Assim, à medida que construímos nossa consulta, podemos adicionar nosso `sort` por `name`, de A a Z:
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name"
+}
+```
+
+### Filtros e paginação {#filters-and-pagination}
+
+Os filtros são o recurso mais complicado e, ao mesmo tempo, mais poderoso da pesquisa de Assets do Frame.io. Os filtros são escritos dentro de um único objeto `filter` e todos seguem o mesmo padrão de uma operação (`op`) e um `value`. Os filtros usam as seguintes abreviações comuns, sendo que as opções de equivalência diferentes de "igual a" são reservadas para consultas de data e tamanho:
+
+- `eq` — igual a
+- `lt` — menor que
+- `gt` — maior que
+- `lte` — menor ou igual a
+- `gte` — maior ou igual a
+- `match` — correspondência exata, usada apenas para os filtros Uploader e Filetype
+
+Por exemplo, um `filter` para corresponder a um `project_id` conhecido seria construído da seguinte forma:
+
+```json
+{
+    "filter": {
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        }
+    }
+}
+```
+
+### Opções e operações {#options-and-operations}
+
+A tabela a seguir descreve as opções e operações associadas a cada tipo de filtro.
+
+| Opção de filtro | Atributo | Operações compatíveis | Valores compatíveis |
+| :--- | :--- | :--- | :--- |
+| **Arquivado** | `archived` | `eq` | `true`, `false` |
+| **Data de envio** | `inserted_at` | `eq`, `lt`, `gt`, `lte`, `gte` | `<datetime>` (ISO-8601, UTC) |
+| **Excluído** | `deleted` | `eq` | `true`, `false` |
+| **Tipo de arquivo** | `filetype` | `match` | `<MIME type>` |
+| **Privado** | `private` | `eq` | `true`, `false` |
+| **Project** | `project_id` | `eq` | `<project_id>` |
+| **Tamanho** | `filesize` | `eq`, `lt`, `gt`, `lte`, `gte` | `size` (em bytes) |
+| **Status** | `label` | `eq` | `none`, `in_progress`, `needs_review`, `approved` |
+| **Team** | `team_id` | `eq` | `<team_id>` |
+| **Tipo** | `asset_type` | `eq` | `audio`, `document`, `folder`, `image`, `other`, `stream`, `video` |
+| **Quem enviou** | `creator.name` | `match` | `<name>` |
+
+<Warning>
+
+**Quem enviou precisa ser um membro ativo da Account para constar no índice**
+
+Pesquisar criadores que não são mais membros da conta não funcionará, pois esse usuário não está mais no índice de pesquisa de Users.
+
+</Warning>
+
+Para continuar construindo nossa consulta, podemos agora adicionar um filtro para Assets que:
+
+- Estejam em um Project específico
+- Tenham sido enviados entre 1º e 30 de abril de 2020
+- Estejam marcados como "Approved"
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-28T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    }
+}
+```
+
+<Note>
+
+**Paginação**
+
+O endpoint de pesquisa pagina exatamente como qualquer outro endpoint, por meio dos atributos `page_size` e `page`, que ficam na camada mais externa do corpo da solicitação. Para mais detalhes sobre paginação, consulte o guia separado [aqui](/pt-BR/platform/v2/key-concepts#pagination).
+
+</Note>

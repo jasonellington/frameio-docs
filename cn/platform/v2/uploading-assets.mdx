@@ -1,0 +1,178 @@
+---
+title: "上传 Assets"
+---
+
+# 概述 {#overview}
+
+本教程介绍如何将 assets 上传到 Frame.io。Frame.io 可以处理所有文件类型，不仅限于视频，还包括剧本、图片、地图和参考文件。从更技术的角度来说，Frame.io 中的 asset 是对 S3 中文件及其在 Frame.io 中上下文的完整表示，包括转码、用户/团队/项目上下文和元数据。有关 assets 的更多信息，请参阅资源定义。​
+
+## 核心层级结构 {#core-hierarchies}
+
+了解 Frame.io 如何构建其核心模型也很有帮助。
+
+**Users** 所属的 **Accounts** 拥有多个 **Projects**，而这些 Projects 都包含 **Assets**。**Teams** 仅适用于 Enterprise 账户，提供了额外一层逻辑隔离。Assets 并不“知道”自己属于哪个 Team——只知道属于哪个 Project 和 Account——但 Projects 严格归 Teams 所有，而不是归 Accounts 所有，这使得 Teams 成为 Asset 上传流程中不可或缺的一部分。
+
+## 前提条件 {#prerequisites}
+
+完成本教程，您需要：
+
+- 一个拥有 developer token 的 Frame.io 账户（token 的说明见下文）
+- [Frame.io Python SDK](https://github.com/Frameio/python-frameio-client)
+
+## 上传 Asset {#upload-an-asset}
+
+本节将逐步介绍上传 asset 的步骤。
+
+1. 在 [developer.frame.io](/cn/platform/v2) 创建具有以下 scopes 的 developer token：
+
+| Scope | 原因 |
+| --- | --- |
+| **Accounts:** Read | 获取发出请求的 User 的 Account 列表。 |
+| **Teams:** Read | 获取目标 Account 中可用的 Teams。 |
+| **Projects:** Read | 获取目标 Team 中可用的 Projects。 |
+| **Assets:** Create, Read | 创建新的 Asset 记录，并获取可用的 Assets 以遍历 Project 中的文件夹结构。 |
+
+<Info>
+
+**需要帮助创建 API token？**
+
+请查看[**此处**](/cn/platform/v2/authentication)的说明。
+
+</Info>
+
+2. 为您的 asset 确定目标位置。Assets 至少需要放置在某个 **Project** 中。您需要获取项目的根 asset ID（`root_asset_id`）或文件夹的 asset ID，以便指定要上传到的文件层级位置。
+
+<Warning>
+
+**注意：**
+
+您不能仅凭项目 ID 进行上传。要上传到项目的根目录，请在请求中指定 `root_asset_id`。
+
+</Warning>
+
+一般来说，您需要（按指定顺序）获取：
+
+- account ID 并选择一个账户
+- team ID 并选择一个团队
+- 与团队关联的项目
+- 您要处理的项目的 project ID
+- 根 asset ID 或文件夹 ID
+
+您可以使用 `root_asset_id` 直接上传到项目的根目录。
+
+### 列出 Assets {#list-assets}
+
+要选择新 asset 的上传位置，您可以使用 API 列出项目中或项目内某个文件夹中的所有 assets。如果某个 asset 是*文件夹*，它会包含子 assets，这些子 assets 同样可以是文件和文件夹。列出 assets 信息时，您可以使用任意 asset ID，但如果您想查看与项目相关的所有内容，请使用 `root_asset_id`。
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+在返回的 assets 列表中，您可以使用任意文件夹类型 asset 的 ID，或根 asset ID。您将使用此 ID 来标记新 asset 的上传位置。
+
+### 上传 Asset {#upload-asset}
+
+在此示例中，我们将上传一个新文件。您需要在请求中发送以下信息：
+
+| 参数 | 描述 |
+| --- | --- |
+| `filesize` | 输入要上传的文件的大小 |
+| `filetype` | 选择要上传的文件类型。可选项包括视频和图片。示例：`video/mp4`、`image/png`。 |
+| `name` | 输入表示文件名的字符串，不含空格。 |
+| `type` | 表示您使用的是 `file` 还是 `folder`。version stack 是指将多个文件相互堆叠在一起。 |
+
+如果您想创建新文件夹，则无需在请求中包含 `filesize` 或 `filetype`。
+
+对于 `cURL` 请求，您可以使用 `"source": {  "url":"URL_FOR_VIDEO" }` 参数包含文件链接，从而快速将 asset 上传到 Frame.io。该链接必须可以公开访问。否则，您可以使用 Python SDK，它会为您将文件拆分成多个分块，分别对应每个上传链接。
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Asset URL 会过期**
+
+您从 asset 创建 API 调用中获得的 URL 已经过预签名，用于授权您的上传，但会在 24 小时后过期。
+
+</Info>
+
+# 构建您自己的文件上传器 {#build-your-own-file-uploader}
+
+如果您想构建自己的上传器，为获得最佳性能，建议并行上传分块。每个分块都应直接 `PUT` 到 Frame.io API 响应中提供的 Amazon S3 URL。
+
+您的文件分块必须与所提供的 `upload_urls` 的顺序一致，因为它们*决定了最终拼接和转码后 asset 的顺序。* 这意味着第 1 个 URL 接收第 1 个分块，第 2 个 URL 接收第 2 个分块，依此类推。
+
+#### 伪代码示例 {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+发往 S3 的每个请求的 header 都应包含新 Asset 的 `filetype`（与您初次调用 Frame.io API 时返回的完全一致），以及一个额外的隐私 header：
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+您可以在[此处](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py)查看我们的 Python SDK 如何处理这一切的示例。
+
+<Info>
+
+**AWS 错误采用 XML 格式**
+
+请注意，您在此阶段遇到的任何错误都直接来自 AWS，因此会采用 XML 格式，而不是 Frame.io 标准的 JSON 错误处理格式。对于任何生产环境用途，我们通常建议为这些上传构建重试逻辑，因为未完整上传的文件（即缺少分块的文件）将无法在 Frame.io 中转码和显示
+
+</Info>
+
+就是这样！完成对各个 `upload_url` 的 `PUT` 调用后，您就会在 Frame.io 中拥有一个新的 Asset。

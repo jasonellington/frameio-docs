@@ -1,0 +1,385 @@
+---
+title: "管理用户权限"
+---
+
+本指南介绍如何使用 Frame.io V4 API 管理用户权限。内容涵盖权限在账户、工作区和项目各级别的工作方式，以及每个级别应使用的端点。
+
+---
+
+## 权限级别 {#permission-levels}
+
+Frame.io 中的权限在账户、工作区和项目三个级别上进行管理。每个级别都有自己的一组角色：
+
+```
+Account 
+│
+├── (admin)  - full access to all Workspaces, Projects, and Restricted Projects
+│
+└── (member)
+        │
+        ├── Workspace - (full_access | editor | edit_only | commenter | viewer)
+        │       │
+        │       └── Project - (full_access | editor | edit_only | commenter | viewer)
+        │
+        └── Restricted Project - (members require direct invite)
+```
+
+每个用户都有一个账户角色。通过 API，您可以将用户的角色设置为 <Tooltip tip="您可能会在 API 响应中看到 Owner 和 Reviewer，但这些角色无法通过 API 配置。更多详细信息请参阅账户级权限部分。">`admin` 或 `member`。</Tooltip>
+账户管理员（Account Admin）对所有工作区和项目拥有完全访问权限。账户成员（Account Member）可以有选择地添加到他们需要的工作区和项目中。
+
+当您将账户成员添加到工作区时，您分配的权限级别（`full_access`、`editor`、`edit_only`、`commenter` 或 `viewer`）将适用于其中所有现有和未来的项目。例如，如果您以 `viewer` 身份添加账户成员，那么每当他们访问该工作区中的任何项目时，都将拥有 `viewer` 权限。
+
+同一账户成员还可以以 `editor` 身份被添加到该工作区中的特定项目。这样，每当他们访问该项目时，都将拥有 `editor` 权限。他们的 `viewer` 权限仍适用于该工作区中的所有其他项目。
+
+由于项目分配与工作区分配相互独立，如果您将该账户成员从工作区中移除，他们仍会保留该单个项目的 `editor` 权限。
+
+受限项目（Restricted Projects）是例外。账户成员始终需要直接邀请。更多信息请参阅下方的项目级权限部分。
+
+## 账户级权限 {#account-level-permissions}
+
+您账户中的每个用户都有一个角色：
+
+| 角色 | 权限 | 可通过 API 配置 | 端点 |
+| --- | --- | --- | --- |
+| Owner | 对所有工作区和项目拥有完全访问权限。每个账户一个 | 否 | — |
+| <Tooltip tip="在界面中标记为“Content Admin”">`admin`</Tooltip> | 对所有工作区和项目拥有完全访问权限 | 是 | `PATCH /accounts/:account_id/users/:user_id` |
+| `member` | 在工作区和/或项目级别设置权限 | 是 | `PATCH /accounts/:account_id/users/:user_id` |
+| Reviewer | 仅通过分享链接访问。当用户被添加到安全分享时创建 | <Tooltip tip="Reviewer 会出现在账户用户列表中，因为他们需要登录 Frame.io 进行身份验证，但他们存在于工作区和项目权限体系之外。他们只能通过安全分享链接访问内容。">否</Tooltip> | — |
+
+---
+
+账户管理员在任何地方都拥有完全访问权限。要将管理员的访问权限限制在特定资源上，请先将其账户角色更改为 Member，然后再将其添加到所需的工作区或项目中。
+
+例如：
+
+<Steps>
+
+<Step title="列出账户用户角色，以查找用户 ID 并确认其当前角色：">
+
+```bash
+
+curl https://api.frame.io/v4/accounts/:account_id/users \
+     -H "Authorization: Bearer <token>"
+```
+
+</Step>
+
+<Step title="将账户角色更新为 Member：">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/users/:user_id \
+ -H "Authorization: Bearer <token>" \
+ -H "Content-Type: application/json" \
+ -d '{
+"data": {
+"role": "member"
+}
+}'
+```
+
+</Step>
+
+<Step title="将其添加到项目：">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+"data": {
+ "role": "edit_only"
+}
+}'
+```
+
+</Step>
+
+</Steps>
+
+### 账户权限端点 {#account-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="列出账户用户角色">
+
+<CardGroup cols={2}>
+
+<Card title="列出账户用户角色" icon="list" iconType="solid">
+
+<br />
+
+列出指定账户中的用户，包括用户详细信息（ID、姓名、电子邮件）及其账户角色。
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/users`
+
+<br />
+
+[文档](/cn/platform/api-reference/account-permissions/account-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="更新用户角色">
+
+<CardGroup cols={2}>
+
+<Card title="更新用户角色" icon="pen-to-square" iconType="solid">
+
+<br />
+
+更新用户在账户中的角色。这目前是一个实验性端点。
+
+<br /><br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/users/:user_id`
+
+<br />
+
+[文档](https://developer.frame.io/platform/v4-experimental/api-reference/account-permissions/developer-api-web-experimental-account-user-roles-controller-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## 工作区级权限 {#workspace-level-permissions}
+
+当您将账户成员添加到工作区时，他们在该工作区内的所有项目上都拥有该权限级别。工作区仅限邀请加入，因此账户成员只能看到他们被添加到的工作区。
+
+<br />
+
+| 角色 | 权限 |
+| --- | --- |
+| `full_access` | 上传、管理、分享、评论、查看、下载、管理设置以及邀请用户 |
+| `editor` | 上传、管理、分享、评论、查看、下载 |
+| `edit_only` | 上传、管理、评论、查看。不能分享或下载 |
+| `commenter` | 查看和评论 |
+| `viewer` | 仅查看 |
+
+<br />
+
+### 工作区权限端点 {#workspace-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="列出工作区用户角色">
+
+<CardGroup cols={2}>
+
+<Card title="列出用户" icon="list" iconType="solid">
+
+<br />
+
+列出有权访问指定工作区的用户，包括用户详细信息（ID、姓名、电子邮件）及其角色。
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users`
+
+<br />
+
+[文档](/cn/platform/api-reference/workspace-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="更新用户角色">
+
+<CardGroup cols={2}>
+
+<Card title="更新用户角色" icon="pen-to-square" iconType="solid">
+
+<br />
+
+修改用户在指定工作区中的角色。如果用户已被添加到该工作区，则更新其角色；否则以指定角色添加该用户。
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[文档](/cn/platform/api-reference/workspace-permissions/workspace-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="移除用户">
+
+<CardGroup cols={2}>
+
+<Card title="移除用户" icon="xmark" iconType="solid">
+
+<br />
+
+从指定工作区中移除用户
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[文档](/cn/platform/api-reference/workspace-permissions/workspace-user-roles-delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## 项目级权限 {#project-level-permissions}
+
+项目使用与工作区相同的权限级别。当用户只需要访问某个特定项目，或需要与其工作区分配不同的权限级别时，可将其直接添加到该项目中。用户无需拥有工作区访问权限即可被添加到项目中。
+
+<br />
+
+| 角色 | 权限 |
+| --- | --- |
+| `full_access` | 上传、管理、分享、评论、查看、下载、管理设置以及邀请用户 |
+| `editor` | 上传、管理、分享、评论、查看、下载 |
+| `edit_only` | 上传、管理、评论、查看。不能分享或下载 |
+| `commenter` | 查看和评论 |
+| `viewer` | 仅查看 |
+
+<br />
+
+**示例：将用户添加到项目**
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+  "data": {
+    "role": "full_access"
+  }
+}'
+```
+
+---
+
+### 受限项目 {#restricted-projects}
+
+受限项目需要直接邀请。工作区访问权限不会延续到受限项目，
+因此用户只有在被直接添加到受限项目后才能访问它。
+
+要授予成员访问权限，请以适当的权限级别将其添加到该项目中。
+
+<Note>
+
+账户管理员和所有者是例外，他们可以访问所有
+受限项目。
+
+</Note>
+
+### 项目权限端点 {#project-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="列出项目用户角色">
+
+<CardGroup cols={2}>
+
+<Card title="列出项目用户角色" icon="list" iconType="solid">
+
+<br />
+
+列出有权访问指定项目的用户，包括用户详细信息（ID、姓名、电子邮件）及其角色。
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users`
+
+<br />
+
+[文档](/cn/platform/api-reference/project-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="更新用户角色">
+
+<CardGroup cols={2}>
+
+<Card title="更新用户角色" icon="pen-to-square" iconType="solid">
+
+<br />
+
+修改用户在指定项目中的角色。如果用户已被添加到该项目，则更新其角色；否则以指定角色添加该用户。
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id `
+
+<br />
+
+[文档](/cn/platform/api-reference/project-permissions/project-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="移除用户">
+
+<CardGroup cols={2}>
+
+<Card title="移除用户" icon="xmark" iconType="solid">
+
+<br />
+
+从指定项目中移除用户
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id`
+
+<br />
+
+[文档](/cn/platform/api-reference/project-permissions/delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## 资源 {#resources}
+
+您可能会觉得有用的其他资源：
+
+- Frame.io [开发者论坛](https://forum.frame.io/)是开发者提问、分享反馈和讨论其构建内容的地方
+- 关于用户角色和权限的[帮助中心文章](https://help.frame.io/en/articles/9875389-user-roles-and-permissions)
+- OWASP [Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html#prefer-attribute-and-relationship-based-access-control-over-rbac)，提供有关基于关系和基于属性的访问控制的更多信息

@@ -1,0 +1,378 @@
+---
+title: "V4 Webhooks"
+sidebarTitle: "Webhooks"
+---
+
+## 什么是 Webhook？ {#what’s-a-webhook}
+
+**Webhook** 是一种推送式 HTTP 回调，当您的账户中**发生值得关注的事件时**（例如，新文件完成转码、添加了评论、创建了项目），Frame.io 会**立即**触发它。
+您无需轮询 API，只需提供一个公共 HTTPS URL；Frame.io 会实时向该 URL 发送 JSON 负载，以便您可以：
+
+<CardGroup cols={2}>
+
+<Card title="将元数据同步到外部 DAM/MAM" icon="arrows-rotate" iconType="solid" />
+
+<Card title="向 Slack 频道或工单系统推送信息" icon="bell" iconType="solid" />
+
+</CardGroup>
+
+有关 Webhook 是什么及其作用的更多信息，请参阅 [https://docs.webhook.site/](https://docs.webhook.site/)。
+
+## 端点概览 {#endpoint-overview}
+
+| **操作** | **端点** | **详情** |
+| --- | --- | --- |
+| **创建** Webhook | POST /v4/accounts/\{account_id\}/workspaces/\{workspace_id\}/webhooks | 请求正文包含 `name`、`url`、`events[]` |
+| **列出**某个 Workspace 的所有 Webhook | GET /v4/accounts/\{account_id\}/workspaces/\{workspace_id\}/webhooks | 支持分页 |
+| **查看**单个 Webhook | GET /v4/webhooks/\{webhook_id\} | 签名密钥仅在创建时返回 |
+| **更新** Webhook | PATCH /v4/webhooks/\{webhook_id\} | 更改 `url`、`events` 或 `is_active` |
+| **删除** Webhook | DELETE /v4/webhooks/\{webhook_id\} | 立即停止投递 |
+
+<Warning>
+
+**身份验证** — 所有 V4 端点都需要通过 Adobe Developer Console 获取的 OAuth 2.0 访问令牌。**不**接受旧版开发者令牌和 JWT。
+
+</Warning>
+
+## Frame V4 中的变更与更新 {#changes-and-updates-in-frame-v4}
+
+<Info>
+
+在 Legacy 中创建的 Webhook 转移到 V4 后，会有以下变更：
+
+1. **负载结构**：负载中新增了 Account ID
+2. **端点变更**：JSON 负载中不再提供 `team_id`，而是改为放在 URL 的路径参数中：`https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/webhooks`
+3. **API 集成**：由于 API 结构、端点和身份验证方式发生了变化，任何处理传入 Webhook 并随后调用 Frame.io API 以补充信息和查找资源的现有代码都需要更新
+4. **事件类型**：Asset Webhook 已拆分为独立的 File 和 Folder 事件——任何来自 Legacy 且使用 asset 事件的 Webhook 都需要更新为相应的 File 和 Folder 事件
+
+</Info>
+
+<Warning>
+
+**迁移后的 Webhook 状态** — 当您的账户迁移到 Frame.io V4 时，先前版本中的现有 Webhook 会被自动禁用。这样可以确保您在重新启用它们之前，先修改 Webhook 端点和集成逻辑以适配 V4 的更新。未针对 V4 兼容性进行更新的 Webhook 如果在未经适当修改的情况下启用，将会出现错误。在重新启用之前，您可以通过 API 检查 `is_active` 字段，或查看您的 [Webhook 设置](https://next.frame.io/settings/webhooks)，以确认哪些 Webhook 处于非活动状态。
+
+</Warning>
+
+## Webhook 事件订阅 {#webhook-event-subscriptions}
+
+创建和更新 Webhook 时，请指定您感兴趣的事件。您可以根据需要选择任意数量的事件。请注意，订阅较少的事件可以获得更好的体验：按逻辑拆分您的 Webhook，使用不同的命名方案和不同的端点，这样您就可以在接收端围绕业务逻辑进行建模，减少共享函数中的过滤和路由工作。
+
+<Note>
+
+事件范围 — 所有事件的范围都限定为创建 Webhook 时提供的 Workspace。这意味着，在该 Workspace 内所有项目中执行的操作都会发送事件。
+
+</Note>
+
+### 项目 {#projects}
+
+| 事件 | 说明 |
+| --- | --- |
+| `project.created` | 新项目已**创建** |
+| `project.updated` | 项目设置已**更新** |
+| `project.deleted` | 项目已**删除** |
+
+### 文件 {#files}
+
+| 事件 | 说明 |
+| --- | --- |
+| `file.created` | 已在 Frame.io 中**创建**文件。*注意：* 此事件会在文件上传完成之前触发。如果您的处理程序需要完整的文件，我们建议改为监听 `upload.completed` 事件 |
+| `file.ready` | 文件上传并处理后，所有转码均已**完成** |
+| `file.updated` | 文件名称或其他信息已更改 |
+| `file.deleted` | 文件已被**删除**（手动或以其他方式） |
+| `file.upload.completed` | 文件已**上传** |
+| `file.versioned` | 已**创建**文件版本 |
+
+### 文件夹 {#folders}
+
+| 事件 | 说明 |
+| --- | --- |
+| `folder.created` | 新文件夹已**创建** |
+| `folder.updated` | 文件夹设置已**更新** |
+| `folder.deleted` | 文件夹已**删除** |
+
+### 评论 {#comments}
+
+| 事件 | 说明 |
+| --- | --- |
+| `comment.created` | 新评论或回复已**创建** |
+| `comment.updated` | 评论已更新 |
+| `comment.deleted` | 评论已**删除** |
+| `comment.completed` | 评论已标记为**已完成** |
+| `comment.uncompleted` | 评论已标记为**未完成** |
+
+### 元数据 {#metadata}
+
+| 事件 | 说明 |
+| --- | --- |
+| `metadata.value.updated` | 资产的元数据字段已更新 |
+
+### 集合 {#collections}
+
+| 事件 | 说明 |
+| --- | --- |
+| `collection.created` | 新集合已**创建** |
+| `collection.updated` | 集合已**更新** |
+| `collection.deleted` | 集合已**删除** |
+
+### 自定义字段 {#custom-fields}
+
+| 事件 | 说明 |
+| --- | --- |
+| `customfield.created` | 新自定义字段已**创建** |
+| `customfield.updated` | 自定义字段已**更新** |
+| `customfield.deleted` | 自定义字段已**删除** |
+
+### 分享 {#shares}
+
+| 事件 | 说明 |
+| --- | --- |
+| `share.created` | 新分享已**创建** |
+| `share.updated` | 分享已**更新** |
+| `share.deleted` | 分享已**删除** |
+| `share.viewed` | 分享已被**查看** |
+
+## Webhook 消息负载 {#webhook-message-payload}
+
+所有 Webhook 负载都包含一个表示所发生事件的 `type` 字段，以及一个 `resource` 对象。`resource` 对象包含与该事件相关的 Frame.io 资源的 `type` 和 `ID`。
+
+### 负载示例 {#example-payload}
+
+```json
+{
+  "account": {
+    "id": "6f70f1bd-7e89-4a7e-b4d3-7e576585a181"
+  },
+  "project": {
+    "id": "7e46e495-4444-4555-8649-bee4d391a997"
+  },
+  "resource": {
+    "id": "d3075547-4e64-45f0-ad12-d075660eddd2",
+    "type": "file"
+  },
+  "type": "file.ready",
+  "user": {
+    "id": "56556a3f-859f-4b38-b6c6-e8625b5da8a5"
+  },
+  "workspace": {
+    "id": "378fcbf7-6f88-4224-8139-6a743ed940b2"
+  }
+}
+```
+
+在上面的 `file.created` 事件示例中，`resource.id` 表示新创建文件的 `ID`。此外，负载中还包含 `workspace`、`project` 和 `user` 对象，分别包含相关的 `workspace.id`、`project.id` 和 `user.id`。您可以使用这些值来过滤传入事件或在本地查找缓存数据，从而减少 API 调用。
+
+<Warning>
+
+**除资源 ID 外，我们不会包含有关所订阅资源的任何其他信息**。
+
+如果您的应用程序需要更多信息或上下文，我们建议通过 API 调用查找所引用资源的更多信息。
+
+</Warning>
+
+## 安全性 {#security}
+
+默认情况下，所有 Webhook 都有一个签名密钥。这个不可配置的签名密钥可用于验证请求是否来自 Frame.io。
+
+您所配置的 Webhook 的响应负载中包含该 Webhook 专属的签名密钥。此密钥**仅在最初创建 Webhook 的响应中提供**，因此请将其安全地保存在您的密钥存储或环境变量中。之后可以用它来验证 Webhook 是否直接来自我们的服务器，且未被以任何方式拦截或篡改。
+
+### 验证 Webhook 签名 {#verifying-webhook-signatures}
+
+为了保护集成免受中间人攻击和重放攻击，验证 Webhook 负载的签名至关重要。验证可确保 Webhook 负载确实由 Frame.io 发送，并且负载内容在传输过程中未被修改。
+
+`POST` 请求中包含以下 HTTP 请求头：
+
+| 请求头名称 | 说明 | 示例 |
+| --- | --- | --- |
+| `X-Frameio-Request-Timestamp` | 发送请求时的时间戳 | `1604004499` |
+| `X-Frameio-Signature` | 计算得出的 Webhook 签名 | `v0=a77ce6856e609c884575c2fd211d07a9ad1c3f72e19c06ff710e8f086ffca883` |
+| `user-agent: "Frame.io V4 API"` | V4 请求头中的 User agent |  |
+| `user-agent: "Frame.io Legacy API"` | Legacy 请求头中的 User agent |  |
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify Webhook signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the Frame.io API for the given request
+        body (str): Webhook body from the received POST
+        secret (str): The secret for this Webhook that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+**时间戳**是 Frame.io 系统发送出站 Webhook 时的系统时间。它可用于防止[重放](https://en.wikipedia.org/wiki/Replay_attack)攻击。我们建议验证该时间与本地时间相差不超过 5 分钟。
+
+**签名**是使用首次创建 Webhook 时提供的签名密钥计算的 HMAC SHA256 哈希值。
+
+**按照以下步骤验证签名：**
+
+<Steps>
+
+<Step title="提取签名">
+
+从 HTTP 请求头中提取签名。
+
+</Step>
+
+<Step title="创建待签名消息">
+
+将版本、投递时间和请求正文组合起来，创建待签名的消息：`v0:timestamp:body.`
+
+</Step>
+
+<Step title="计算 HMAC SHA256">
+
+使用您的签名密钥计算 HMAC SHA256 签名。
+
+</Step>
+
+<Step title="比较签名">
+
+将您计算出的签名与提供的签名进行比较！
+
+</Step>
+
+</Steps>
+
+<Note>
+
+提供的签名带有 `v0=` 前缀。目前 Frame.io 仅使用这一个版本对请求进行签名。请务必在您计算出的签名前加上此前缀。
+
+</Note>
+
+## Webhook 速率限制 {#webhook-rate-limits}
+
+Webhook 和 Custom Action 事件共享以下按账户计算的限制：
+
+| 时间窗口 | 每个账户的限制 |
+| --- | --- |
+| 1 分钟 | 1,000 个事件 |
+| 1 小时 | 20,000 个事件 |
+
+这两项限制均适用于 Webhook 和 Custom Action 事件的合计数量。即使未超出每分钟限制，账户也仍受每小时限制的约束。这些限制在账户级别生效，而不是分别针对每个 Webhook 订阅或 Custom Action。
+
+这些是事件数量限制，而不是创建、列出、更新或删除 Webhook 订阅或 Custom Action 时的 API 请求限制。
+
+<Warning>
+
+当达到任一账户级别限制时，额外的 Webhook 和 Custom Action 事件将被**丢弃**，而不会排队等待稍后投递。被丢弃的事件不会在容量恢复后自动重试或重放。下方的投递重试策略不适用于因速率限制而被丢弃的事件。
+
+</Warning>
+
+### 在限制范围内工作 {#working-within-the-limits}
+
+为了在 Webhook 限制范围内工作，我们建议仅订阅您的集成所需的**[事件](#webhook-event-subscriptions)**。例如，如果您的工作流在文件上传完成时开始，请订阅 `file.upload.completed`，而不是所有文件事件。定期检查您账户的订阅，并删除不再使用的订阅。
+
+如果您的集成会上传大量文件或进行一系列更新，请尽可能将这些操作分散开来，以同时满足两项限制，并为账户的其他活动留出容量。这有助于避免事件被丢弃，因为被丢弃的事件不会重试。
+
+## 重试与日志记录 {#retries-and-logging}
+
+<CardGroup cols={2}>
+
+<Card title="投递重试策略" icon="arrows-rotate" iconType="solid">
+
+- 总共尝试三次（首次 + 2 次重试）
+- 指数退避，起始间隔为 15 秒（加随机抖动）
+- HTTP `5xx` 响应、连接错误或超过 5 秒的超时会触发重试
+- HTTP `4xx` 响应（包括 `429`）不会重试
+
+</Card>
+
+<Card title="失败日志" icon="list" iconType="solid">
+
+Frame.io 会保留一份**失败日志**，其中包含：`webhook_id`、`account_id`、`event_type`、`resource_id`、`user_id`。
+
+</Card>
+
+</CardGroup>
+
+## Webhook 教程 {#webhook-tutorial}
+
+### 第 1 步：设置接收端（先完成此步骤，以便知道您的 URL） {#step-1-setup-receiving-end-done-first-so-that-you-know-what-your-url-will-be}
+
+这里我们使用 [webhook.site](http://webhook.site/)，它可以让您轻松启动一个一次性 Webhook 接收器，用于检查负载并发送基本响应，而无需任何实际的业务逻辑。当您首次访问 [https://webhook.site](https://webhook.site/) 时，系统会为您创建一个唯一的 Webhook 端点，您可以立即复制使用。
+
+此 URL 对您的会话是唯一的。
+
+<Frame>
+
+![Step 1 Example](/images/platform/docs/guides/webhooks/webhook_site_example.gif)
+
+</Frame>
+
+### 第 2 步：选择要订阅的事件 {#step-2-choose-the-events-you-want-to-subscribe-to}
+
+在本教程中，我们尽量保持简单，将此 Webhook 设置为仅订阅 `file.created` 事件。用于创建 Webhook 的 JSON 负载如下。
+
+```json
+{
+    "data": {
+        "name": "asset.created sample webhook",
+        "events": ["file.created"],
+        "url": "https://webhook.site/c05f2216-9558-4816-bc09-f77ee7b9de40"
+    }
+}
+```
+
+### 第 3 步：使用 Postman 创建 Webhook 资源 {#step-3-create-a-webhook-resource-using-postman}
+
+使用 Postman 发出 API 调用来创建 Webhook 资源，并在负载中提供 [webhook.site](http://webhook.site/) 端点。
+
+### 第 4 步：测试！ {#step-4-test}
+
+现在您已经创建了 Webhook 订阅，并设置好了接收 Webhook 的端点，是时候进行测试了：执行相应的操作来触发第一个 Webhook！
+
+由于我们的示例设置为在 `file.created` 时触发，因此我们将在设置该 Webhook 的对应账户和 Workspace 中的任意项目里上传一个新资产。
+
+<Frame>
+
+![Step 4 Example](/images/platform/docs/guides/webhooks/trigger_asset_created_webhook.gif)
+
+</Frame>
+
+## 其他资源 {#additional-resources}
+
+<CardGroup cols={2}>
+
+<Card title="Ngrok" icon="globe" iconType="solid" href="https://ngrok.com/">
+
+**Ngrok** 是一款出色的工具，适合需要在可公开访问的 URL 上暴露 Webhook 的开发者。它会创建从本地环境到互联网的安全隧道，让您可以暴露本地服务器以实时接收 Webhook 负载。
+
+</Card>
+
+<Card title="Hookdeck" icon="webhook" iconType="solid" href="https://hookdeck.com/">
+
+**Hookdeck** 是一个通过提供强大的事件网关来帮助团队可靠管理 Webhook 的平台。它集中处理 Webhook，确保不会遗漏任何事件，并提供过滤、排队以及重试失败 Webhook 等功能。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Webhook.site" icon="webhook" iconType="solid" href="https://webhook.site">
+
+**Webhook.site** 是一款用于 Webhook 原型设计和测试的优秀工具，它提供了一个简单而强大的平台，可捕获并检查发送到唯一的自动生成 URL 的 HTTP 请求。
+
+</Card>
+
+<Card title="Val.town" icon="code" iconType="solid" href="https://www.val.town/">
+
+**Val.town** 是快速构建 Webhook 处理程序原型的绝佳工具，因为它简化了直接在浏览器中编写、测试和部署小型 JavaScript 和 Python 函数的过程。
+
+</Card>
+
+</CardGroup>

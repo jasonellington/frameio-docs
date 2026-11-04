@@ -1,0 +1,529 @@
+---
+title: "自定义操作"
+---
+
+Frame.io 操作（Actions）可让您快速执行常见的媒体操作，例如下载、重命名和复制项目，还能将第三方工具和服务的集成直接呈现在 [Frame.io](https://next.frame.io/) 的用户界面中。
+
+## 关于操作 {#about-actions}
+
+随着自定义操作（Custom Actions）的推出，开发者可以在 Frame.io V4 中配置和管理自己的操作。自定义操作利用与 [Webhooks](https://developer.adobe.com/frameio/guides/Webhooks/) 相同的底层事件系统，为开发者提供了另一种机制，将其资产与 Frame.io 账户中用户最看重的工具连接起来。
+
+任何属于启用了该操作的 Frame.io 工作区成员的用户都可以执行该操作。执行操作时，Frame.io 会向您提供的 URL 发送一个负载。接收方应用会以 HTTP 状态码响应以确认收到，或以自定义回调响应，在 Frame.io 界面中渲染更多表单字段。接收方应用可以是您自己托管的程序、服务，甚至是 Workfront Fusion 或 Zapier 等低代码/无代码 IPaaS 工具。
+
+使用自定义操作，可将集成作为可编程的 UI 组件直接构建到 [Frame.io](https://next.frame.io/) 中。这使得用户能够在应用内触发工作流，并利用与 webhooks 相同的底层事件路由。您可以创建由用户触发的单步或多步表单，并以另一个表单或基本响应的形式返回到 Frame.io。当用户在资产上点击自定义操作时，Frame.io 会向您提供的 URL 发送一个负载。接收方应用会以 HTTP 状态码响应以确认收到，或以可在 Frame.io 中渲染更多 UI 的自定义回调进行响应。
+
+## 速率限制 {#rate-limits}
+
+自定义操作事件与 webhook 事件计入相同的账户级限制：**每分钟 1,000 个事件**和**每小时 20,000 个事件**。这两项限制均适用于整个账户的合计事件量，而不是分别适用于每个自定义操作或 webhook 订阅。
+
+当达到任一限制时，额外的自定义操作事件将被**丢弃**，不会排队或自动重试。
+
+这些是事件量限制，而不是用于管理自定义操作的 API 请求限制。详情请参阅 [Webhook 速率限制](/cn/platform/docs/guides/webhooks#webhook-rate-limits)。
+
+## V4 中的操作改进 {#actions-improvements-in-v4}
+
+借鉴旧版用户的经验，我们在 Frame.io V4 中对操作功能集进行了多项增强：
+
+<CardGroup cols={3}>
+
+<Card title="新字段类型" icon="input-numeric" iconType="solid">
+
+以前仅支持文本和单选字段，现在我们还支持多选、文本区域（用于较大的文本框）以及布尔字段（用于单选按钮）。
+
+</Card>
+
+<Card title="可点击链接" icon="link" iconType="solid">
+
+文本字段不便于用户复制/粘贴 URL。请改用我们新的链接字段，获得一键复制的便捷体验。
+
+</Card>
+
+<Card title="动态模态框" icon="window" iconType="solid">
+
+根据返回的数据量，操作的模态框会动态调整大小以最佳地适配表单中的信息，必要时还会提供可滚动的模态框。
+
+</Card>
+
+<Card title="多资产操作" icon="files" iconType="solid">
+
+将您的操作配置为在一个请求中最多针对 100 个资产。
+
+<br /><Badge color="green">NEW</Badge>
+
+</Card>
+
+<Card title="混合资产类型" icon="rectangles-mixed" iconType="solid">
+
+操作不局限于单一资产类型，可以在文件、文件夹和版本堆栈的组合上触发。
+
+</Card>
+
+<Card title="应用内反馈表单" icon="square-poll-horizontal" iconType="solid" href="https://next.frame.io/settings/actions">
+
+我们希望听取开发者和最终用户关于如何使用操作的意见，因此我们在 Web 端的设置页面中提供了反馈表单。
+
+</Card>
+
+</CardGroup>
+
+## 迁移的操作 {#migrated-actions}
+
+当迁移到包含在旧版 Frame.io 中创建的自定义操作的 Frame.io V4 账户时，需要注意以下几点。
+
+### 操作状态 {#action-status}
+
+账户迁移到 Frame.io V4 后，所有在早期版本中创建的自定义操作的状态都将为“null”，并会被自动禁用。这让用户有机会先将操作更新为使用 V4 API，然后再启用，因为任何未更新的操作都会失败。要识别处于此状态的操作，请访问操作设置页面并参考“Status”列；如果使用 API，则检查 is_active 字段。
+
+### 可操作的资源：文件、文件夹和版本堆栈 {#actionable-resources-files-folders-&-version-stacks}
+
+由于在 Frame.io V4 API 中资产类型被拆分为独立的资源，因此在解析操作负载中收到的资源 ID 时，可能需要考虑一些行为差异。单个文件的行为很直接，ID 即为执行该操作的特定文件。同样，对于文件夹，您将收到执行该操作的文件夹的 ID；但根据您的使用场景，您在定义操作行为时有多种选择。如果您想与文件夹资源本身交互，请使用文件夹 ID 对 Frame.io API 进行后续调用。或者，您可能希望获取该文件夹的子项，以便对其中的资产做进一步处理。当操作在版本堆栈上执行时，您的负载将包含“Head Asset”的 ID，即堆栈中最顶层的文件，也是 Frame.io 界面中显示的文件。
+
+您可以在我们的[迁移指南](/cn/platform/docs/resources/migration)中进一步了解 Frame.io 旧版 API 与 V4 之间的差异。
+
+<Info>
+
+使用 API 配置[自定义操作](/cn/platform/api-reference/custom-actions/actions-show)。
+
+</Info>
+
+自定义操作需要：
+
+| 字段名称 | 描述 |
+| --- | --- |
+| Name | 您为自定义操作选择的名称。它将显示在 Frame.io 中可用自定义操作的菜单里。 |
+| Description | 说明该操作的作用，仅供参考（描述不会出现在 Frame.io Web 应用中）。 |
+| Event | 内部事件键，帮助您区分标准 webhook 事件和您自己的事件。 |
+| URL | 事件的投递地址。 |
+| Workspace | 将使用该自定义操作的工作区。 |
+
+## 配置您的自定义操作 {#configure-your-custom-action}
+
+当用户触发自定义操作时，Frame.io 会向您提供的 URL 发送一个负载。接收方应用可以以 HTTP 状态码响应以确认收到，或以自定义回调响应，在 [Frame.io](https://next.frame.io/) 中渲染更多 UI。
+
+<Warning>
+
+要为工作区创建自定义操作，需要账户管理员（Account Admin）权限。如果您没有访问权限，请联系您的管理员修改您的权限。
+
+</Warning>
+
+### 多资产配置 {#multi-asset-configuration}
+
+多资产支持由配置驱动，必须在操作的配置模态框中显式启用（[在 Web 端](https://next.frame.io/settings/actions)）。可以在创建新操作时启用，也可以在更新现有操作时启用。
+
+启用多资产支持后，负载格式会立即切换。旧版负载与支持多资产的负载是互斥的。
+
+## 来自 Frame.io 的负载 {#payload-from-frame-io}
+
+当用户点击您的自定义操作时，会向您在 URL 字段中设置的 URL 发送一个负载。使用此负载可以识别：
+
+<CardGroup cols={2}>
+
+<Card title="操作上下文" icon="computer-mouse" iconType="solid">
+
+- 点击的是哪个自定义操作
+- 点击的是哪个（些）资源
+- 执行操作的是哪个用户
+- 触发的是哪种事件类型
+
+</Card>
+
+<Card title="组织上下文" icon="building" iconType="solid">
+
+- 与该自定义操作关联的账户
+- 与该自定义操作关联的工作区
+- 包含该（些）资源的项目
+
+</Card>
+
+</CardGroup>
+
+<AccordionGroup>
+
+<Accordion title="负载 - 单资产或多资产支持">
+
+自定义操作最初每个请求只接受一个资产，使用包含一个资产的 `resource` 对象。启用多资产支持后，负载使用包含一个或多个资产的 `resources` 列表（一个请求最多 100 个资产）。
+
+```json
+POST /your/url
+{
+  "account_id": "1a94720e-f7f5-4c41-ab62-d11eebe3d504",
+  "action_id": "0aeb9feb-f8eb-4100-a8c2-b39b66d354ab",
+  "data": {
+      "description": "Pretty cool video.",
+      "title": "Hey there!"
+  },
+  "interaction_id": "985559de-865a-40e5-a687-2bbed4497eaa",
+  "project": {
+      "id": "3e34e7cb-5c21-49f5-8ca9-a1419584c2ea"
+  },
+  "resources": [
+      {
+          "id": "fe41c5a8-1b8d-417d-a7df-0b88bc19b476",
+          "type": "file"
+      },
+      {
+          "id": "fe81fb2b-1316-4a76-9cf6-0630f474fc39",
+          "type": "file"
+      }
+  ],
+  "type": "some.event",
+  "user": {
+      "id": "68093c1c-4b05-41ce-a3c9-e64d195b1935"
+  },
+  "workspace": {
+      "id": "629086c0-f6aa-4d63-a284-f39bcd415b9f"
+  }
+}
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+<AccordionGroup>
+
+<Accordion title="旧版负载 - 仅支持单资产">
+
+```json
+POST /your/url
+{
+    "account_id": "1a94720e-f7f5-4c41-ab62-d11eebe3d504",
+    "action_id": "0e38b93a-9f10-4bc7-90bc-bd07a16e510a",
+    "data": {
+        "description": "Wow look at this.",
+        "title": "Hey there!!"
+    },
+    "interaction_id": "dff6d369-7150-41f9-8e6f-4f0895f6b416",
+    "project": {
+        "id": "3e34e7cb-5c21-49f5-8ca9-a1419584c2ea"
+    },
+    "resource": {
+        "id": "fe81fb2b-1316-4a76-9cf6-0630f474fc39",
+        "type": "file"
+    },
+    "type": "some.event",
+    "user": {
+        "id": "68093c1c-4b05-41ce-a3c9-e64d195b1935"
+    },
+    "workspace": {
+        "id": "629086c0-f6aa-4d63-a284-f39bcd415b9f"
+    }
+}                                  
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+### 从旧版负载迁移 {#migrating-from-the-legacy-payload}
+
+<Warning>
+
+**旧版负载计划弃用**
+
+旧版负载计划弃用，强烈建议用户迁移其服务以处理新负载。
+
+通过启用配置标志并更新负载处理逻辑，操作可以无缝过渡到支持多资产负载。
+
+1. 将单数 `resource` 对象的用法替换为 `resources` 列表
+2. 更新代码以遍历 `resources` 列表
+3. 在操作配置中启用多资产标志
+
+</Warning>
+
+| 字段名称 | 描述 |
+| --- | --- |
+| `account_id` | 操作所属的唯一账户 ID。 |
+| `action_id` | 操作的唯一 ID。 |
+| `interaction_id` | 由 Frame.io 生成的唯一标识符，用于在多个请求（例如链式消息回调或表单回调）中跟踪您的事务。在操作的整个序列中保持不变。 |
+| `project_id` | 操作所属的唯一项目 ID。 |
+| `resource.id` | 触发该操作的资源的 ID。 |
+| `resource.type` | 触发该操作的资源的类型。 |
+| `type` | 配置操作时在 `event` 字段中提供的名称。 |
+| `user.id` | 触发该操作的用户的 ID。 |
+| `workspace.id` | 使用该操作的工作区的 ID。 |
+| `data` | 包含用户所选表单字段名称和值的键值对。您的应用通过它了解用户做出了哪些选择。 |
+
+## 交互、重试和超时 {#interactions-retries-and-timeouts}
+
+`interaction_id` 是一个唯一标识符，用于跟踪交互随时间的演进。如果您不需要回复用户，只需返回 200 状态码即可。虽然是可选的，但我们建议包含有关操作结果的信息，例如成功消息或错误提示。自定义操作支持消息回调。
+
+<Note>
+
+Frame.io 期望在 10 秒内收到响应，并会在等待成功响应期间最多重试 5 次。理想情况下，响应应当是即时的，而异步操作在通过自定义操作触发后再执行。
+
+</Note>
+
+## 创建消息回调 {#create-a-message-callback}
+
+在您对 webhook 事件的 HTTP 响应中，可以返回一个描述消息的 JSON 对象，该消息将在 Frame.io 界面中返回给发起操作的用户。
+
+```json
+{
+  "title": "Success!",
+  "description": "The thing worked! Nice."
+}
+```
+
+消息让您可以直接在 Frame.io 界面中向用户提供反馈。如果您需要向用户收集更多信息，请改用**表单回调**。
+
+## 创建表单回调 {#create-a-form-callback}
+
+假设您在开始处理之前需要更多信息。例如，您可能要将内容上传到一个需要额外详细信息的系统。您可以在响应中描述一个表单，由用户填写并提交回给您。示例如下：
+
+```json
+{
+  "title": "Need some more info!",
+  "description": "Getting ready to submit this file!",
+  "fields": [
+    {
+      "type": "text",
+      "label": "Title",
+      "name": "title",
+      "value": "MyVideo.mp4"
+    },
+    {
+      "type": "select",
+      "label": "Captions",
+      "name": "captions",
+      "options": [
+        {
+          "name": "Off",
+          "value": "off"
+        },
+        {
+          "name": "On",
+          "value": "on"
+        }
+      ]
+    }
+  ]
+}
+```
+
+当用户提交表单时，您将在与初始 POST 相同的 URL 上收到一个事件：
+
+```json
+POST /your/url
+{
+  "type": "your-specified-event-name",
+  "interaction_id": "the-same-id-as-before",
+  "action_id": "unique-id-for-this-custom-action",
+  "data":{
+    "title": "MyVideo.mp4",
+    "captions": "off"
+  }
+}
+```
+
+表单上添加的所有自定义字段都会出现在 Frame.io 发送的 JSON 负载的 `data` 部分中。使用 `interaction_id` 将初始请求与这些新的表单数据对应起来。您可以回复一条消息，或链接另一个表单。通过链接操作、表单和消息，您可以借助外部系统的业务逻辑，在 Frame.io 中高效地编写多步骤工作流。
+
+## 表单详情 {#form-details}
+
+与消息一样，表单支持在表单顶部渲染的 `title` 和 `description` 属性。除此之外，每个表单字段都接受以下基本属性：
+
+<CardGroup cols={2}>
+
+<Card title="字段属性" icon="tarp" iconType="solid">
+
+- **type** — 告诉 Frame.io 界面预期的数据类型，以及要渲染哪个组件。
+- **label** — 在界面中作为字段上方的标题显示。
+
+</Card>
+
+<Card title="字段数据" icon="database" iconType="solid">
+
+- **name** — 在后续负载中用于标识该字段的键。
+- **value** — 用于预填充该字段的值。
+
+</Card>
+
+</CardGroup>
+
+## 支持的字段类型 {#supported-field-types}
+
+### 文本字段 {#text-field}
+
+一个没有额外参数的简单文本字段。
+
+```json
+{  
+  "type": "text",
+  "label": "Title",
+  "name": "title",
+  "value": "MyVideo.mp4"
+}
+```
+
+### 文本区域 {#text-area}
+
+一个没有额外参数的简单文本区域。
+
+```json
+{  
+  "type": "textarea",
+  "label": "Description",
+  "name": "description",
+  "value": "This video is really, really popular."
+}
+```
+
+### 选择列表 {#select-list}
+
+定义一个供用户选择的选项列表。必须包含一个 `options` 列表，其中每个成员都应包含人类可读的 `name` 和机器可解析的 `value`。
+
+```json
+{
+  "type": "select",
+  "label": "Captions",
+  "name": "captions",
+  "value": "off",
+  "options": [
+       {
+         "name": "Off",
+         "value": "off"
+       },
+       {
+         "name": "On",
+         "value": "on"
+      }
+   ]
+}
+```
+
+### 复选框 {#checkbox}
+
+一个没有额外参数的简单复选框。
+
+```json
+{ 
+   "type": "boolean", 
+   "name": "enabled", 
+   "label": "Enabled", 
+   "value": "false"
+}
+```
+
+### 链接 {#link}
+
+一个没有额外参数的简单链接。
+
+```json
+{
+  "type": "link",
+  "name": "videoLink",
+  "label": "Video Link",
+  "value": "https://www.youtube.com/watch?v=XtX1zv9CEVc"
+}
+```
+
+## Frame.io 权限模型 {#the-frame-io-permissions-model}
+
+自定义操作有一个特殊的权限模型：它们属于工作区，而不属于账户中的任何特定用户。这意味着：
+
+<CardGroup cols={2}>
+
+<Card title="创建与管理" icon="users-gear" iconType="solid">
+
+- 任何管理员都可以在工作区上创建自定义操作。
+- 任何管理员都可以修改或删除团队中已有的自定义操作。
+
+</Card>
+
+<Card title="实时更新" icon="arrows-rotate" iconType="solid">
+
+- 一旦修改，所有用户都会立即看到更改的结果。
+
+</Card>
+
+</CardGroup>
+
+## 安全与验证 {#security-and-verification}
+
+默认情况下，所有自定义操作在创建时都会生成一个签名密钥。此项不可配置。该密钥可用于验证请求是否来自 Frame.io。`POST` 请求中包含以下内容：
+
+| 名称 | 描述 |
+| --- | --- |
+| `X-Frameio-Request-Timestamp` | 您的自定义操作被触发的时间。 |
+| `X-Frameio-Signature` | 计算得出的签名。 |
+
+<CardGroup cols={2}>
+
+<Card title="时间戳验证" icon="clock" iconType="solid">
+
+**时间戳**是请求在离开 Frame.io 网络时被签名的时间。它可用于防止重放攻击。我们建议验证该时间与本地时间相差在 5 分钟以内。
+
+</Card>
+
+<Card title="签名验证" icon="shield" iconType="solid">
+
+**签名**是使用首次创建自定义操作时提供的签名密钥计算的 HMAC SHA-256 哈希值。
+
+</Card>
+
+</CardGroup>
+
+### 验证签名 {#verifying-the-signature}
+
+<Steps>
+
+<Step title="提取签名">
+
+从 HTTP 请求头中提取签名。
+
+</Step>
+
+<Step title="创建待签名消息">
+
+将版本、投递时间和请求体组合为 `v0:timestamp:body`，创建待签名的消息。
+
+</Step>
+
+<Step title="计算 HMAC SHA256">
+
+使用您的签名密钥计算 HMAC SHA256 签名。
+
+</Step>
+
+<Step title="比较签名">
+
+将您计算出的签名与提供的签名进行比较！
+
+</Step>
+
+</Steps>
+
+<Note>
+
+提供的签名带有 `v0=` 前缀。目前 Frame.io 只有这一个用于签名请求的版本。您需要将此前缀添加到您计算出的签名中。
+
+</Note>
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify webhook/custom action signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the frame.io API for the given request
+        body (str): Custom Action body from the received POST
+        secret (str): The secret for this Custom Action that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+## 反馈 {#feedback}
+
+我们很希望听取开发者和最终用户关于您希望如何在 Frame.io V4 中使用操作的想法。欢迎[联系我们](https://forum.frame.io/)，分享您的问题、想法和使用场景，帮助我们确定优先级。
