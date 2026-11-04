@@ -1,0 +1,58 @@
+---
+title: "Limites de débit"
+---
+
+# Vue d’ensemble {#overview}
+
+Qu’un jeton soit distribué via le portail développeur, une autorisation OAuth ou le backend Accounts qui dessert les propres applications de Frame.io, **tous les appels d’API vers Frame.io sont soumis à des limites de débit.**
+
+Les limites de débit s’appliquent à l’ensemble des requêtes d’API d’un même utilisateur (quel que soit le jeton ou la méthode d’authentification utilisés), s’épuisent et se rechargent progressivement, et sont indiquées dans les en-têtes de réponse de chaque requête adressée à l’API Frame.io. Chaque endpoint est configuré avec ses propres limites, qui vont de `10` requêtes/minute à `100` requêtes/seconde.
+
+Les requêtes qui dépassent la limite de débit d’un endpoint donné reçoivent une erreur HTTP `429` en réponse.
+
+## Épuisement et recharge {#depletion-and-refill}
+
+L’API Frame.io utilise une stratégie de limitation progressive de type [seau percé](https://wikipedia.org/wiki/Leaky_bucket) (leaky bucket), dans laquelle les limites se rechargent progressivement au cours de la fenêtre de temps qui leur est allouée. Autrement dit, il n’existe pas de seuil fixe après lequel les limites d’une ressource donnée sont réinitialisées (comme dans les stratégies à « fenêtre fixe » ou à « fenêtre glissante »). Les limites restantes se rechargent plutôt en continu, à un rythme proportionnel à la limite et à la fenêtre de temps de la ressource.
+
+### Backoff exponentiel {#exponential-backoff}
+
+La stratégie que nous recommandons pour gérer les limites de débit est généralement appelée « backoff exponentiel ».
+
+En bref :
+
+- Lorsque vous recevez une erreur `429`, faites une pause pendant un certain temps (généralement une seconde)
+- Si vous recevez une autre erreur `429`, augmentez de façon exponentielle le temps d’attente jusqu’au retour à un fonctionnement normal
+
+## En-têtes {#headers}
+
+Les réponses aux requêtes d’API incluent toujours les trois en-têtes suivants, que vous devez utiliser pour limiter vos requêtes sortantes :
+
+| En-tête | Valeur |
+| --- | --- |
+| `x-ratelimit-limit` | La limite de débit pour ce chemin de ressource, mesurée en requêtes. |
+| `x-ratelimit-remaining` | Le nombre de requêtes restantes dans la fenêtre de temps actuelle. |
+| `x-ratelimit-window` | La fenêtre de temps des limites de ce chemin de ressource, mesurée en millisecondes (ms). |
+
+### Exemple {#example}
+
+L’exemple suivant provient de la réponse à `GET v2/assets/:id/children`, qui permet de récupérer les assets enfants d’une racine de projet, d’un dossier ou d’une pile de versions. La limite pour ce chemin est de 40 requêtes par 60 000 ms (une minute), et il reste 39 requêtes après en avoir effectué une.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Détails {#details}
+
+Les limites de débit varient fortement d’un chemin de ressource à l’autre dans l’API Frame.io. Vous trouverez ci-dessous quelques détails choisis, exprimés pour plus de lisibilité sous la forme ressource et action (par exemple « Assets — Mise à jour » plutôt que `PUT /assets/:id`).
+
+En règle générale, les chemins de ressource qui créent de nouvelles données sont limités à 100 appels par minute ou moins, et ceux qui récupèrent des listes d’assets sont limités à 200 appels par minute.
+
+| Ressource | Action | Limite (requêtes) | Fenêtre de limite (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1,000 |
+| **Assets** | `update` | `10` | 1,000 |
+| **Assets** | `read` | `5` | 1,000 |
+| **Commentaires<br />Présentations<br />Projets<br />Liens de révision<br />Équipes<br />Membres d’équipe** | `create` | `100` | 60,000 |
+| **Recherche** | `read` | `200` | 60,000 |

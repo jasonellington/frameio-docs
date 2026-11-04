@@ -1,0 +1,178 @@
+---
+title: "Téléverser des éléments"
+---
+
+# Vue d'ensemble {#overview}
+
+Ce tutoriel explique comment téléverser des éléments (assets) dans Frame.io. Frame.io prend en charge tous les types de fichiers, pas seulement la vidéo, mais aussi les scripts, les images, les cartes et les fichiers de référence. En termes plus techniques, un asset dans Frame.io est une représentation complète d'un fichier stocké dans S3 et de son contexte dans Frame.io, y compris les transcodages, le contexte utilisateur/équipe/projet et les métadonnées. Pour plus d'informations sur les assets, consultez la définition de la ressource.​
+
+## Hiérarchies principales {#core-hierarchies}
+
+Il est également utile de savoir comment Frame.io structure ses modèles principaux.
+
+Les **Accounts** (comptes), auxquels appartiennent les **Users** (utilisateurs), possèdent de nombreux **Projects** (projets), qui contiennent tous des **Assets**. Les **Teams** (équipes) sont réservées aux comptes Enterprise et offrent un niveau supplémentaire de séparation logique. Les assets ne « savent » pas à quelle équipe ils appartiennent — seulement à quel projet et à quel compte — mais les projets appartiennent strictement aux équipes, et non aux comptes, ce qui fait des équipes un élément essentiel du processus de téléversement des assets.
+
+## Prérequis {#prerequisites}
+
+Pour ce tutoriel, vous aurez besoin de :
+
+- Un compte Frame.io avec un jeton de développeur (les jetons sont expliqués ci-dessous)
+- Le [SDK Python de Frame.io](https://github.com/Frameio/python-frameio-client)
+
+## Téléverser un asset {#upload-an-asset}
+
+Cette section vous guide à travers les étapes de téléversement d'un asset.
+
+1. Créez un jeton de développeur sur [developer.frame.io](/fr/platform/v2) avec les scopes suivants :
+
+| Scope | Raison |
+| --- | --- |
+| **Accounts:** Read | Récupérer la liste des comptes de l'utilisateur à l'origine de la requête. |
+| **Teams:** Read | Récupérer les équipes disponibles pour le compte souhaité. |
+| **Projects:** Read | Récupérer les projets disponibles pour l'équipe souhaitée. |
+| **Assets:** Create, Read | Créer le nouvel enregistrement d'asset et récupérer les assets disponibles pour parcourir l'arborescence des dossiers du projet. |
+
+<Info>
+
+**Besoin d'aide pour créer un jeton d'API ?**
+
+Consultez les instructions [**ici**](/fr/platform/v2/authentication).
+
+</Info>
+
+2. Choisissez une destination pour votre asset. Les assets doivent au minimum être placés dans un **Project**. Vous devrez récupérer l'ID de l'asset racine (`root_asset_id`) d'un projet ou l'ID d'asset d'un dossier afin d'indiquer l'emplacement de la hiérarchie de fichiers dans lequel vous souhaitez téléverser.
+
+<Warning>
+
+**REMARQUE :**
+
+Vous ne pouvez pas téléverser avec un seul ID de projet.  Pour téléverser à la racine de votre projet, indiquez le `root_asset_id` dans votre requête.
+
+</Warning>
+
+En général, vous devez récupérer (dans l'ordre indiqué) :
+
+- le ou les ID de compte, puis choisir un compte
+- le ou les ID d'équipe, puis choisir une équipe
+- les projets associés à une équipe
+- l'ID du projet avec lequel vous souhaitez travailler
+- l'ID de l'asset racine ou l'ID d'un dossier
+
+Vous pouvez téléverser directement à la racine d'un projet à l'aide du `root_asset_id`.
+
+### Lister les assets {#list-assets}
+
+Pour choisir où téléverser votre nouvel asset, vous pouvez utiliser l'API pour lister tous les assets d'un projet ou d'un dossier au sein d'un projet. Si un asset est un *dossier*, il contient des assets enfants, qui peuvent eux aussi être des fichiers et des dossiers. Pour lister les informations des assets, vous pouvez utiliser n'importe quel ID d'asset, mais si vous souhaitez examiner tout ce qui est associé à un projet, utilisez le `root_asset_id`.
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+Dans la liste d'assets renvoyée, vous pouvez utiliser l'ID de n'importe quel asset de type dossier, ou l'ID de l'asset racine. Cet ID vous servira à indiquer où téléverser votre nouvel asset.
+
+### Téléverser l'asset {#upload-asset}
+
+Dans cet exemple, nous allons téléverser un nouveau fichier. Envoyez votre requête avec les informations suivantes :
+
+| Paramètre | Description |
+| --- | --- |
+| `filesize` | Indiquez la taille du fichier que vous souhaitez téléverser |
+| `filetype` | Choisissez le type de fichier que vous téléversez, par exemple vidéo ou image. Exemples : `video/mp4`, `image/png`. |
+| `name` | Saisissez une chaîne représentant le nom du fichier, sans espaces. |
+| `type` | Indique s'il s'agit d'un `file` (fichier) ou d'un `folder` (dossier). Une pile de versions consiste à empiler plusieurs fichiers les uns sur les autres. |
+
+Si vous souhaitez créer un nouveau dossier, vous n'avez pas besoin d'inclure `filesize` ni `filetype` dans votre requête.
+
+Avec une requête `cURL`, vous pouvez rapidement téléverser un asset dans Frame.io en incluant un lien vers votre fichier à l'aide du paramètre `"source": {  "url":"URL_FOR_VIDEO" }`. Le lien doit être accessible publiquement. Sinon, vous pouvez utiliser le SDK Python, qui se charge de découper votre fichier en un segment pour chaque lien de téléversement.
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Les URL des assets expirent**
+
+Les URL renvoyées par l'appel d'API de création d'asset sont pré-signées pour autoriser votre téléversement, mais elles expirent au bout de 24 heures.
+
+</Info>
+
+# Créer votre propre outil de téléversement {#build-your-own-file-uploader}
+
+Si vous souhaitez créer votre propre outil de téléversement, il est recommandé, pour de meilleures performances, de téléverser les segments en parallèle. Chaque segment doit être envoyé par `PUT` directement vers les URL Amazon S3 fournies dans la réponse de l'API Frame.io.
+
+Vos segments de fichier doivent respecter l'ordre des `upload_urls` fournies, car celles-ci *déterminent la séquence de l'asset final, une fois concaténé et transcodé.* Autrement dit, la 1re URL reçoit le 1er segment, la 2e URL le 2e segment, et ainsi de suite.
+
+#### Exemple en pseudocode {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+Les en-têtes de chaque requête vers S3 doivent inclure le `filetype` de votre nouvel asset, exactement tel qu'il a été renvoyé par votre appel initial à l'API Frame.io, ainsi qu'un en-tête de confidentialité supplémentaire :
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+Vous trouverez un exemple de la manière dont tout cela est géré dans notre SDK Python [ici](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py).
+
+<Info>
+
+**Les erreurs AWS sont au format XML**
+
+Notez que toutes les erreurs que vous recevez à cette étape proviennent directement d'AWS et sont donc au format XML, et non au format d'erreur JSON standard de Frame.io. Pour toute utilisation en production, nous recommandons généralement de prévoir une logique de nouvelle tentative autour de ces téléversements, car les fichiers incomplètement téléversés (c'est-à-dire les fichiers auxquels il manque des segments) ne pourront pas être transcodés ni affichés dans Frame.io
+
+</Info>
+
+Et voilà ! Une fois les appels `PUT` vers les `upload_url` terminés, vous disposerez d'un nouvel asset dans Frame.io.

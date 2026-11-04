@@ -1,0 +1,277 @@
+---
+title: "SDK Python Frame.io — Guide d’import"
+sidebarTitle: "Guide d’import avec le SDK Python"
+---
+
+Ce guide explique comment importer des fichiers dans Frame.io à l’aide du **SDK Python Frame.io** (`frameio`). Le SDK gère les imports multipart découpés en chunks vers S3 via des URL pré-signées, avec des workers parallèles, des nouvelles tentatives automatiques et un suivi de progression facultatif.
+
+Pour les concepts généraux de l’API d’import (URL d’import, en-têtes, découpage en chunks), consultez [Fonctionnement des imports locaux et distants](/fr/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work).
+
+---
+
+## Prérequis {#prerequisites}
+
+<Steps>
+
+<Step title="Authentification">
+
+Vous disposez d’un client `Frameio` fonctionnel. Consultez le [Guide d’authentification](/fr/platform/docs/guides/authentication/python-sdk) pour la configuration.
+
+</Step>
+
+<Step title="Installer le SDK">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="Dossier cible">
+
+Vous avez besoin de l’`account_id` et du `folder_id` où le fichier doit être importé. Utilisez le SDK pour les trouver :
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## Démarrage rapide {#quick-start}
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+C’est tout. Le SDK découpe le fichier en chunks en fonction des URL d’import renvoyées par l’API, les importe en parallèle et gère automatiquement les nouvelles tentatives.
+
+---
+
+## Fonctionnement {#how-it-works}
+
+L’import local est un processus en deux étapes :
+
+<Steps>
+
+<Step title="Créer la ressource fichier">
+
+Appelez `client.files.create_local_upload()` avec le nom et la taille du fichier. L’API crée un fichier temporaire et renvoie des URL PUT S3 pré-signées, une par chunk. Le nombre d’URL (et donc de chunks) dépend de la taille du fichier.
+
+</Step>
+
+<Step title="Importer vers S3">
+
+`FrameioUploader` lit les URL d’import dans la réponse, découpe votre fichier en chunks correspondants et envoie chaque chunk à son URL via PUT en parallèle à l’aide d’un pool de threads. Chaque requête inclut les en-têtes requis `x-amz-acl: private` et `Content-Type`.
+
+</Step>
+
+</Steps>
+
+<Note>
+
+L’import se fait directement de votre application vers S3 : il ne passe pas par les serveurs de l’API Frame.io. C’est le même schéma que celui utilisé par des services comme YouTube, Vimeo et Dropbox pour l’import de fichiers volumineux.
+
+</Note>
+
+---
+
+## Utiliser `FrameioUploader` {#using-frameiouploader}
+
+`FrameioUploader` est la méthode recommandée pour importer des fichiers. Il encapsule l’uploader par chunks de plus bas niveau et gère tous les détails : extraction des URL d’import depuis la réponse de l’API, définition des en-têtes requis, découpage du fichier en chunks et import en parallèle.
+
+### Suivi de la progression {#progress-tracking}
+
+Utilisez le callback `on_progress` pour suivre la progression de l’import :
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+Le callback est appelé une fois à la fin de chaque chunk, avec le nombre cumulé d’octets importés jusque-là et la taille totale du fichier.
+
+#### Barre de progression Rich {#rich-progress-bar}
+
+Pour une expérience soignée dans le terminal, utilisez [Rich](https://github.com/Textualize/rich) :
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### Configuration {#configuration}
+
+`FrameioUploader` accepte plusieurs paramètres facultatifs :
+
+| Paramètre | Valeur par défaut | Description |
+| --- | --- | --- |
+| `max_workers` | `5` | Nombre de threads d’import simultanés |
+| `headers` | `{"x-amz-acl": "private"}` | En-têtes envoyés avec chaque requête PUT S3. Les en-têtes personnalisés sont fusionnés avec ceux par défaut. |
+| `max_retries` | `3` | Nombre de nouvelles tentatives par chunk (backoff exponentiel : 1 s, 2 s, 4 s, …) |
+| `on_progress` | `None` | Callback `(bytes_uploaded, total_bytes)` déclenché après chaque chunk |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### Exemple complet {#full-example}
+
+Un exemple complet avec authentification, import et suivi de la progression :
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+Si vous avez besoin d’un contrôle total sur le processus d’import (par exemple pour gérer manuellement le découpage en chunks, l’intégrer à un pipeline asynchrone ou personnaliser la logique de nouvelles tentatives), consultez [Fonctionnement des imports locaux et distants](/fr/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work) pour le flux brut de l’API et un exemple de script Python autonome.
+
+</Tip>
+
+---
+
+## Import distant {#remote-upload}
+
+Si votre fichier est déjà accessible via une URL publique, utilisez plutôt l’import distant. Aucun découpage en chunks n’est nécessaire : Frame.io récupère directement le fichier :
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+L’import distant est actuellement soumis à une **limite de taille de fichier de 50 Go**. Pour les fichiers de plus de 50 Go, utilisez plutôt l’[import local](#quick-start).
+
+</Warning>
+
+---
+
+## Vérifier le statut de l’import {#checking-upload-status}
+
+Après l’import, vous pouvez vérifier que le fichier a bien été reçu :
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

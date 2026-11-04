@@ -1,0 +1,37 @@
+---
+title: "Codes d’erreur de l’API"
+---
+
+L’API Frame.io peut renvoyer les erreurs courantes suivantes :
+
+| Code | Détails | Raison(s) |
+| --- | --- | --- |
+| `401` | **Unauthorized** — Jeton d’API invalide. Vérifiez que vous utilisez bien l’authentification par Bearer Token et que vous transmettez votre jeton via l’en-tête Authorization. |  |
+| `402` | **Usage exceeded** — Vous avez dépassé les limites de votre forfait Frame.io. |  |
+| `403` | **Forbidden** — Vous n’avez pas accès à cette ressource. Renvoyée aussi bien pour l’accès utilisateur que pour le scope du jeton. |  |
+| `404` | **Not Found** — Ressource introuvable. | La ressource a été déplacée ou supprimée. |
+| `422` | **Invalid arguments** — Un ou plusieurs des paramètres fournis sont invalides. |  |
+| `429` | **Rate Limited** — Vous avez atteint la limite de débit de l’API. |  |
+| `500` | **Server Error** — Notre serveur ne sait pas comment interpréter votre requête, ou n’a pas pu la traiter dans le délai imparti (30 secondes). | URL ou corps de requête mal formé, ou impossibilité de traiter la requête pour une autre raison. |
+
+# Résolution des erreurs courantes {#troubleshooting-common-errors}
+
+Lorsque vous utilisez un jeton d’API valide pour effectuer des tâches courantes, les erreurs les plus fréquentes sont `403`, `404` et `500`.
+
+Une erreur **403** indique généralement l’un des trois scénarios suivants :
+
+1. Le jeton utilisé dans la requête, et/ou l’utilisateur auquel il appartient, ne dispose pas d’un accès suffisant à la zone du compte Frame.io où se trouve la ressource demandée.
+2. Le jeton ne dispose pas des scopes suffisants pour la ressource demandée. Par exemple : appeler `GET /comments/` sans le scope `comments.read`.
+3. Un problème de trafic réseau empêche l’API Frame.io de traiter la requête.  *Si vous pensez que vos requêtes sont bloquées par un problème de trafic réseau, veuillez contacter le service client.*
+
+Une erreur **404** indique généralement qu’une ressource n’existe plus : elle a été déplacée ou supprimée.
+
+Une erreur **500** indique généralement une URL ou un corps de requête mal formé, mais elle peut également se produire lorsque nous ne parvenons pas à traiter la requête dans le délai imparti (30 s).
+
+# Limitation du débit {#rate-limiting}
+
+L’API Frame.io applique des limites de débit par jeton. La limite par défaut d’un jeton est de 50 appels par seconde. Certaines méthodes ont des limites plus basses (par exemple, POST `/assets/:id/children` est limité à 5 assets par seconde).
+
+Toutes les limites sont susceptibles d’évoluer et, lorsqu’elles sont atteintes, renvoient une erreur HTTP 429. Nous vous suggérons d’utiliser une approche de back-off exponentiel pour gérer la limitation du débit.
+
+Consultez [notre guide](/fr/platform/v2/rate-limits) sur les limites de débit pour en savoir plus.

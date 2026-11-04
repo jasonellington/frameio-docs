@@ -1,0 +1,182 @@
+---
+title: "Guide pratique : gérer les canaux"
+sidebarTitle: "Gérer les canaux"
+---
+
+Que se passe-t-il lorsque votre écosystème comprend des appareils qui ne peuvent pas se connecter à Internet ni communiquer directement avec Frame.io, mais qui peuvent communiquer avec votre appareil compatible C2C ? Certaines intégrations peuvent souhaiter effectuer des actions pour le compte de ces appareils : un enregistreur audio qui téléverse des fichiers pour le compte d’un microphone, ou une caméra qui publie des commentaires en temps réel pour le compte des boutons d’un accessoire.
+
+Ces requêtes sont traitées grâce aux canaux d’un appareil. Si votre intégration ne gère pas de sous-appareils, vous pouvez ignorer ce guide.
+
+## De quoi aurai-je besoin ? {#what-will-i-need}
+
+Si vous n’avez pas encore lu le guide [Implémenter C2C : configuration](/fr/camera-to-cloud/implementing-c2c-setting-up), jetez-y un rapide coup d’œil avant de continuer !
+
+Vous aurez besoin de l’`access_token` reçu lors du [guide d’authentification et d’autorisation des appareils](/fr/platform/v2/how-to-authorization-management-hardware).
+
+Vous aurez également besoin d’une liste des identifiants de modèles d’appareils (Device Model IDs) pour les sous-appareils qui doivent pouvoir se connecter à Frame.io via votre appareil principal.
+
+## Qu’est-ce qu’un canal ? {#what-is-a-channel}
+
+Les canaux sont brièvement présentés dans notre [Vue d’ensemble de l’architecture](/fr/camera-to-cloud/integration-architecture). Chaque appareil de projet possède au moins un canal, et bien que nous les ayons généralement traités comme une seule et même chose, nous devons maintenant distinguer ces deux concepts. Approfondissons.
+
+Un appareil de projet a la capacité de communiquer directement avec frame.io. Un canal collecte les données que l’appareil de projet doit transmettre. Dans la plupart des cas, le ProjectDevice et le premier canal ne font qu’un. Prenons l’exemple d’une caméra : conceptuellement, l’appareil de projet représente la carte réseau de la caméra, qui envoie les données directement à Frame.io, tandis que le canal représente le capteur CMOS de la caméra, qui collecte les données vidéo à envoyer via la carte réseau (l’appareil de projet).
+
+Point le plus important : l’appareil de projet est authentifié auprès de Frame via une OauthApp, ce qui n’est pas le cas des canaux. Ceux-ci utilisent l’authentification de leur appareil de projet parent.
+
+Notre modèle permet à un appareil de projet d’avoir plusieurs canaux, qui peuvent faire partie ou non de l’appareil physique. Les canaux peuvent être des composants matériels qui communiquent avec l’appareil principal via TCP/IP, Bluetooth, SDI, etc. L’appareil de projet agit comme un routeur pour envoyer ces données à frame.io. La manière dont ces données sont fournies par les canaux à l’appareil de projet dépend de vous, l’intégrateur.
+
+Imaginez un enregistreur audio, connecté à Frame.io en tant qu’appareil de projet, avec plusieurs microphones connectés chacun en tant que canal distinct. L’enregistreur peut envoyer le fichier de mixage sur son canal principal, et les pistes de chaque microphone sur les canaux de ses sous-appareils. La façon dont vous utilisez les canaux et ce que chacun représente dépend de vous ! Les canaux ne sont pas authentifiés : l’appareil peut en ajouter ou en retirer à tout moment.
+
+Comme les canaux peuvent appartenir à des sous-appareils physiques distincts, chaque canal est associé à un modèle d’appareil, comme toute autre intégration matérielle ou logicielle. Cela permet à frame.io d’afficher le modèle du sous-appareil, qui peut être différent de celui de l’appareil hôte, et permet aux intégrations de définir un comportement distinct pour chaque sous-appareil. Les modèles d’appareils pouvant être ajoutés en tant que canaux à une intégration donnée doivent être définis à l’avance.
+
+Il existe plusieurs raisons pour lesquelles vous pourriez vouloir connecter de nouveaux canaux à votre appareil C2C :
+
+- Permettre plusieurs configurations pour une intégration en fonction du canal et du modèle d’appareil. Cela inclut une structure de dossiers fixe pour les ressources, des chemins de dossiers tokenisés, un routage selon l’extension de fichier, etc. Imaginez une station DIT qui utilise différents canaux pour téléverser des proxys de montage ou des fichiers Camera Raw.
+- Offrir à l’utilisateur de frame.io une visibilité sur vos sous-appareils.
+- Les canaux peuvent être configurés avec des entrées humaines, c’est-à-dire des boutons, qui peuvent être configurés pour des fonctions de journalisation en temps réel.
+
+Voyons plus en détail comment gérer les canaux avec l’API C2C.
+
+## Lister les canaux {#listing-channels}
+
+La liste des canaux existants peut être récupérée via le champ channels de l’[endpoint d’identité](/fr/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information). Examinons le champ `"channels"` de la charge utile de la réponse :
+
+```json
+{
+    "_type": "project_device",
+    ...
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+            "external_index": 0,
+            "id": "5919e9bc-7fc2-4629-97e5-852ce27cfa1a",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Host Device",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "online",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        },
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+            "external_index": 0,
+            "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Client Device 01234",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "offline",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        }
+    ],
+    ...
+    "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+    ...
+    "id": "bf30fc66-f126-4336-bdfc-75d3e659b95am"
+}
+```
+
+Remarquez que le `device_id` du premier canal correspond au `device_id` de notre appareil de projet dans son ensemble.
+
+## Connecter un canal {#connecting-a-channel}
+
+Nous pouvons connecter un nouveau canal avec la requête suivante :
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/connect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'{
+            "client_id": [client_id],
+            "device_model_id": [device_model_id]
+        }
+__JSON__
+    | python -m json.tool
+```
+
+Nous obtenons la réponse suivante :
+
+```json
+{
+   "_type": "project_device_channel",
+   "actor_id": null,
+   "asset_type": "video",
+   "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+   "external_index": 0,
+   "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+   "inserted_at": "2023-07-14T19:11:43.217565Z",
+   "name": "Test Client Device 01234",
+   "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+   "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+   "real_time_logging_capable": true,
+   "status": "offline",
+   "updated_at": "2023-07-14T19:11:43.217565Z"
+}
+```
+
+Cette réponse reflète le champ channels de l’endpoint d’[identité](/fr/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information).
+
+C’est le client_id qui garantit l’unicité ; il doit donc s’agir d’une valeur stable, comme le numéro de série.
+Le device_model_id indique à Frame.io le type sous-jacent d’appareil matériel que représente ce canal, par exemple un modèle précis de microphone. Ces modèles auront été configurés par votre partner manager.
+
+Si un canal a déjà été déclaré, vous recevrez une erreur 409 portant le titre Already Exists.
+
+Lorsque vous créez un canal avec les mêmes identifiants qu’un canal précédemment connecté puis déconnecté, toute la configuration utilisateur précédente de ce canal est restaurée.
+
+## Déconnecter un canal {#disconnecting-a-channel}
+
+Un canal est déconnecté à l’aide de l’id défini par Frame.io, et non à l’aide du client_id ou du device_model_id.
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/:channel_id/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Cette requête renvoie une réponse `204` avec une charge utile vide.
+
+Si vous supprimez un canal qui n’existe pas, vous obtiendrez une erreur 404. Vous ne pouvez pas déconnecter le premier canal, le canal principal, de l’appareil parent.
+
+## Déconnecter tous les canaux des sous-appareils {#disconnecting-all-sub-device-channels}
+
+Vous pouvez déconnecter tous les canaux de sous-appareils actuels d’un appareil de projet avec l’appel suivant :
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Cet appel renvoie une réponse `204` avec une charge utile vide. Il réussit toujours, même si l’appareil de projet n’a aucun canal d’appareil client.
+
+Nous pouvons maintenant lister tous nos canaux à l’aide de l’endpoint d’[identité](/fr/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) ; seul le canal principal de l’appareil hôte subsistera.
+
+## Flux de gestion des canaux {#channel-management-flow}
+
+Nous déconseillons aux ProjectDevices de gérer l’état des canaux en interne, afin d’éviter les problèmes d’intégrité des données pouvant résulter de redémarrages survenant à des moments inopportuns. Par exemple :
+
+- Une mise hors tension après le traitement d’un appel Channel Connect, mais avant que l’`id` renvoyé ait pu être enregistré dans un stockage de données
+- Des sous-appareils branchés ou débranchés de l’appareil hôte pendant que celui-ci est éteint.
+
+Il est plutôt recommandé que tous les appareils hôtes exécutent les étapes suivantes lors de leur premier démarrage :
+
+- Appeler l’endpoint Bulk Channel Disconnect pour supprimer tous les canaux de sous-appareils existants
+- Appeler l’endpoint Channel Connect pour chaque sous-appareil actuellement connecté
+  Après la configuration initiale, un appareil hôte DOIT appeler l’endpoint Channel Disconnect chaque fois qu’un sous-appareil est déconnecté, et l’endpoint Channel Connect chaque fois qu’un nouveau sous-appareil est ajouté. Les appareils hôtes NE PEUVENT PAS supprimer les sous-appareils chaque fois qu’un nouvel appareil est connecté.
+
+Les appareils hôtes DOIVENT gérer correctement les mauvaises conditions réseau lors de la gestion des appareils, et ajouter ou retirer correctement les appareils actuellement connectés lorsque la connexion au réseau est rétablie.
+
+## Et ensuite {#next-up}
+
+Si ce n’est pas déjà fait, nous vous encourageons à contacter notre équipe, puis à passer au guide suivant. Nous avons hâte d’avoir de vos nouvelles !
