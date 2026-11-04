@@ -1,0 +1,3144 @@
+---
+title: "TypeScript SDK リファレンス"
+---
+
+### インストール {#installation}
+
+```bash
+npm i -s frameio
+```
+
+---
+
+### 使い方 {#usage}
+
+次のようにクライアントをインスタンス化して使用します。
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: "YOUR_TOKEN" });
+await client.metadataFields.metadataFieldDefinitionsCreate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        field_type: "select",
+        field_configuration: {
+            enable_add_new: false,
+            options: [
+                {
+                    display_name: "Option 1",
+                },
+                {
+                    display_name: "Option 2",
+                },
+            ],
+        },
+        name: "Fields definition name",
+    },
+});
+```
+
+---
+
+### リクエストとレスポンスの型 {#request-and-response-types}
+
+SDK は、すべてのリクエストとレスポンスの型を TypeScript インターフェースとしてエクスポートしています。次の名前空間を使ってインポートするだけで利用できます。
+
+```typescript
+import { Frameio } from "frameio";
+
+const request: Frameio.UpdateFieldDefinitionParams = {
+    ...
+};
+```
+
+---
+
+### 例外処理 {#exception-handling}
+
+API が成功以外のステータスコード（4xx または 5xx レスポンス）を返した場合、次のエラーのサブクラスがスローされます。
+
+```typescript
+import { FrameioError } from "frameio";
+
+try {
+    await client.metadataFields.metadataFieldDefinitionsCreate(...);
+} catch (err) {
+    if (err instanceof FrameioError) {
+        console.log(err.statusCode);
+        console.log(err.message);
+        console.log(err.body);
+        console.log(err.rawResponse);
+    }
+}
+```
+
+---
+
+### 高度な使い方 {#advanced}
+
+#### 追加のヘッダー {#additional-headers}
+
+リクエストに追加のヘッダーを含めて送信したい場合は、headers リクエストオプションを使用します。
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    headers: {
+        'X-Custom-Header': 'custom value'
+    }
+});
+```
+
+#### 追加のクエリ文字列パラメーター {#additional-query-string-parameters}
+
+リクエストに追加のクエリ文字列パラメーターを含めて送信したい場合は、queryParams リクエストオプションを使用します。
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    queryParams: {
+        'customQueryParamKey': 'custom query param value'
+    }
+});
+```
+
+---
+
+#### リトライ {#retries}
+
+SDK には、指数バックオフによる自動リトライ機能が組み込まれています。リクエストがリトライ可能と判断され、かつリトライ回数が設定されたリトライ上限（デフォルト: 2）を超えていない限り、リクエストはリトライされます。
+
+次のいずれかの HTTP ステータスコードが返された場合、リクエストはリトライ可能と判断されます。
+
+- 408（タイムアウト）
+- 429（リクエスト過多）
+- 5XX（内部サーバーエラー）
+
+<br />
+
+この動作を設定するには、`maxRetries` リクエストオプションを使用します。
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    maxRetries: 0 // override maxRetries at the request level
+});
+```
+
+---
+
+#### タイムアウト {#timeouts}
+
+SDK のデフォルトのタイムアウトは 60 秒です。この動作を設定するには、timeoutInSeconds オプションを使用します。
+
+```typescript
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    timeoutInSeconds: 30 // override timeout to 30s
+});
+```
+
+#### リクエストの中止 {#aborting-requests}
+
+SDK では、中止シグナルを渡すことで、任意の時点でリクエストを中止できます。
+
+```typescript
+const controller = new AbortController();
+const response = await client.metadataFields.metadataFieldDefinitionsCreate(..., {
+    abortSignal: controller.signal
+});
+controller.abort(); // aborts the request
+```
+
+---
+
+#### 生のレスポンスデータへのアクセス {#access-raw-response-data}
+
+SDK では、`.withRawResponse()` メソッドを通じて、ヘッダーを含む生のレスポンスデータにアクセスできます。`.withRawResponse()` メソッドは、`data` プロパティと `rawResponse` プロパティを持つオブジェクトに解決される Promise を返します。
+
+```typescript
+const { data, rawResponse } = await client.metadataFields.metadataFieldDefinitionsCreate(...).withRawResponse();
+
+console.log(data);
+console.log(rawResponse.headers['X-My-Header']);
+```
+
+#### ランタイムの互換性 {#runtime-compatibility}
+
+SDK は次のランタイムで動作します。
+
+- Node.js 18+
+- Vercel
+- Cloudflare Workers
+- Deno v1.25+
+- Bun 1.0+
+- React Native
+
+---
+
+#### Fetch クライアントのカスタマイズ {#customizing-fetch-client}
+
+SDK では、内部で使用される HTTP クライアント / Fetch 関数をカスタマイズできます。サポート対象外の環境で実行している場合でも、この方法を緊急手段として使うことで SDK を確実に動作させられます。
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({
+    ...
+    fetcher: // provide your implementation here
+});
+```
+
+---
+
+### リファレンス {#reference}
+
+#### アカウント権限 {#account-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.accountPermissions.index(accountId, { ...params }) -> core.Page<Frameio.AccountUserRole>">
+
+指定したアカウントのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+const response = await client.accountPermissions.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include_deactivated: true,
+    sort: "role_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.accountPermissions.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include_deactivated: true,
+    sort: "role_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.AccountPermissionsIndexRequest`
+
+`requestOptions`: `AccountPermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### アカウント {#accounts}
+
+<AccordionGroup>
+
+<Accordion title="client.accounts.index({ ...params }) -> core.Page<Frameio.Account>">
+
+現在のユーザーのアカウントを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+const response = await client.accounts.index({
+    sort: "display_name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.accounts.index({
+    sort: "display_name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+
+`request`: `Frameio.AccountsIndexRequest`
+
+`requestOptions`: `Accounts.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.accounts.auditlogIndex(accountId, { ...params }) -> Frameio.AuditLogsWithIncludesResponse">
+
+クエリパラメーターによるフィルタリング機能を使って監査ログを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.accounts.auditlogIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "user",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.AuditlogIndexRequest`
+
+`requestOptions`: `Accounts.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 認証 {#auth}
+
+<AccordionGroup>
+
+<Accordion title="new ServerToServerAuth({ clientId, clientSecret, ... })">
+
+OAuth 2.0 の `client_credentials` グラントを使用して認証します。このフローはユーザーを介さず、リフレッシュトークンも返しません。アクセストークンの有効期限が切れると、SDK はクライアント認証情報を使って新しいトークンを自動的にリクエストします。
+
+```typescript title="usage"
+import { FrameioClient, ServerToServerAuth } from "frameio";
+
+const auth = new ServerToServerAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+});
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**パラメーター**
+
+`clientId`: `string` — Adobe IMS の OAuth クライアント ID。
+
+`clientSecret`: `string` — Adobe IMS の OAuth クライアントシークレット。
+
+`scopes`: `string` — スペース区切りのスコープ（OAuth 2.0 RFC 6749）。デフォルトはサーバー間認証用のスコープです。
+
+`imsBaseUrl`: `string` — ステージング環境や別環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`fetch`: `typeof fetch` — カスタムの fetch 実装（プロキシ、TLS などに使用）。
+
+`onTokenRefreshed`: `OnTokenRefreshed` — トークンを取得するたびに呼び出される任意のコールバック。
+
+`timeout`: `number` — HTTP リクエストのタイムアウト（ミリ秒）。デフォルトは 30000 です。
+
+`maxRetries`: `number` — 一時的な障害に対する最大リトライ回数。デフォルトは 2 です。
+
+`refreshBuffer`: `number` — 有効期限の何秒前に事前リフレッシュを行うか。デフォルトは 60 です。
+
+`logger`: `Logger` — 診断出力用のロガーインスタンス。
+
+**メソッド**
+
+`getToken(): Promise<string>` — 有効なアクセストークンを返します。必要に応じてリフレッシュします。クライアントには次のように渡します: `new FrameioClient({ token: () => auth.getToken() })`。
+
+`authenticate(): Promise<TokenResponse>` — 新しいアクセストークンを明示的に取得します。
+
+`revoke(): Promise<void>` — サーバー側でトークンを失効させ、ローカルの状態をクリアします。
+
+`exportTokens(): ExportedTokens` — 永続化のために現在のトークンの状態をエクスポートします。
+
+`importTokens(data: ExportedTokens): void` — 以前にエクスポートしたオブジェクトからトークンの状態を復元します。
+
+</Accordion>
+
+<Accordion title="new WebAppAuth({ clientId, clientSecret, redirectUri, ... })">
+
+OAuth 2.0 の `authorization_code` グラントを使用して認証します。クライアントシークレットを安全に保管できるサーバーサイドアプリケーションで使用します。
+
+```typescript title="usage"
+import { randomBytes } from "crypto";
+import { FrameioClient, WebAppAuth } from "frameio";
+
+const auth = new WebAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+    redirectUri: "https://myapp.com/callback",
+});
+const url = auth.getAuthorizationUrl({ state: randomBytes(24).toString("hex") });
+// redirect the user to url ...
+await auth.exchangeCode("CODE_FROM_CALLBACK");
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**パラメーター**
+
+`clientId`: `string` — Adobe IMS の OAuth クライアント ID。
+
+`clientSecret`: `string` — Adobe IMS の OAuth クライアントシークレット。
+
+`redirectUri`: `string` — 登録済みのリダイレクト URI。
+
+`scopes`: `string` — スペース区切りのスコープ（OAuth 2.0 RFC 6749）。
+
+`imsBaseUrl`: `string` — ステージング環境や別環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`fetch`: `typeof fetch` — カスタムの fetch 実装（プロキシ、TLS などに使用）。
+
+`onTokenRefreshed`: `OnTokenRefreshed` — トークンをリフレッシュするたびに呼び出される任意のコールバック。
+
+`timeout`: `number` — HTTP リクエストのタイムアウト（ミリ秒）。デフォルトは 30000 です。
+
+`maxRetries`: `number` — 一時的な障害に対する最大リトライ回数。デフォルトは 2 です。
+
+`refreshBuffer`: `number` — 有効期限の何秒前に事前リフレッシュを行うか。デフォルトは 60 です。
+
+`logger`: `Logger` — 診断出力用のロガーインスタンス。
+
+**メソッド**
+
+`getToken(): Promise<string>` — 有効なアクセストークンを返します。必要に応じてリフレッシュします。
+
+`getAuthorizationUrl({ state }): string` — Adobe IMS の認可 URL を構築します。そのまま返送される不透明な CSRF/state 値を渡します。
+
+`exchangeCode(code: string): Promise<TokenResponse>` — 認可コードをアクセストークンとリフレッシュトークンに交換します。
+
+`refresh(): Promise<TokenResponse>` — トークンのリフレッシュを手動で実行します。
+
+`revoke(): Promise<void>` — サーバー側でトークンを失効させ、ローカルの状態をクリアします。
+
+`exportTokens(): ExportedTokens` — 永続化のために現在のトークンの状態をエクスポートします。
+
+`importTokens(data: ExportedTokens): void` — 以前にエクスポートしたオブジェクトからトークンの状態を復元します。
+
+</Accordion>
+
+<Accordion title="new SPAAuth({ clientId, redirectUri, ... })">
+
+`authorization_code` + PKCE（クライアントシークレットなし）を使用して認証します。クライアントシークレットを安全に保管できない、ブラウザーベースのシングルページアプリで使用します。
+
+```typescript title="usage"
+import { randomBytes } from "crypto";
+import { FrameioClient, SPAAuth } from "frameio";
+
+const auth = new SPAAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "https://myapp.com/cb",
+});
+const result = await auth.getAuthorizationUrl({ state: randomBytes(24).toString("hex") });
+// redirect the user to result.url, store result.codeVerifier ...
+await auth.exchangeCode({ code: "CODE_FROM_CALLBACK", codeVerifier: result.codeVerifier });
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**パラメーター**
+
+`clientId`: `string` — Adobe IMS の OAuth クライアント ID。
+
+`redirectUri`: `string` — 登録済みのリダイレクト URI。
+
+`scopes`: `string` — スペース区切りのスコープ（OAuth 2.0 RFC 6749）。
+
+`imsBaseUrl`: `string` — ステージング環境や別環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`fetch`: `typeof fetch` — カスタムの fetch 実装（プロキシ、TLS などに使用）。
+
+`onTokenRefreshed`: `OnTokenRefreshed` — トークンをリフレッシュするたびに呼び出される任意のコールバック。
+
+`timeout`: `number` — HTTP リクエストのタイムアウト（ミリ秒）。デフォルトは 30000 です。
+
+`maxRetries`: `number` — 一時的な障害に対する最大リトライ回数。デフォルトは 2 です。
+
+`refreshBuffer`: `number` — 有効期限の何秒前に事前リフレッシュを行うか。デフォルトは 60 です。
+
+`logger`: `Logger` — 診断出力用のロガーインスタンス。
+
+**メソッド**
+
+`getToken(): Promise<string>` — 有効なアクセストークンを返します。必要に応じてリフレッシュします。
+
+`getAuthorizationUrl({ state }): Promise<AuthorizationUrlResult>` — PKCE チャレンジ付きの Adobe IMS 認可 URL を構築します。`url` と `codeVerifier` を含む `AuthorizationUrlResult` を返します。
+
+`exchangeCode({ code, codeVerifier }): Promise<TokenResponse>` — 認可コードと PKCE ベリファイアをトークンに交換します。
+
+`refresh(): Promise<TokenResponse>` — トークンのリフレッシュを手動で実行します。
+
+`revoke(): Promise<void>` — サーバー側でトークンを失効させ、ローカルの状態をクリアします。
+
+`exportTokens(): ExportedTokens` — 永続化のために現在のトークンの状態をエクスポートします。
+
+`importTokens(data: ExportedTokens): void` — 以前にエクスポートしたオブジェクトからトークンの状態を復元します。
+
+</Accordion>
+
+<Accordion title="new NativeAppAuth({ clientId, redirectUri, ... })">
+
+デスクトップアプリやモバイルアプリ向けに、`authorization_code` + PKCE を使用して認証します。API は `SPAAuth` と共通です。カスタムスキームのリダイレクト URI（例: `myapp://callback`）を使用してください。
+
+```typescript title="usage"
+import { randomBytes } from "crypto";
+import { FrameioClient, NativeAppAuth } from "frameio";
+
+const auth = new NativeAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "myapp://callback",
+});
+const result = await auth.getAuthorizationUrl({ state: randomBytes(24).toString("hex") });
+// open result.url in the system browser, store result.codeVerifier ...
+await auth.exchangeCode({ code: "CODE_FROM_CALLBACK", codeVerifier: result.codeVerifier });
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+**パラメーター**
+
+`clientId`: `string` — Adobe IMS の OAuth クライアント ID。
+
+`redirectUri`: `string` — 登録済みのリダイレクト URI（カスタムスキームに対応）。
+
+`scopes`: `string` — スペース区切りのスコープ（OAuth 2.0 RFC 6749）。
+
+`imsBaseUrl`: `string` — ステージング環境や別環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`fetch`: `typeof fetch` — カスタムの fetch 実装（プロキシ、TLS などに使用）。
+
+`onTokenRefreshed`: `OnTokenRefreshed` — トークンをリフレッシュするたびに呼び出される任意のコールバック。
+
+`timeout`: `number` — HTTP リクエストのタイムアウト（ミリ秒）。デフォルトは 30000 です。
+
+`maxRetries`: `number` — 一時的な障害に対する最大リトライ回数。デフォルトは 2 です。
+
+`refreshBuffer`: `number` — 有効期限の何秒前に事前リフレッシュを行うか。デフォルトは 60 です。
+
+`logger`: `Logger` — 診断出力用のロガーインスタンス。
+
+**メソッド**
+
+`SPAAuth` と同じです: `getToken()`、`getAuthorizationUrl({ state })`、`exchangeCode({ code, codeVerifier })`、`refresh()`、`revoke()`、`exportTokens()`、`importTokens(data)`。
+
+</Accordion>
+
+<Accordion title="AuthorizationUrlResult">
+
+`SPAAuth.getAuthorizationUrl()` と `NativeAppAuth.getAuthorizationUrl()` が返すオブジェクトです。認可 URL と PKCE コードベリファイアを保持します。
+
+**プロパティ**
+
+`url`: `string` — ユーザーのリダイレクト先となる完全な認可 URL。
+
+`codeVerifier`: `string` — 保存しておき、`exchangeCode()` に渡す PKCE コードベリファイア。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 認証の例外 {#auth-exceptions}
+
+すべての認証エラーは `FrameioAuthError` を継承しており、`frameio` からインポートできます。
+
+| 例外 | 説明 |
+| --- | --- |
+| `FrameioAuthError` | 認証 SDK のすべてのエラーの基底エラー。 |
+| `AuthenticationError` | トークンの交換またはリフレッシュに失敗しました。`errorCode` プロパティと `errorDescription` プロパティを持ちます。 |
+| `TokenExpiredError` | リフレッシュトークンの有効期限が切れています。再認証が必要です。 |
+| `NetworkError` | ネットワークリクエストに失敗しました（タイムアウト、接続エラーなど）。 |
+| `RateLimitError` | Adobe IMS が 429 を返し、リトライ回数の上限に達しました。`retryAfter` プロパティを持ちます。 |
+| `PKCEError` | PKCE の検証に失敗しました。 |
+| `ConfigurationError` | 必須の設定が不足しているか、無効です。 |
+
+#### コレクション {#collections}
+
+<AccordionGroup>
+
+<Accordion title="client.collections.index(accountId, projectId, { ...params }) -> Frameio.CollectionsResponse">
+
+プロジェクトのコレクションを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.collections.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator,project",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CollectionsIndexRequest`
+
+`requestOptions`: `Collections.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.collections.show(accountId, collectionId, { ...params }) -> Frameio.CollectionResponse">
+
+コレクションの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.collections.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator,project",
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`collectionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CollectionsShowRequest`
+
+`requestOptions`: `Collections.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### コメント {#comments}
+
+<AccordionGroup>
+
+<Accordion title="client.comments.show(accountId, commentId, { ...params }) -> Frameio.CommentWithIncludesResponse">
+
+ファイル上の単一のコメントを表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.comments.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    include: "owner",
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`commentId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CommentsShowRequest`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.delete(accountId, commentId) -> void">
+
+アセットからコメントを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.comments.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`commentId`: `Frameio.Uuid` —
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.update(accountId, commentId, { ...params }) -> Frameio.CommentResponse">
+
+指定したアセットのコメントを更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.comments.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    data: {
+        annotation:
+            '[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed: false,
+        page: 4,
+        text: "This is great!",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`commentId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateCommentParams`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.index(accountId, fileId, { ...params }) -> core.Page<Frameio.CommentWithIncludes>">
+
+指定したアセットのコメントを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+const response = await client.comments.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        timestamp_as_timecode: true,
+        include: "owner",
+        sort: "owner_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.comments.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    include: "owner",
+    sort: "owner_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CommentsIndexRequest`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.create(accountId, fileId, { ...params }) -> Frameio.CommentResponse">
+
+ファイルにコメントを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.comments.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    timestamp_as_timecode: true,
+    data: {
+        annotation:
+            '[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed: false,
+        page: 4,
+        text: "This is great!",
+        timestamp: "00:00:02:12",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateCommentParams`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.createAttachment(accountId, commentId, { ...params }) -> Frameio.CommentAttachmentResponse">
+
+既存のコメントに添付ファイルを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.comments.createAttachment("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_size: 1024000,
+        media_type: "image/png",
+        name: "screenshot.png",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`commentId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateAttachmentParams`
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.comments.deleteAttachment(accountId, commentId, attachmentId) -> void">
+
+コメントから添付ファイルを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.comments.deleteAttachment("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`commentId`: `Frameio.Uuid` —
+
+`attachmentId`: `Frameio.Uuid` —
+
+`requestOptions`: `Comments.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### カスタムアクション {#custom-actions}
+
+<AccordionGroup>
+
+<Accordion title="client.customActions.actionsIndex(accountId, workspaceId, { ...params }) -> Frameio.ActionsWithIncludesResponse">
+
+指定したワークスペース内のアクションを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.customActions.actionsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionsIndexRequest`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsShow(accountId, actionId, { ...params }) -> Frameio.ActionWithIncludesResponse">
+
+カスタムアクションの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.customActions.actionsShow("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`actionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionsShowRequest`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsCreate(accountId, workspaceId, { ...params }) -> Frameio.ActionCreateResponse">
+
+ワークスペースにカスタムアクションを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.customActions.actionsCreate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        description: "customizing our workflow",
+        event: "my.event",
+        name: "First Custom Action",
+        timeout: 7,
+        url: "https://example.com/custom-action",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionCreateParams`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsUpdate(accountId, actionId, { ...params }) -> Frameio.ActionResponse">
+
+カスタムアクションの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.customActions.actionsUpdate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        active: true,
+        description: "customizing our workflow",
+        event: "my.event",
+        multi_asset: true,
+        name: "First Custom Action",
+        timeout: 7,
+        url: "https://example.com/custom-action",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`actionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ActionUpdateParams`
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.customActions.actionsDelete(accountId, actionId) -> void">
+
+カスタムアクションを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.customActions.actionsDelete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`actionId`: `Frameio.Uuid` —
+
+`requestOptions`: `CustomActions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ファイル {#files}
+
+<AccordionGroup>
+
+<Accordion title="client.files.list(accountId, folderId, { ...params }) -> Frameio.FileAssetsWithIncludesResponse">
+
+指定したフォルダー内のファイルを一覧表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+await client.files.list("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links.original",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FilesListRequest`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.create(accountId, folderId, { ...params }) -> Frameio.FileWithUploadUrlsResponse">
+
+親フォルダーの下に新しいファイルを作成します。このエンドポイントは `Create file (local upload)` と `Create file (remote upload)` に置き換えられました。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+await client.files.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_size: 1137444,
+        media_type: "image/png",
+        name: "asset.png",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCreateParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.show(accountId, fileId, { ...params }) -> Frameio.FileWithIncludesResponse">
+
+ファイルの詳細を表示します。<br />
+include クエリパラメーターを使用すると、レスポンスに追加のプロパティを選択的に含めることができます。
+
+<Note>
+
+`media_links.original` を含めた場合に、ユーザーがそのファイルをダウンロードする権限を持っていなければ、このエンドポイントは `403 Forbidden` エラーを返します。このユーザーにはウォーターマークが必須で、リクエストされた media_links がそれに対応していないためにコンテンツにアクセスできない場合、リクエスト自体は成功しますが、非対応のメディアリンクは null に設定されます。同様に、リクエストされたトランスコードリンクが特定のファイルに存在しない場合（例: 静止画像ファイルに対して `media_links.video_h264_180` を含めた場合）や、トランスコード処理が完了していない場合（つまり、ファイルのステータスが「transcoded」ではなく「uploaded」の場合）も、レスポンスペイロード内のそのリンクは null に設定されます。つまり、クライアントは null のメディアリンクを適切に処理する必要があります。
+
+</Note>
+
+レート制限: account_user あたり 1 秒ごとに 10 回
+
+```typescript title="usage"
+await client.files.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FilesShowRequest`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.delete(accountId, fileId) -> void">
+
+ID を指定してファイルを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.files.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.update(accountId, fileId, { ...params }) -> Frameio.FileResponse">
+
+ファイルの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.files.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "asset.png",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileUpdateParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.copy(accountId, fileId, { ...params }) -> Frameio.FileCopyResponse">
+
+ファイルをコピーします。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.files.copy("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    copy_metadata: true,
+    copy_comments: "none",
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCopyParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.createRemoteUpload(accountId, folderId, { ...params }) -> Frameio.FileRemoteUploadResponse">
+
+リモートアップロードにより、親フォルダーの下に新しいファイルを作成します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+await client.files.createRemoteUpload("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "asset.png",
+        source_url: "https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.png",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCreateRemoteUploadParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.move(accountId, fileId, { ...params }) -> Frameio.FileResponse">
+
+ファイルをフォルダーまたは version_stack に移動します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.files.move("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileMoveParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.createLocalUpload(accountId, folderId, { ...params }) -> Frameio.FileWithUploadUrlsResponse">
+
+ローカルアップロードにより、親フォルダーの下に新しいファイルを作成します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+await client.files.createLocalUpload("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_size: 1137444,
+        name: "asset.png",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FileCreateLocalUploadParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.showFileUploadStatus(accountId, fileId) -> Frameio.FileUploadStatusResponse">
+
+ファイルのアップロードステータスの詳細を表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+await client.files.showFileUploadStatus("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.files.importFile(accountId, folderId, { ...params }) -> Frameio.FileResponse">
+
+アカウントに設定されたストレージの場所からファイルをインポートします。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+await client.files.importFile("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        key: "uploads/08091b0f-a541-42f5-a059-5e8c4afecc12/original.png",
+        name: "asset.png",
+        storage_location: "123e4567-e89b-12d3-a456-426614174000",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`folderId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.FileImportParams`
+
+`requestOptions`: `Files.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### フォルダー権限 {#folder-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.folderPermissions.folderUserRolesIndex(accountId, folderId, { ...params }) -> Frameio.UserRolesResponse">
+
+指定したフォルダーのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.folderPermissions.folderUserRolesIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include_deactivated: true,
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderUserRolesIndexRequest`
+
+`requestOptions`: `FolderPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folderPermissions.folderUserRolesUpdate(accountId, folderId, userId, { ...params }) -> Frameio.UpdateUserRolesResponse">
+
+ユーザーがすでにフォルダーに追加されている場合は、そのフォルダーでのユーザーロールを更新します。ユーザーがフォルダーに追加されていない場合は、指定したロールでユーザーが追加されます。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.folderPermissions.folderUserRolesUpdate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        role: "editor",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateUserRolesParams`
+
+`requestOptions`: `FolderPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folderPermissions.delete(accountId, folderId, userId) -> void">
+
+指定したフォルダーからユーザーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.folderPermissions.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`requestOptions`: `FolderPermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### フォルダー {#folders}
+
+<AccordionGroup>
+
+<Accordion title="client.folders.show(accountId, folderId, { ...params }) -> Frameio.FolderWithIncludesResponse">
+
+フォルダーの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+await client.folders.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FoldersShowRequest`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.delete(accountId, folderId) -> void">
+
+ID を指定してフォルダーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+
+await client.folders.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.update(accountId, folderId, { ...params }) -> Frameio.FolderResponse">
+
+フォルダーの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.folders.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Folder name",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderUpdateParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.index(accountId, folderId, { ...params }) -> Frameio.AssetsWithIncludesResponse">
+
+指定したフォルダー内の子要素を一覧表示します。<br />
+include クエリパラメーターを使用すると、レスポンスに追加のプロパティを選択的に含めることができます。
+
+<Note>
+
+`media_links.original` を含めた場合に、ユーザーが対応するプロジェクト内のファイルをダウンロードする権限を持っていなければ、このエンドポイントは `403 Forbidden` エラーを返します。このユーザーにはウォーターマークが必須で、リクエストされた media_links がそれに対応していないためにコンテンツにアクセスできない場合、リクエスト自体は成功しますが、非対応のメディアリンクは null に設定されます。同様に、リクエストされたトランスコードリンクが特定のファイルに存在しない場合（例: 静止画像ファイルに対して `media_links.video_h264_180` を含めた場合）や、トランスコード処理が完了していない場合（つまり、ファイルのステータスが「transcoded」ではなく「uploaded」の場合）も、レスポンスペイロード内のメディアリンクは null に設定されます。つまり、クライアントは null のメディアリンクを適切に処理する必要があります。
+
+</Note>
+
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+await client.folders.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+    type: "file,folder,version_stack",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderIndexRequest`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.copy(accountId, folderId, { ...params }) -> Frameio.FolderCopyResponse">
+
+フォルダーをコピーします。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.folders.copy("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    copy_metadata: true,
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderCopyParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.list(accountId, folderId, { ...params }) -> Frameio.FoldersWithIncludesResponse">
+
+指定したフォルダー内のフォルダーを一覧表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+
+await client.folders.list("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FoldersListRequest`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.create(accountId, folderId, { ...params }) -> Frameio.FolderResponse">
+
+パスパラメーター `folder_id` で指定したフォルダー内に新しいフォルダーを作成します。
+レート制限: account_user あたり 1 秒ごとに 3 回
+
+```typescript title="usage"
+
+await client.folders.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Folder name",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderCreateParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.folders.move(accountId, folderId, { ...params }) -> Frameio.FolderResponse">
+
+フォルダーを別のフォルダーに移動します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.folders.move("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.FolderMoveParams`
+
+`requestOptions`: `Folders.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### グループ {#groups}
+
+<AccordionGroup>
+
+<Accordion title="client.groups.index(accountId, { ...params }) -> Frameio.GroupsWithIncludesResponse">
+
+アカウント内のグループを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.groups.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "creator_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.GroupsIndexRequest`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.groups.show(accountId, groupId, { ...params }) -> Frameio.GroupWithIncludesResponse">
+
+グループの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.groups.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`groupId`: `Frameio.Uuid` —
+
+`request`: `Frameio.GroupsShowRequest`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.groups.create(accountId, { ...params }) -> Frameio.GroupResponse">
+
+現在のアカウントにグループを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.groups.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        emoji: "smile",
+        name: "group-1",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.CreateGroupParams`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.groups.update(accountId, groupId, { ...params }) -> Frameio.GroupResponse">
+
+グループの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.groups.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        emoji: "smile",
+        name: "group-1",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`groupId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateGroupParams`
+
+`requestOptions`: `Groups.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### メタデータ {#metadata}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata.bulkUpdate(accountId, projectId, { ...params }) -> void" defaultOpen={true}>
+
+複数のファイルにわたってメタデータの値を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.metadata.bulkUpdate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_ids: ["09b31c2a-04de-464a-a593-643a36ef0d98", "b967fc36-4e18-4b48-a3ab-c790100e2baa"],
+        values: [
+            {
+                field_definition_id: "ff41ce50-269b-4624-8306-aac10e28ab94",
+                value: [
+                    {
+                        id: "e60f47b4-cf8e-4273-96d5-3258a830a0aa",
+                        type: "user",
+                    },
+                    {
+                        id: "24eeaf7e-ce27-4555-bc77-cce39900626d",
+                        type: "account_user_group",
+                    },
+                ],
+            },
+        ],
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.BulkUpdateMetadataParams`
+
+`requestOptions`: `Metadata.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.metadata.show(accountId, fileId, { ...params }) -> Frameio.MetadataResponse">
+
+ファイルのメタデータを表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.metadata.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    show_null: true,
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`fileId`: `Frameio.Uuid` —
+
+`request`: `Frameio.MetadataShowRequest`
+
+`requestOptions`: `Metadata.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### メタデータフィールド {#metadata-fields}
+
+<AccordionGroup>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsDelete(accountId, fieldDefinitionId) -> void">
+
+アカウントレベルのカスタムフィールド定義を削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsDelete(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`fieldDefinitionId`: `Frameio.Uuid` —
+
+`requestOptions`: `MetadataFields.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsUpdate(accountId, fieldDefinitionId, { ...params }) -> Frameio.FieldDefinitionResponse">
+
+アカウントレベルのカスタムフィールド定義を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsUpdate(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        data: {
+            field_type: "select",
+            field_configuration: {
+                enable_add_new: false,
+                options: [
+                    {
+                        display_name: "Option 1",
+                    },
+                    {
+                        display_name: "Option 2",
+                    },
+                ],
+            },
+            name: "Updated-Field-Name",
+        },
+    },
+);
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uui`d\` —
+
+`fieldDefinitionId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateFieldDefinitionParams`
+
+requestOptions: MetadataFields.RequestOptions
+
+</Accordion>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsIndex(accountId, { ...params }) -> Frameio.FieldDefinitionsWithIncludesResponse">
+
+アカウントレベルのフィールド定義を一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.MetadataFieldDefinitionsIndexRequest`
+
+`requestOptions`: `MetadataFields.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.metadataFields.metadataFieldDefinitionsCreate(accountId, { ...params }) -> Frameio.FieldDefinitionResponse">
+
+アカウントレベルのフィールド定義を作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.metadataFields.metadataFieldDefinitionsCreate("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        field_type: "select",
+        field_configuration: {
+            enable_add_new: false,
+            options: [
+                {
+                    display_name: "Option 1",
+                },
+                {
+                    display_name: "Option 2",
+                },
+            ],
+        },
+        name: "Fields definition name",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateFieldDefinitionParams`
+
+`requestOptions`: `MetadataFields.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### プロジェクト権限 {#project-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.projectPermissions.index(accountId, projectId, { ...params }) -> core.Page<Frameio.UserRole>">
+
+指定したプロジェクトのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+const response = await client.projectPermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.projectPermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectPermissionsIndexRequest`
+
+`requestOptions`: `ProjectPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projectPermissions.delete(accountId, projectId, userId) -> void">
+
+指定したプロジェクトからユーザーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+
+await client.projectPermissions.delete(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uui`d\` —
+
+`projectId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`requestOptions`: `ProjectPermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projectPermissions.projectUserRolesUpdate(accountId, projectId, userId, { ...params }) -> Frameio.UpdateUserRolesResponse">
+
+ユーザーがすでにプロジェクトに追加されている場合は、そのプロジェクトでのユーザーロールを更新します。ユーザーがプロジェクトに追加されていない場合は、指定したロールでユーザーが追加されます。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.projectPermissions.projectUserRolesUpdate(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        data: {
+            role: "editor",
+        },
+    },
+);
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`UserId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateUserRolesParams`
+
+`requestOptions`: `ProjectPermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### プロジェクト {#projects}
+
+<AccordionGroup>
+
+<Accordion title="client.projects.show(accountId, projectId, { ...params }) -> Frameio.ProjectWithIncludesResponse">
+
+プロジェクトの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+await client.projects.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectsShowRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.delete(accountId, projectId) -> void">
+
+プロジェクトを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+
+await client.projects.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uui`d\` —
+
+`projectId`: `Frameio.Uuid` —
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.update(accountId, projectId, { ...params }) -> Frameio.ProjectResponse">
+
+プロジェクトの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.projects.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Project Name",
+        restricted: true,
+        status: "active",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectUpdateParams`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.index(accountId, workspaceId, { ...params }) -> core.Page<Frameio.ProjectWithIncludes>">
+
+指定したワークスペース内のプロジェクトを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+const response = await client.projects.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include: "owner",
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.projects.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectsIndexRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.create(accountId, workspaceId, { ...params }) -> Frameio.ProjectResponse">
+
+指定したワークスペースにプロジェクトを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.projects.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "Project Name",
+        restricted: true,
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.ProjectsParams`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.accountProjectsIndex(accountId, { ...params }) -> Frameio.ProjectsWithIncludesResponse">
+
+指定したアカウント内で、認証済みユーザーがアクセスできるすべてのプロジェクトを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.projects.accountProjectsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.AccountProjectsIndexRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.projects.invitedProjectsIndex(accountId, { ...params }) -> Frameio.ProjectsWithIncludesResponse">
+
+指定したアカウント内で、現在のユーザーが招待されているものの、ワークスペースレベルのアクセス権を持たないプロジェクトを一覧表示します。これらは、ユーザーがより広いチーム/ワークスペースの権限を持たず、プロジェクト単位のコラボレーターアクセス権を持つプロジェクトです。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.projects.invitedProjectsIndex("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "owner",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.FrameOrAdobeId` —
+
+`request`: `Frameio.InvitedProjectsIndexRequest`
+
+`requestOptions`: `Projects.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 検索 {#search}
+
+<AccordionGroup>
+
+<Accordion title="client.search.search(accountId, { ...params }) -> Frameio.SearchResponse">
+
+アカウント内のアセット、フォルダー、プロジェクトを横断して検索します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.search.search("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    engine: "nlp",
+    query: "red car driving on highway",
+    filters: {
+        files_and_version_stacks: true,
+        folders: false,
+        projects: false,
+    },
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.SearchParams`
+
+`requestOptions`: `Search.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 共有 {#shares}
+
+<AccordionGroup>
+
+<Accordion title="client.shares.show(accountId, shareId) -> Frameio.ShareResponse">
+
+単一の共有を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.shares.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.delete(accountId, shareId) -> void">
+
+共有を削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.shares.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.update(accountId, shareId, { ...params }) -> Frameio.ShareResponse">
+
+共有を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.shares.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        access: "public",
+        description: "A descriptive summary of the share",
+        downloading_enabled: true,
+        expiration: "2026-01-22T17:04:53Z",
+        name: "Share Name",
+        passphrase: "as!dfj39sd(*",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateShareParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.listReviewers(accountId, shareId, { ...params }) -> core.Page<Frameio.User>">
+
+共有のレビュアーを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+const response = await client.shares.listReviewers(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.shares.listReviewers(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.SharesListReviewersRequestreParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.addReviewers(accountId, shareId, { ...params }) -> void">
+
+`adobe_user_id`、`email`、`user_id` の 3 種類の識別子を使って、セキュア共有にレビュアーを追加します。
+1 つのリクエストに含められる識別子タイプのパラメーターは 1 つだけです。
+共有が属するアカウントの Frame アカウントメンバーではないレビュアーを共有に追加できる識別子は、`email` だけです。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.shares.addReviewers("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        message: "Please join my share!",
+        reviewers: {
+            emails: ["email1@domain.com", "email2@domain.com"],
+        },
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.AddReviewersToShareParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.removeReviewers(accountId, shareId, { ...params }) -> void">
+
+`adobe_user_id`、`email`、`user_id` の 3 種類の識別子を使って、セキュア共有からレビュアーを削除します。
+1 つのリクエストに含められる識別子タイプのパラメーターは 1 つだけです。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.shares.removeReviewers("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        reviewers: {
+            adobe_user_ids: ["2A3C1A3D66C621B20A494021@176719f5667c82b4499999.e"],
+        },
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.RemoveReviewerParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.removeAsset(accountId, shareId, assetId) -> Frameio.RemoveAssetResponse">
+
+現在共有に含まれているアセットを、その共有から削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.shares.removeAsset(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`assetId`: `Frameio.Uuid` —
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.addAsset(accountId, shareId, { ...params }) -> Frameio.AddAssetResponse">
+
+新しいアセットを共有に追加します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.shares.addAsset("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        asset_id: "0cc1cb59-1d7c-4176-8532-afe099897318",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.AddAssetParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.index(accountId, projectId, { ...params }) -> core.Page<Frameio.Share>">
+
+プロジェクトの共有を一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+const response = await client.shares.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        sort: "name_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.shares.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`shareId`: `Frameio.Uuid` —
+
+`request`: `Frameio.SharesIndexRequest`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.shares.create(accountId, projectId, { ...params }) -> Frameio.ShareResponse">
+
+共有を作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.shares.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        type: "asset",
+        access: "public",
+        asset_ids: ["12eb1446-5736-4f93-85fc-3b636f156211", "f23a3b3e-7b1f-4655-b91a-acf0566e5bb9"],
+        downloading_enabled: true,
+        expiration: "2026-01-22T17:04:53Z",
+        name: "Share Name",
+        passphrase: "as!dfj39sd(*",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.CreateShareParams`
+
+`requestOptions`: `Shares.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ユーザー {#users}
+
+<AccordionGroup>
+
+<Accordion title="client.users.show() -> Frameio.ProfileResponse">
+
+ベアラートークンに関連付けられたユーザーの詳細を確認します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.users.show();
+```
+
+**パラメーター**
+`requestOptions`: `Users.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### バージョンスタック {#version-stacks}
+
+<AccordionGroup>
+
+<Accordion title="client.versionStacks.index(accountId, versionStackId, { ...params }) -> Frameio.AssetsWithIncludesResponse">
+
+指定したバージョンスタック内の子要素（ファイル）を一覧表示します。<br />
+include クエリパラメーターを使用すると、レスポンスに追加のプロパティを選択的に含めることができます。
+
+<Note>
+
+`media_links.original` を含めた場合に、ユーザーが対応するプロジェクト内のファイルをダウンロードする権限を持っていなければ、このエンドポイントは `403 Forbidden` エラーを返します。このユーザーにはウォーターマークが必須で、リクエストされた media_links がそれに対応していないためにコンテンツにアクセスできない場合、リクエスト自体は成功しますが、非対応のメディアリンクは null に設定されます。同様に、リクエストされたトランスコードリンクが特定のファイルに存在しない場合（例: 静止画像ファイルに対して `media_links.video_h264_180` を含めた場合）や、トランスコード処理が完了していない場合（つまり、ファイルのステータスが「transcoded」ではなく「uploaded」の場合）も、レスポンスペイロード内のメディアリンクは null に設定されます。つまり、クライアントは null のメディアリンクを適切に処理する必要があります。
+
+</Note>
+
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+await client.versionStacks.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`projectId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStacksIndexRequest`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.show(accountId, versionStackId, { ...params }) -> Frameio.VersionStackWithIncludesResponse">
+
+バージョンスタックの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+
+await client.versionStacks.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`versionStackId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStacksShowRequest`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.copy(accountId, versionStackId, { ...params }) -> Frameio.VersionStackCopyResponse">
+
+バージョンスタックをコピーします。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+現在、Adobe ストレージを基盤とするプロジェクト間でのバージョンスタックのコピーはサポートされていません。これらのプロジェクトでバージョンスタックをコピーするには、バージョンスタック内の個々のファイルをコピーしてから再度スタックする方法が、現時点でサポートされている方法です。
+
+```typescript title="usage"
+
+await client.versionStacks.copy("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    copy_metadata: true,
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`versionStackId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStackCopyParams`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.list(accountId, folderId, { ...params }) -> Frameio.VersionStacksWithIncludesResponse">
+
+指定したフォルダー内のバージョンスタックを一覧表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```typescript title="usage"
+
+await client.versionStacks.list("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "media_links",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStacksListRequest`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.create(accountId, folderId, { ...params }) -> Frameio.VersionStackWithIncludesResponse">
+
+親フォルダーの下に新しいバージョンスタックを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.versionStacks.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        file_ids: ["dd2a3cdd-fc90-41bd-a7b8-8a0447aec6d4", "79fed48a-8372-496e-8dcb-5e959b9b9fcf"],
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStackCreateParams`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.versionStacks.move(accountId, versionStackId, { ...params }) -> Frameio.VersionStackResponse">
+
+バージョンスタックをフォルダーに移動します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+
+await client.versionStacks.move("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        parent_id: "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    },
+});
+```
+
+**パラメーター**
+
+`accountId`: `Frameio.Uuid` —
+
+`folderId`: `Frameio.Uuid` —
+
+`request`: `Frameio.VersionStackMoveParams`
+
+`requestOptions`: `VersionStacks.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Webhook {#webhooks}
+
+<AccordionGroup>
+
+<Accordion title="client.webhooks.index(accountId, workspaceId, { ...params }) -> core.Page<Frameio.WebhookWithIncludes>">
+
+指定したワークスペースの Webhook を一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+const response = await client.webhooks.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include: "creator",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.webhooks.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WebhooksIndexRequest`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.create(accountId, workspaceId, { ...params }) -> Frameio.WebhookCreateResponse">
+
+シークレット付きの Webhook を 1 つ作成します。<br />
+有効なイベント:
+
+`file.created`,<br />
+`file.deleted`,<br />
+`file.ready`,
+`file.updated`,
+`file.upload.completed`,
+`file.versioned`,
+`file.copied`,
+`folder.created`,
+`folder.deleted`,
+`folder.updated`,
+`folder.copied`,
+`comment.completed`,
+`comment.created`,
+`comment.deleted`,
+`comment.uncompleted`,
+`comment.updated`,
+`customfield.created`,
+`customfield.updated`,
+`customfield.deleted`,
+`metadata.value.updated`,
+`project.created`,
+`project.deleted`,
+`project.updated`,
+`collection.created`,
+`collection.updated`,
+`collection.deleted`,
+`share.created`,
+`share.updated`,
+`share.deleted`,
+`share.viewed`<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.webhooks.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        events: [
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name: "New Webhook",
+        url: "https://url.example.com",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WebhookCreateParams`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.show(accountId, webhookId, { ...params }) -> Frameio.WebhookWithIncludesResponse">
+
+Webhook の詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.webhooks.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`webhookId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WebhooksShowRequest`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.delete(accountId, webhookId) -> void">
+
+Webhook を削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.webhooks.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`webhookId`: `Frameio.Uuid` —
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.webhooks.update(accountId, webhookId, { ...params }) -> Frameio.WebhookResponse">
+
+Webhook の詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.webhooks.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        active: true,
+        events: [
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name: "Updated Webhook",
+        url: "https://url.example.com",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`webhookId`: `Frameio.Uuid` —
+` `request`: `Frameio.WebhookUpdateParams\`
+
+`requestOptions`: `Webhooks.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ワークスペース権限 {#workspace-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.workspacePermissions.index(accountId, workspaceId, { ...params }) -> core.Page<Frameio.UserRole>">
+
+指定したワークスペースのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+const response = await client.workspacePermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.workspacePermissions.index(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        include_deactivated: true,
+        sort: "role_asc",
+        after: "<opaque_cursor>",
+        page_size: 10,
+        include_total_count: false,
+    },
+);
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspacePermissionsIndexRequest`
+
+`requestOptions`: `WorkspacePermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspacePermissions.workspaceUserRolesDelete(accountId, workspaceId, userId) -> void">
+
+指定したワークスペースからユーザーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.workspacePermissions.workspaceUserRolesDelete(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+);
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`requestOptions`: `WorkspacePermissions.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspacePermissions.workspaceUserRolesUpdate(accountId, workspaceId, userId, { ...params }) -> Frameio.UpdateUserRolesResponse">
+
+ユーザーがすでにワークスペースに追加されている場合は、そのワークスペースでのユーザーロールを更新します。ユーザーがワークスペースに追加されていない場合は、指定したロールでユーザーが追加されます。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.workspacePermissions.workspaceUserRolesUpdate(
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    {
+        data: {
+            role: "editor",
+        },
+    },
+);
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`userId`: `Frameio.Uuid` —
+
+`request`: `Frameio.UpdateUserRolesParams`
+
+`requestOptions`: `WorkspacePermissions.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ワークスペース {#workspaces}
+
+<AccordionGroup>
+
+<Accordion title="client.workspaces.show(accountId, workspaceId, { ...params }) -> Frameio.WorkspaceWithIncludesResponse">
+
+ワークスペースの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+await client.workspaces.show("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspacesShowRequest`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.delete(accountId, workspaceId) -> void">
+
+アカウントからワークスペースを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```typescript title="usage"
+await client.workspaces.delete("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b");
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.update(accountId, workspaceId, { ...params }) -> Frameio.WorkspaceResponse">
+
+ワークスペースを更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.workspaces.update("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", "b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "My Workspace",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`workspaceId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspaceParams`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.index(accountId, { ...params }) -> core.Page<Frameio.WorkspaceWithIncludes>">
+
+指定したアカウントのワークスペースを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```typescript title="usage"
+const response = await client.workspaces.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+for await (const item of response) {
+    console.log(item);
+}
+
+// Or you can manually iterate page-by-page
+let page = await client.workspaces.index("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    include: "creator",
+    sort: "name_asc",
+    after: "<opaque_cursor>",
+    page_size: 10,
+    include_total_count: false,
+});
+while (page.hasNextPage()) {
+    page = page.getNextPage();
+}
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspacesIndexRequest`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+<Accordion title="client.workspaces.create(accountId, { ...params }) -> Frameio.WorkspaceResponse">
+
+アカウントにワークスペースを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```typescript title="usage"
+await client.workspaces.create("b2702c44-c6da-4bb6-8bbd-be6e547ccf1b", {
+    data: {
+        name: "My Workspace",
+    },
+});
+```
+
+**パラメーター**
+`accountId`: `Frameio.Uuid` —
+
+`request`: `Frameio.WorkspaceParams`
+
+`requestOptions`: `Workspaces.RequestOptions`
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+### npm {#npm}
+
+<Info>
+
+[npm](https://www.npmjs.com/package/frameio) で表示
+
+</Info>
+
+---

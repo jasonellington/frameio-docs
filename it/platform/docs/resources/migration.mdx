@@ -1,0 +1,345 @@
+---
+title: "Guida alla migrazione dall’API Legacy di Frame.io alla V4"
+sidebarTitle: "Migrazione"
+---
+
+## Introduzione {#introduction}
+
+L’API Frame.io V4 è una riprogettazione dell’API Legacy, spesso indicata come *endpoint V2* o *API Frame.io V3*. La riprogettazione sfrutta appieno le nuove capacità e funzionalità di Frame V4, mantenendo tutte le funzionalità rilevanti dell’API Legacy. Questa guida illustra le principali differenze tra l’API Legacy e l’API V4 e fornisce indicazioni passo passo per aiutarti a eseguire la migrazione senza problemi.
+
+## Checklist di migrazione {#migration-checklist}
+
+<Steps>
+
+<Step title="Autenticazione">
+
+Per gli <Tooltip tip="Account che utilizzavano l’API Legacy con un developer token generato e che sono stati migrati automaticamente alla V4. Non sono inclusi gli account creati sulla V4 o migrati manualmente">**account migrati automaticamente alla V4**</Tooltip> non ancora amministrati tramite l’Adobe Admin Console, puoi continuare a utilizzare i Developer token Legacy gestiti nel [sito per sviluppatori di Frame.io](/it/platform/welcome), ma dovrai aggiungere alle tue richieste API un header con chiave `x-frameio-legacy-token-auth` e valore `true`. In caso contrario, segui i passaggi della sezione [Autenticazione](#adobe-developer-console-managed-authentication) più avanti.
+
+</Step>
+
+<Step title="Aggiorna le chiamate API esistenti">
+
+Tutte le route dell’API Legacy dovranno essere mappate alle nuove route e ai nuovi payload JSON dell’API V4. Più avanti trovi una tabella di [corrispondenza](#endpoint-mappings-legacy-api-to-v4) piuttosto completa che ti aiuterà in questo processo.
+
+</Step>
+
+<Step title="Test vivamente consigliati">
+
+**Esegui test approfonditi.** Poiché l’API presenta molte modifiche, si consiglia di eseguire i test con un account V4 per assicurarsi che la nuova API funzioni come previsto.
+
+</Step>
+
+<Step title="Implementa un accesso dedicato">
+
+Implementa un metodo di accesso dedicato per la V4, poiché gli URL di autenticazione sono separati. L’URL di autenticazione della V4 è diverso da quello dell’API Legacy, non restituisce nella risposta gli account non ancora aggiornati alla V4 e deve essere trattato come un’integrazione separata.
+
+</Step>
+
+</Steps>
+
+<Note>
+
+Se hai domande su un endpoint non elencato nella tabella di corrispondenza riportata di seguito, contatta il nostro team di supporto all’indirizzo [support@frame.io](mailto:support@frame.io).
+
+</Note>
+
+## Autenticazione gestita tramite Adobe Developer Console {#adobe-developer-console-managed-authentication}
+
+Per gli account migrati alla V4 gestiti tramite l’[Adobe Developer Console](https://developer.adobe.com/developer-console/), dovrai utilizzare l’API V4 con OAuth 2.0. Dovrai seguire i passaggi riportati di seguito.
+
+<Steps>
+
+<Step title="Crea un progetto Adobe">
+
+**Crea un progetto nell’Adobe Developer Console** e aggiungi Frame.io come prodotto.
+
+</Step>
+
+<Step title="Scegli il tipo di autenticazione">
+
+**Autenticati.** Per maggiori informazioni, consulta la [Guida all’autenticazione](https://developer.adobe.com/frameio/guides/Authentication/). Se il tuo account V4 non è ancora gestito tramite l’Adobe Admin Console, puoi saltare questo passaggio.
+
+- **Autenticazione utente**: si connette a Frame utilizzando un Client ID e/o un Client Secret e richiede che un utente acceda con nome utente e password.
+- **Autenticazione server-to-server**: si connette a Frame utilizzando Client ID e Client Secret, ma non richiede l’intervento di un utente per l’accesso tramite browser.
+
+</Step>
+
+<Step title="Implementa l’autenticazione Bearer">
+
+**Autenticazione JWT Bearer**: per ogni richiesta API, passa il token di autenticazione tramite un header con chiave `Authorization` e valore `Bearer <IMS_ACCESS_TOKEN>`.
+
+</Step>
+
+</Steps>
+
+## Corrispondenza degli endpoint (dall’API Legacy alla V4) {#endpoint-mappings-legacy-api-to-v4}
+
+<Note>
+
+Se utilizzi l’autenticazione con developer token legacy, dovrai aggiungere alle tue richieste API un header con chiave x-frameio-legacy-token-auth e valore true.
+
+</Note>
+
+Note generali utili per la migrazione:
+
+<Steps>
+
+<Step title="Payload">
+
+I payload di richiesta e risposta potrebbero essere diversi.
+
+</Step>
+
+<Step title="Team → Workspace">
+
+I ”Team” dell’API Legacy equivalgono ai “Workspace” della V4.
+
+</Step>
+
+<Step title="Asset">
+
+Gli ”Asset” dell’API Legacy sono ora suddivisi in “File”, “Cartelle” e “Version Stack” nella V4.
+
+</Step>
+
+<Step title="Permessi">
+
+Permessi e ruoli sono diversi nella V4, il che modifica la struttura degli endpoint. Nella V4 esistono ruoli utente a livello di workspace e di progetto. Per maggiori dettagli, consulta [Gestione dei permessi utente](/it/platform/docs/guides/managing-user-permissions).
+
+</Step>
+
+</Steps>
+
+### 1. Account e informazioni utente {#1-accounts-&-user-info}
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/accounts` <br />([Ottieni gli account di un utente](/it/platform/v2/api-reference/accounts/get-accounts)) | **GET** | `/v4/accounts` <br />([Elenca gli account](/it/platform/api-reference/accounts/index)) | La V4 restituisce tutti gli account a cui l’utente può accedere. |
+| **GET** | `/v2/accounts/{account_id}` <br />([Ottieni un account tramite ID](/it/platform/v2/api-reference/accounts/get-account)) | N/A | N/A | Le informazioni su un account specifico sono disponibili nell’endpoint di elenco degli account. |
+| **GET** | `/v2/me` <br />([Ottieni l’utente corrente](/it/platform/v2/api-reference/users/get-me)) | **GET** | `/v4/me` <br />([Dettagli utente](/it/platform/api-reference/users/show)) | Recupera il profilo dell’utente corrente. |
+| **GET** | `/v2/accounts/{account_id}/membership` | N/A | N/A | Ruoli e permessi sono gestiti tramite i permessi di workspace e di progetto. |
+
+### 2. Workspace (sostituiscono gli endpoint Team) {#2-workspaces-replaced-team-endpoints}
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/accounts/{account_id}/teams` <br />([Ottieni tutti i team di un account](/it/platform/v2/api-reference/teams/get-teams-by-account)) | **GET** | `/v4/accounts/{account_id}/workspaces` <br />([Elenca i workspace](/it/platform/api-reference/workspaces/index)) | Il concetto di “team” dell’API Legacy → “workspace” nella V4. |
+| **POST** | `/v2/accounts/{account_id}/teams` <br />([Crea un team per l’account indicato](/it/platform/v2/api-reference/teams/create-team)) | **POST** | `/v4/accounts/{account_id}/workspaces` <br />([Crea un workspace](/it/platform/api-reference/workspaces/create)) | Il corpo è simile (name, ecc.). La risposta è un oggetto workspace, non un oggetto team. |
+| **GET** | `/v2/teams/{team_id}` <br />([Ottieni un team](/it/platform/v2/api-reference/teams/get-team)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}` <br />([Mostra un workspace](/it/platform/api-reference/workspaces/show)) | Team ID → Workspace ID nella V4. |
+| **GET** | `/v2/teams/{team_id}/members` <br />([Ottieni i membri del team](/it/platform/v2/api-reference/teams/get-team-members)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/users` <br />[(Ottieni i membri del workspace)](/it/platform/api-reference/workspace-permissions/index) | Restituisce tutti gli utenti di un workspace |
+| **POST** | `/v2/teams/{team_id}/members` <br />([Aggiungi un membro al team)](/it/platform/v2/api-reference/teams/add-team-member)) | **PATCH** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/users/{user_id}` <br />([Aggiungi o aggiorna il ruolo di un utente nel workspace](/it/platform/api-reference/workspace-permissions/workspace-user-roles-update)) | Consente di aggiungere o rimuovere utenti da un workspace |
+| **GET** | `/v2/teams/{team_id}/membership` <br />([Ottieni l’appartenenza dell’utente al team](/it/platform/v2/api-reference/teams/get-membership-by-team)) | N/A | N/A | Ruoli e permessi sono gestiti tramite i permessi di workspace e di progetto. |
+
+### 3. Progetti {#3-projects}
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/teams/{team_id}/projects` <br />([Ottieni i progetti per team](/it/platform/v2/api-reference/projects/get-projects-by-team)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects` <br />([Elenca i progetti](/it/platform/api-reference/projects/index)) | Nella V4 è necessario fornire sia `account_id` sia `workspace_id`. |
+| **GET** | `/v2/projects/shared` | **GET** | `/v4/accounts/{account_id}/invited_projects` <br />([Elenca i progetti a cui sei stato invitato](https://next.developer.frame.io/platform/api-reference/projects/invited-projects-index)) | Elenca solo i progetti a cui sei stato invitato. `/v4/accounts/{account_id}/projects` elenca tutti i progetti, inclusi quelli a cui sei stato invitato |
+| **POST** | `/v2/teams/{team_id}/projects` <br />([Crea un progetto](/it/platform/v2/api-reference/projects/create-project)) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects` <br />([Crea un progetto](/it/platform/api-reference/projects/create)) | Il corpo è simile: `{ "name": "MyProject", ... }`. |
+| **GET** | `/v2/projects/{project_id}` <br />([Ottieni un progetto tramite ID](/it/platform/v2/api-reference/projects/get-project)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}` <br />([Mostra un progetto](/it/platform/api-reference/projects/show)) | Richiede `account_id` e `project_id` |
+| **PUT** | `/v2/projects/{project_id}` <br />([Aggiorna un progetto](/it/platform/v2/api-reference/projects/update-project)) | **PATCH** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects/{project_id}` <br />([Aggiorna un progetto](/it/platform/api-reference/projects/update)) | La V4 utilizza PATCH per gli aggiornamenti parziali. |
+| **DELETE** | `/v2/projects/{project_id}` <br />[(Elimina un progetto tramite ID)](/it/platform/v2/api-reference/projects/delete-project) | **DELETE** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects/{project_id}` <br />[(Elimina un progetto)](/it/platform/api-reference/projects/delete) | Rimuove il progetto. |
+| **GET** | `/v2/projects/{project_id}/collaborators` <br />([Ottieni i collaboratori del progetto](/it/platform/v2/api-reference/projects/get-project-collaborators)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}/users` <br />([Elenca i ruoli utente del progetto](/it/platform/api-reference/project-permissions/index)) | Restituisce tutti gli utenti di un progetto (l’equivalente più vicino all’endpoint legacy dei collaboratori) |
+| **POST** | `/v2/projects/{project_id}/collaborators` <br />([Aggiungi un collaboratore a un progetto](/it/platform/v2/api-reference/projects/add-collaborator-to-project)) | **PATCH** | `/v4/accounts/{account_id}/projects/{project_id}/users/{user_id}` <br />([Aggiorna i ruoli utente per il progetto indicato](/it/platform/api-reference/project-permissions/project-user-roles-update)) | Consente di aggiungere o rimuovere utenti da un progetto (l’equivalente più vicino all’endpoint legacy dei collaboratori) |
+
+### 4. Cartelle {#4-folders}
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/assets/{asset_id}/children` <br />([Recupera gli asset figli](/it/platform/v2/api-reference/assets/get-assets)) | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/children` <br />([Elenca gli elementi figli della cartella](/it/platform/api-reference/folders/index)) | Se nell’API Legacy il tuo `asset_id` era una cartella, nella V4 è ora `folder_id`. |
+| **POST** | `/v2/assets/{parent_asset_id}/children` <br />([Crea un asset](/it/platform/v2/api-reference/assets/create-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/folders` <br />([Crea una cartella](/it/platform/api-reference/folders/create)) | Nell’API Legacy si utilizzava `"type": "folder"`, nella V4 si usa `{"data": {"name": "Folder name"}}`. |
+| **GET** | `/v2/assets/{asset_id}` <br />([Ottieni un asset](/it/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([Mostra una cartella](/it/platform/api-reference/folders/show)) | L’API Legacy richiede “type”: “folder” <br />L’API V4 richiede `folder_id` e `account_id` nei parametri del percorso |
+| **PUT** | `/v2/assets/{asset_id}` ([Aggiorna un asset](/it/platform/v2/api-reference/assets/update-asset)) | **PATCH** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([Aggiorna una cartella](/it/platform/api-reference/folders/update)) | API Legacy: `asset_id` sarà l’ID della tua cartella <br />API V4: corpo: `{"data": {"name": "New Folder Name"}}`. |
+| **DELETE** | `/v2/assets/{asset_id}` <br />([Elimina un asset](/it/platform/v2/api-reference/assets/delete-asset)) | **DELETE** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([Elimina una cartella)](/it/platform/api-reference/folders/delete) | Rimuove la cartella. |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/folders` <br />([Elenca le cartelle](/it/platform/api-reference/folders/list)) | Elenca le cartelle contenute in una determinata cartella. (Ottieni root_folder_id dalla route che mostra il progetto e usalo per elencare tutte le cartelle al livello più alto.) |
+
+### 5. Version Stack {#5-version-stacks}
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/assets/{destination_folder}/copy` <br />([Copia un asset](/it/platform/v2/api-reference/assets/copy-asset)) | **POST** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/copy` <br />([Copia un version stack](/it/platform/api-reference/version-stacks/copy)) | Legacy: cartella di destinazione nel percorso; da usare con un version stack nella richiesta. V4: copia un version stack. |
+| **POST** | `/v2/assets/{asset_id}/version` <br />([Crea una versione di un asset](/it/platform/v2/api-reference/assets/add-version-to-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/version_stacks` <br />([Crea un version stack](/it/platform/api-reference/version-stacks/create)) | Crea un version stack. Richiede da 2 a 10 ID di file nel corpo della richiesta. |
+| **POST** | `/v2/assets/{asset_id}/version` <br />([Crea una versione di un asset](/it/platform/v2/api-reference/assets/add-version-to-asset)) | **PATCH** | `/v4/accounts/{account_id}/files/{file_id}/move` <br />([Sposta un file in un version stack](/it/platform/api-reference/files/move)) | Sposta un file in un version stack esistente. Usa il `version_stack_id` come `parent_id` nel corpo della richiesta. |
+| **GET** | `/v2/assets/{asset_id}/children` <br />([Recupera gli asset figli](/it/platform/v2/api-reference/assets/get-assets)) | **GET** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/children` <br />([Elenca gli elementi figli del version stack](/it/platform/api-reference/version-stacks/index)) | Legacy: da usare con l’asset_id di un version stack. V4: elenca gli elementi figli (file/versioni) di un version stack. |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/version_stacks` <br />([Elenca i version stack](/it/platform/api-reference/version-stacks/list)) | Elenca i version stack di una cartella. |
+| N/A | N/A | **PATCH** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/move` <br />([Sposta un version stack](/it/platform/api-reference/version-stacks/move)) | Sposta un version stack in un’altra cartella. |
+| **GET** | `/v2/assets/{asset_id}` <br />([Ottieni un asset](/it/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}` <br />([Mostra un version stack](/it/platform/api-reference/version-stacks/show)) | Legacy: da usare con l’asset_id di un version stack. V4: mostra i dettagli del version stack. |
+| **DELETE** | `/v2/assets/{asset_id}/unversion` (Rimozione della versione) | N/A | N/A | La rimozione delle versioni non è attualmente supportata nella V4. |
+
+### 6. File {#6-files}
+
+Nota: nella V4 esistono ora due endpoint per creare file (in locale e tramite caricamento S3). Per maggiori dettagli, consulta [Caricamento dei file](/it/platform/v4-experimental/docs/guides/how-to-upload).
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/assets/{parent_asset_id}/children` <br />([Crea un asset](/it/platform/v2/api-reference/assets/create-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/files/local_upload` <br />([Crea un file (caricamento locale)](/it/platform/api-reference/files/create-local-upload)) | API Legacy: richiede name, type, filetype, filesize e auto_version_id <br />API V4: account_id e folder_id sono obbligatori nei parametri del percorso, file_size e name sono obbligatori nel payload |
+| N/A | N/A | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/files/remote_upload` <br />([Crea un file (caricamento remoto)](/it/platform/api-reference/files/create-remote-upload)) | Account_id e folder_id sono obbligatori nei parametri del percorso, source url e name sono obbligatori nel payload |
+| **GET** | `/v2/assets/{asset_id}` <br />([Ottieni un asset](/it/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/files/{file_id}` <br />([Mostra un file)](/it/platform/api-reference/files/show) | Mostra i dettagli del file: sono disponibili molti include per restituire ulteriori dettagli del file nella risposta. |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/files/{file_id}/status` <br />([Ottieni i metadati del file](/it/platform/api-reference/files/show-file-upload-status)) | Ottiene lo stato di un caricamento remoto avviato dall’endpoint di creazione file con caricamento remoto. |
+| **PUT** | `/v2/assets/{asset_id}` <br />([Aggiorna un asset](/it/platform/v2/api-reference/assets/update-asset)) | **PATCH** | `/v4/accounts/{account_id}/files/{file_id}` <br />([Aggiorna un file](/it/platform/api-reference/files/update)) | Aggiorna il nome del file. |
+| **DELETE** | `/v2/assets/{asset_id}` <br />([Elimina un asset](/it/platform/v2/api-reference/assets/delete-asset)) | **DELETE** | `/v4/accounts/{account_id}/files/{file_id}` <br />([Elimina un file](/it/platform/api-reference/files/delete)) | 204 No Content in caso di successo. |
+
+### 7. Commenti {#7-comments}
+
+La maggior parte delle funzionalità dei commenti dell’API V4 è attualmente supportata.
+
+<Info>
+
+**Funzionalità in arrivo:**
+
+- Reazioni ai commenti, ovvero emoji
+- Visualizzazione o modifica dello stato di completamento dei commenti
+- Visualizzazione di chi ha visto un commento (impressioni)
+
+</Info>
+
+<Note>
+
+Il campo “timestamp” rappresenta il framestamp su cui è stato lasciato il commento (a partire da 1), non il timestamp
+
+</Note>
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/assets/{asset_id}/comments` <br />([Ottieni tutti i commenti e le risposte di un thread di commenti](/it/platform/v2/api-reference/comments/get-comments)) | **GET** | `/v4/accounts/{account_id}/files/{file_id}/comments` <br />([Elenca i commenti](/it/platform/api-reference/comments/index)) | Elenca i commenti su un file. |
+| **POST** | `/v2/assets/{asset_id}/comments` <br />([Crea un commento](/it/platform/v2/api-reference/comments/create-comment)) | **POST** | `/v4/accounts/{account_id}/files/{asset_id}/comments` <br />([Crea un commento](/it/platform/api-reference/comments/create)) | Crea un commento. Il corpo è simile: `{"text":"Nice","timestamp":12.3}`. |
+| **GET** | `/v2/comments/{comment_id}` <br />([Ottieni un commento tramite ID](/it/platform/v2/api-reference/comments/get-comment)) | **GET** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([Mostra un commento](/it/platform/api-reference/comments/show)) | Recupera un singolo commento tramite ID. |
+| **PUT** | `/v2/comments/{comment_id}` <br />([Aggiorna un commento](/it/platform/v2/api-reference/comments/update-comment)) | **PATCH** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([Aggiorna un commento)](/it/platform/api-reference/comments/update) | Aggiorna testo, tempo, ecc. |
+| **DELETE** | `/v2/comments/{comment_id}` <br />([Elimina un commento](/it/platform/v2/api-reference/comments/delete-comment)) | **DELETE** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([Elimina un commento](/it/platform/api-reference/comments/delete)) | Rimuove il commento. |
+| **GET** | `/v2/comments/{comment_id}/impressions` <br />([Ottieni le impressioni](/it/platform/v2/api-reference/comments/get-comment-impressions)) | N/A | N/A | Le impressioni non sono attualmente supportate nella V4. |
+
+### 8. Condivisioni (Review Link / Presentation) {#8-shares-review-links-/-presentations}
+
+In Frame V4 i link di condivisione non sono più suddivisi tra review link e presentation link. Nella V4 il link di condivisione può ora essere configurato con stili diversi per corrispondere all’esperienza di revisione o di presentazione.
+
+Nota: l’interazione con review link e presentation legacy tramite l’API V4 non è supportata.
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/projects/{project_id}/review_links` <br />([Elenca i review link di un progetto](/it/platform/v2/api-reference/review-links/list)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}/shares` <br />([Elenca le condivisioni](https://developer.adobe.com/frameio/api/current/#tag/Shares/operation/shares.index)) | Elenca le condivisioni di un progetto (nota: non include i review link e le presentation legacy) |
+| **POST** | `/v2/projects/{project_id}/review_links` <br />([Crea un review link)](/it/platform/v2/api-reference/review-links/review-link-create)) | **POST** | `/v4/accounts/{account_id}/projects/{project_id}/shares` <br />([Crea una condivisione](https://developer.adobe.com/frameio/api/current/#tag/Shares/operation/shares.create)) | Crea un nuovo link di condivisione. Il corpo potrebbe essere `{"data":{"name":"Review Link","type":"review"}}`. |
+| **POST** | `/v2/review_links/{link_id}/assets` <br />([Aggiungi un asset a un review link](/it/platform/v2/api-reference/review-links/review-link-item-create)) | **POST** | `/v4/accounts/{account_id}/shares/{share_id}/assets` <br />([Aggiungi un nuovo asset alla condivisione](/it/platform/api-reference/shares/add-asset)) | Aggiunge un asset a una condivisione. Supporta file, cartelle e version stack. |
+| N/A | Non esiste | **DELETE** | `/v4/accounts/{account_id}/shares/{share_id}/assets/{asset_id}` <br />[(Elimina condivisione)](/it/platform/api-reference/shares/remove-asset) | Rimuove un asset dalla condivisione |
+| **DELETE** | `/v2/review_links/{link_id}` <br />([Elimina un review link](/it/platform/v2/api-reference/review-links/review-link-delete)) | **DELETE** | `/v4/accounts/{account_id}/shares/{share_id}` <br />[(Elimina condivisione)](/it/platform/api-reference/shares/delete) | Elimina il link di condivisione. |
+| **PUT** | `/v2/review_links/{review_link_id}` <br />([Aggiorna un review link](/it/platform/v2/api-reference/review-links/review-link-update)) | **PATCH** | `/v4/accounts/{account_id}/shares/{share_id}` <br />[(Aggiorna condivisione)](/it/platform/api-reference/shares/update) | Aggiorna il link di condivisione |
+
+### 9. Webhook {#9-webhooks}
+
+I webhook utilizzati nella V3 verranno migrati e, nella maggior parte dei casi, funzioneranno allo stesso modo. Al momento della migrazione verranno disabilitati e dovranno essere abilitati per funzionare. Saranno necessarie alcune modifiche per gli eventi relativi agli asset, che ora sono suddivisi tra file e cartelle. Esistono inoltre alcuni nuovi eventi specifici della V4 da tenere presenti: metadata.value.updated, gli eventi relativi alle collection e gli eventi relativi alle condivisioni.
+
+Prima di riabilitare i webhook migrati, consulta i [limiti di frequenza dei webhook](/it/platform/docs/guides/webhooks#webhook-rate-limits). Gli eventi dei webhook V4 e delle Custom Action condividono limiti di **1.000 eventi al minuto** e **20.000 eventi all’ora** per account. Entrambi i limiti si applicano al volume combinato nell’intero account.
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/teams/{team_id}/hooks` <br />[(Crea webhook)](/it/platform/v2/api-reference/webhooks/create-webhook-for-team) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspaces_id}/webhooks` <br />[(Crea webhook)](/it/platform/api-reference/webhooks/create) | Fornisci `{"data":{"url":"...","events":["file.created",...]}}`. |
+| **GET** | `/v2/accounts/{account_id}/webhooks` <br />[(Ottieni i webhook di un account)](/it/platform/v2/api-reference/webhooks/get-webhooks-by-account) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspaces_id}/webhooks` <br />[(Elenca webhook)](/it/platform/api-reference/webhooks/index) | Ottiene tutti i webhook di un workspace. Nota: per ottenere tutti i webhook di un account, è necessario ottenere tutti i workspace dell’account e quindi tutti i webhook di tali workspace. |
+| **GET** | `/v2/hooks/{hook_id}` <br />[(Ottieni webhook)](/it/platform/v2/api-reference/webhooks/get-webhook) | **GET** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(Elenca webhook)](/it/platform/api-reference/webhooks/index) | Ottiene le informazioni sul webhook |
+| **PUT** | `/v2/hooks/{hook_id}` <br />[(Aggiorna webhook)](/it/platform/v2/api-reference/webhooks/update-webhook) | **PATCH** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(Aggiorna webhook)](https://developer.adobe.com/frameio/api/experimental/#tag/Webhooks/operation/webhooks.update) | Aggiorna le impostazioni del webhook |
+| **DELETE** | `/v2/hooks/{hook_id}` <br />[(Elimina webhook)](/it/platform/v2/api-reference/webhooks/delete-webhook) | **DELETE** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(Elimina webhook)](https://developer.adobe.com/frameio/api/experimental/#tag/Webhooks/operation/webhooks.delete) | Rimuove il webhook. |
+
+### 10. Custom Action {#10-custom-actions}
+
+Le custom action utilizzate nella V3 verranno migrate, ma richiederanno alcune modifiche alle richieste e alla gestione delle risposte. Al momento della migrazione verranno disabilitate e dovranno essere abilitate per funzionare. Per maggiori dettagli, consulta questo [(documento)](/it/platform/docs/guides/custom-actions#migrated-actions)
+
+Nota: gli endpoint delle custom action si trovano attualmente nell’API sperimentale e richiedono l’header “api-version: experimental”.
+
+| Metodo | Endpoint Legacy | Metodo | Endpoint V4 | Note |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/teams/{team_id}/actions` ([Crea una custom action](/it/platform/v2/api-reference/custom-actions/create-action-for-team)) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/actions` ([Crea una custom action](/it/platform/v4-experimental/api-reference/custom-actions/actions-create)) | Crea una custom action in un workspace. |
+| **DELETE** | `/v2/actions/{action_id}` ([Elimina una custom action](/it/platform/v2/api-reference/custom-actions/delete-action)) | **DELETE** | `/v4/accounts/{account_id}/actions/{action_id}` ([Elimina una custom action](/it/platform/v4-experimental/api-reference/custom-actions/actions-delete)) | Elimina una custom action. |
+| **PUT** | `/v2/actions/{action_id}` ([Aggiorna una custom action](/it/platform/v2/api-reference/custom-actions/update-action)) | **PATCH** | `/v4/accounts/{account_id}/actions/{action_id}` ([Aggiorna una custom action](/it/platform/v4-experimental/api-reference/custom-actions/actions-update)) | Aggiorna i dettagli della custom action. |
+| **GET** | `/v2/teams/{team_id}/actions` ([Ottieni le custom action di un team)](/it/platform/v2/api-reference/custom-actions/get-actions-by-account) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/actions` ([Elenca le custom action](/it/platform/v4-experimental/api-reference/custom-actions/actions-index)) | Elenca le custom action di un determinato workspace. |
+| **GET** | `/v2/actions/{action_id}` ([Ottieni una custom action tramite ID](/it/platform/v2/api-reference/custom-actions/get-action)) | **GET** | `/v4/accounts/{account_id}/actions/{action_id}` ([Mostra i dettagli di una custom action](/it/platform/v4-experimental/api-reference/custom-actions/actions-show)) | Mostra i dettagli della custom action. |
+
+## Passaggi della migrazione {#migration-steps}
+
+<Steps>
+
+<Step title="Adegua gli endpoint V2 non supportati">
+
+**Adegua** tutti gli endpoint Legacy V2 non supportati.
+
+</Step>
+
+<Step title="Aggiorna gli URL di base">
+
+**Aggiorna gli URL di base** da `api.frame.io/v2/...` a `api.frame.io/v4/...`.
+
+</Step>
+
+<Step title="Aggiorna le richieste API">
+
+**Aggiorna le richieste API** nel tuo codice in modo che facciano riferimento al nuovo schema degli endpoint.
+
+</Step>
+
+<Step title="Aggiorna i payload JSON">
+
+**Aggiorna i payload JSON** degli schemi di richiesta/risposta per assicurarti di produrre e utilizzare i campi corretti.
+
+</Step>
+
+<Step title="Aggiorna la terminologia">
+
+Aggiorna la terminologia: “teams” → “workspaces”; “assets” → “files/folders”; “review links” o “presentation links” → “shares” nel tuo codice e nel tuo front-end.
+
+</Step>
+
+<Step title="Testa gli endpoint">
+
+**Testa** tutti gli endpoint appena aggiornati. Se ricevi errori 403, 404 o 422, verifica gli endpoint, la struttura del payload della richiesta, ecc.
+
+</Step>
+
+<Step title="Analizza le risposte di errore">
+
+**Analizza** le nuove risposte di errore dettagliate, cercando il problema nella risposta JSON `{"errors": [...]}` se la chiamata API non va a buon fine.
+
+</Step>
+
+<Step title="Distribuisci in produzione">
+
+**Distribuisci** in produzione dopo la convalida con un account V4 di [Frame.io](http://frame.io/).
+
+</Step>
+
+</Steps>
+
+## Gestione degli errori e problemi comuni {#error-handling-&-common-issues}
+
+<Note>
+
+Alcune route restituiscono errori con descrizioni personalizzate che potrebbero differire leggermente dagli esempi riportati di seguito.
+
+</Note>
+
+<CardGroup cols={2}>
+
+<Card title="Errori del client (4xx)" icon="triangle-exclamation" iconType="solid">
+
+- **400** Bad Request: verifica la correttezza del payload.
+- **401** Unauthorized: token di autorizzazione non valido o mancante.
+- **403** Forbidden: scope mancante oppure l’utente non dispone dell’accesso.
+- **404** Not Found: verifica l’endpoint, la versione dell’API o gli ID.
+- **422** Unprocessable Entity: convalida i dati della richiesta
+- **429** Too Many Requests: implementa nuovi tentativi con backoff.
+
+</Card>
+
+<Card title="Errori del server (5xx)" icon="server" iconType="solid">
+
+- **500** Internal Server Error: riprova dopo un breve intervallo.
+
+</Card>
+
+</CardGroup>
+
+## Supporto degli SDK {#sdk-support}
+
+Analogamente all’SDK Legacy, è disponibile un SDK Python che gli sviluppatori possono utilizzare e, per la prima volta, è disponibile anche un SDK TypeScript. Questi SDK offrono funzionalità simili ma metodi completamente diversi; se stai passando dall’SDK Legacy all’SDK V4, assicurati di aggiornare il tuo codice di conseguenza. Puoi trovarli ai link seguenti:
+[Introduzione agli SDK](/it/platform/docs/getting-started#sdks)
+[SDK Python](/it/platform/docs/sdk-reference/python-sdk-reference)
+[SDK TypeScript](/it/platform/docs/sdk-reference/type-script-sdk-reference)
+
+---

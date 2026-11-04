@@ -1,0 +1,164 @@
+---
+title: "ハウツー: 認可の管理"
+sidebarTitle: "認可の管理"
+---
+
+## 概要 {#overview}
+
+このガイドでは、トークンの更新、失効、安全な保存方法など、Frame.io におけるデバイス認可トークンの管理手順について説明します。
+
+## 前提条件 {#prerequisites}
+
+適切に設定されていることを確認するため、[Implementing C2C: Setting Up](/ja/camera-to-cloud/implementing-c2c-setting-up) ガイドを確認してください。
+
+必要な要素:
+
+- Frame.io から発行された有効な `client_secret`
+- [認証と認可のガイド](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で説明されている、割り当て済みの `client_id`
+- 有効な `access_token` および `refresh_token` の資格情報
+
+## 認可トークンを理解する {#understanding-authorization-tokens}
+
+[デバイス認証](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)に関する前のガイドでは、ユーザー認証を通じて最初の認可トークンを取得するプロセスについて説明しました。
+
+アクセストークンは約 8 時間有効です。デバイスを頻繁に再ペアリングする必要がないように、`offline` スコープを使用して、認可とともにリフレッシュトークンを取得します。このリフレッシュトークンにより、有効期限が切れた際に新しいアクセストークンを生成できます。
+
+リフレッシュトークンは 14 日間有効です。アクセストークンの有効期間を意図的に制限することで、トークンが漏洩した場合の潜在的な脆弱性を最小限に抑え、セキュリティを強化しています。リフレッシュトークンの有効期限が切れる前に認可を更新しなかった場合は、ユーザーによる再認証が必要になることに注意してください。
+
+## アクセストークンの更新プロセス {#access-token-renewal-process}
+
+アクセストークンの有効期限が切れると、API リクエストに対して次のレスポンスが返されます。
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+新しいトークンを取得するには、次のコマンドを実行します。
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/auth/token` の詳細なドキュメントは[こちら](/ja/camera-to-cloud/api-reference/authentication/auth-device-token)で確認できます
+
+</Info>
+
+この実装では、セキュリティを強化するために複数の認証要素が必要です。権限のない第三者がインテグレーションになりすますには、`refresh_token` と `client_secret` の両方を入手する必要があります。
+
+更新に成功すると、次のレスポンスが生成されます。
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+トークンの更新に成功すると、以前の資格情報は無効になります。新しい認可トークンを必ず適切に保存してください。
+
+期限切れのリフレッシュトークンを再利用しようとすると、次の結果になります。
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+これは、トークンがすでに処理済みで、もはや有効ではないことを示しています。
+
+<Danger>
+
+**更新中に 401 を受け取った場合**
+
+トークンの更新中に `401 Not Authorized` レスポンスを受け取った場合は、資格情報が無効になっていることを示しており、新たに認可プロセスを行う必要があります。
+
+</Danger>
+
+## 更新レスポンスの失敗への対処 {#handling-failed-refresh-responses}
+
+`refresh_token` の値は一度しか使用できないため、ネットワークの中断やシステムのシャットダウンなどによって更新レスポンスを受け取れなかった場合は、認証/認可の一連の手順を最初からやり直す必要があります。
+
+このセキュリティプロトコルは不便に感じられるかもしれませんが、システムの完全性を維持するために不可欠です。
+
+## トークンの失効プロセス {#token-revocation-process}
+
+プロジェクトの完了やアプリケーションのリセットなど、Frame.io へのアクセスを終了する必要がある場合があります。現在の認可を終了する際は、適切な失効手順を実装してください。
+
+認可を失効させるには、次のコマンドを実行します。
+
+<Info>
+
+**再認可**
+
+失効後は、[認証と認可のガイド](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で説明されているとおりに、認証と認可のプロセスをやり直す必要があります。
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]'
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/auth/revoke` の完全なドキュメントは[こちら](/ja/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)で確認できます
+
+</Info>
+
+システムはペイロードなしでヘッダーを返します。成功は `200` ステータスコードで示されます。
+
+```text
+HTTP/2 200
+...
+```
+
+失効後、`access_token` による認証を必要とする Frame.io の操作は `Not Authorized` を返します。アクセスを復元するには、デバイスをプロジェクトに再ペアリングする必要があります。
+
+## トークンの保存の実装 {#token-storage-implementation}
+
+システムの再起動をまたいで認可を維持するには、トークンを安全に保存する必要があります。次の重要なガイドラインに従ってください。
+
+**ユーザーアクセス制御を実装する:** トークンの可視性とアクセスを、アプリケーションのプロセスのみに制限します。
+
+**ストレージの暗号化を有効にする:** `client_secret` や認可の資格情報など、保存されたトークンを暗号化します。認可キーをプレーンテキスト形式で保持しないでください。
+
+**資格情報を分離する:** デモ用の Python アプリケーションではストレージを統合していますが、本番環境では認可トークンと `client_secret` を分けて保存する必要があります。次の点を考慮してください。
+
+- `client_secret` と `client_id` はデバイスの永続的な資格情報であり、失われるとデバイスは恒久的に機能しなくなります
+- 認可トークンはデバイスの動作中に定期的に更新されます
+- ストレージを分離しておけば、トークンのストレージが破損しても、認証を完全にリセットする必要はなく、デバイスの再ペアリングだけで済みます
+
+トークンの保存には SQLite が最適ですが、少なくとも認可データとコアとなる資格情報は別々に保存するようにしてください。
+
+## 次のステップ {#next-steps}
+
+ここまでお疲れさまでした。続いて[接続ステータスとハートビートのガイド](/ja/camera-to-cloud/how-to-heartbeats-connection-info-and-status)に進んでください。ご質問やご不明な点があれば、私たちのチームにお問い合わせください。

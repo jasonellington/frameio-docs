@@ -1,0 +1,674 @@
+---
+title: "Frame.io MCP"
+---
+
+Frame.io MCP, ospitato all’indirizzo `https://mcp.frame.io/v1/mcp`, collega al tuo account Frame.io i client compatibili con MCP come Claude, ChatGPT, Cursor, VS Code e GitHub Copilot. Una volta connesso, puoi gestire la tua attività su Frame.io tramite un agente di IA.
+
+Questa guida spiega come funziona l’MCP, come connettersi e cosa può fare una volta attivo, oltre a fornire un riferimento degli strumenti e alcuni prompt di esempio per iniziare. Se non conosci MCP, la sezione successiva illustra il protocollo prima dei passaggi di connessione.
+
+---
+
+## Model Context Protocol {#model-context-protocol}
+
+MCP è uno standard aperto, creato da Anthropic, per collegare i client di IA a sistemi esterni. Un sistema connesso espone un insieme di strumenti, ovvero operazioni che l’agente di IA può chiamare. Quando effettui una richiesta, l’agente sceglie lo strumento giusto, chiama il server e usa la risposta per soddisfare la richiesta.
+
+Per maggiori informazioni su MCP, consulta l’[annuncio originale](https://www.anthropic.com/news/model-context-protocol) di Anthropic.
+
+---
+
+## Come funziona {#how-it-works}
+
+### Architettura {#architecture}
+
+```
+┌───────────────┐        ┌─────────────────────┐        ┌───────────────┐
+│   AI Agent    │        │     Frame.io MCP    │        │ Frame.io API  │
+│(Claude, etc.) │◀──────▶│  mcp.frame.io/mcp   │◀──────▶│ api.frame.io  │
+└───────────────┘        └──────────┬──────────┘        └───────────────┘
+                                    │
+                           ┌────────┴────────┐
+                           │   Adobe Login   │
+                           │  (OAuth 2.0)    │
+                           └─────────────────┘
+```
+
+---
+
+### Autenticazione {#authentication}
+
+L’autenticazione utilizza OAuth 2.0 tramite Adobe IMS e richiede un Adobe ID associato al tuo account Frame.io. L’MCP non supporta gli account Frame.io Legacy.
+
+Ogni client prevede passaggi di connessione specifici, descritti di seguito, ma in sostanza il processo è questo: l’autenticazione viene eseguita una sola volta, alla prima connessione, dopodiché l’MCP gestisce automaticamente l’aggiornamento dei token. Vieni reindirizzato alla schermata di accesso di Adobe per accedere e autorizzare l’accesso, quindi torni al tuo agente di IA con la connessione attiva.
+
+Le chiamate agli strumenti vengono eseguite con i tuoi permessi Frame.io. L’MCP può fare solo ciò che il ruolo del tuo account consente già, quindi uno strumento che tenta di superare il tuo livello di accesso restituisce un errore di permesso invece di eseguire l’azione. Consulta [Gestione dei permessi utente](/it/platform/docs/guides/managing-user-permissions) per scoprire come i ruoli corrispondono alle funzionalità.
+
+#### Adobe Managed Accounts (AMA) e Frame Managed Accounts (FMA) {#adobe-managed-accounts-ama-and-frame-managed-accounts-fma}
+
+Frame.io prevede due tipi di account utente gestiti in modo diverso, e questo è importante durante l’autenticazione. Consulta [Frame Managed vs. Adobe Managed Accounts](https://help.frame.io/en/articles/13719174-frame-managed-vs-adobe-managed-accounts) per un’analisi completa.
+
+I **Frame Managed Accounts (FMA)** vengono creati e gestiti direttamente in Frame.io. Accedi con le tue credenziali Adobe alla richiesta di IMS, autorizza l’accesso e sei connesso.
+
+Gli **Adobe Managed Accounts (AMA)** vengono amministrati tramite l’Adobe Admin Console, in genere per i team enterprise. L’autenticazione passa attraverso IMS come per gli FMA, ma la differenza fondamentale è che la stessa identità Adobe può appartenere a più organizzazioni, talvolta indicate come account o profilo account. Quella in cui ti autentichi determina a quale account Frame.io l’MCP può accedere.
+
+Quando il flusso OAuth si apre nel browser, Adobe IMS verifica se hai già effettuato l’accesso. In tal caso, riutilizza quella sessione senza chiederti di selezionare un profilo. Se quella sessione appartiene a un’organizzazione diversa da quella collegata al tuo account Frame.io, l’autenticazione andrà a buon fine ma finirai nel posto sbagliato. L’MCP si connette senza errori, ma le chiamate all’API di Frame.io restituiscono risultati vuoti o errori di permesso.
+
+Se utilizzi un AMA e riscontri questo comportamento dopo la connessione, consulta [Errori di autenticazione multi-account AMA](#ama-multi-account-authentication-errors) nella sezione Risoluzione dei problemi.
+
+---
+
+Per connettersi è necessario un account Frame.io attivo con un Adobe ID associato (ulteriori informazioni sulla connessione all’autenticazione Adobe sono disponibili [qui](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication)).
+
+<Tip>
+
+**Se questi passaggi sono diversi**
+
+I client descritti di seguito modificano spesso i propri flussi di configurazione MCP. Questa guida viene aggiornata man mano che tali modifiche vengono rilasciate, ma se le opzioni o le etichette che vedi differiscono dai passaggi seguenti, consulta la documentazione del client indicata in ciascuna sezione per le istruzioni più recenti.
+
+</Tip>
+
+---
+
+<Tabs>
+
+<Tab title="Claude">
+
+## Connessione a Claude {#connecting-to-claude}
+
+Questi passaggi riguardano Claude Desktop. Claude è disponibile anche su Web, iOS, Cowork e Code Desktop. Consulta la [documentazione sui connettori di Anthropic](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities) per verificare i passaggi di configurazione per la piattaforma che stai utilizzando.
+
+<Steps>
+
+<Step title="Apri Connettori">
+
+In Claude Desktop, apri **Customize** dalla barra dei menu. Seleziona **Connectors** nella barra laterale sinistra, quindi fai clic su **+** nell’angolo in alto a destra del pannello Connectors.
+
+</Step>
+
+<Step title="Inserisci i dettagli del server">
+
+Nella finestra di dialogo **Add custom connector**, compila entrambi i campi:
+
+```
+  Name: Frame.io
+  URL: https://mcp.frame.io/v1/mcp
+```
+
+Fai clic su **Add**.
+
+</Step>
+
+<Step title="Autenticati">
+
+Frame.io compare nella sezione **Not connected** con l’etichetta **CUSTOM**. Fai clic su **Connect** nel pannello di destra. Verrai indirizzato ad Adobe IMS. Accedi con l’Adobe ID associato al tuo account Frame.io. Dopo aver autorizzato l’accesso, tornerai a Claude Desktop.
+
+</Step>
+
+<Step title="Controlla i permessi degli strumenti">
+
+Dopo l’autenticazione, Frame.io passa alla sezione **Web**. Il pannello di destra elenca gli strumenti suddivisi in **Interactive tools** e **Read-only tools**.
+
+Ogni gruppo ha un’impostazione di permesso, impostata su **Needs approval** per impostazione predefinita. Fai clic sul menu a discesa per modificarla:
+
+| Impostazione | Comportamento |
+| --- | --- |
+| Always allow | Claude chiama lo strumento senza chiedere conferma |
+| Needs approval | Claude si ferma e chiede conferma prima di ogni chiamata allo strumento |
+| Blocked | Claude non può utilizzare questi strumenti |
+| Custom | Configura i permessi per singolo strumento |
+
+Gli strumenti di sola lettura possono essere impostati in sicurezza su **Always allow**. Lascia tutti gli altri strumenti su **Needs approval** finché non avrai letto la sezione [Impostazioni di approvazione degli strumenti](#tool-approval-settings) più avanti.
+
+Per maggiori dettagli, consulta la documentazione di Claude sui [permessi dei connettori](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities).
+
+</Step>
+
+<Step title="Usa gli strumenti di Frame.io">
+
+Una volta connesso, chiedi a Claude di eseguire attività su Frame.io usando un linguaggio naturale. Claude rende disponibili automaticamente gli strumenti del connettore e sceglie quello giusto per ogni richiesta.
+
+</Step>
+
+</Steps>
+
+<Tip>
+
+Per verificare che la connessione funzioni, chiedi a Claude: *“Elenca i miei account Frame.io.”*
+
+</Tip>
+
+</Tab>
+
+<Tab title="ChatGPT">
+
+## Connessione a ChatGPT {#connecting-to-chatgpt}
+
+Questi passaggi riguardano l’app desktop di ChatGPT. Gli strumenti di Frame.io MCP sono supportati anche su ChatGPT Web e ChatGPT iOS. Consulta il [centro assistenza di OpenAI sulle app in ChatGPT](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt) per verificare i passaggi di configurazione per la piattaforma che stai utilizzando.
+
+<Steps>
+
+<Step title="Aggiungi il server">
+
+In ChatGPT, apri **Settings** e seleziona **Plugins** (sotto **Integrations** nel menu a sinistra). In alto a destra, apri il menu **Add** e scegli **Add MCP Server**. Imposta il tipo su **Streamable HTTP** e compila:
+
+```
+ Name: Frame.io
+ URL: https://mcp.frame.io/v1/mcp
+```
+
+Fai clic su **Save**. Frame.io viene aggiunto alla tabella dei server con un pulsante **Authenticate**.
+
+</Step>
+
+<Step title="Autenticati">
+
+Fai clic su **Authenticate** accanto a Frame.io per avviare l’accesso Adobe. Accedi con l’Adobe ID associato al tuo account Frame.io e autorizza l’accesso.
+
+</Step>
+
+<Step title="Controlla i permessi degli strumenti">
+
+ChatGPT chiede conferma prima di determinate azioni, a seconda dell’azione e dei permessi dell’app. Leggi la sezione [Impostazioni di approvazione degli strumenti](#tool-approval-settings) prima di modificare queste impostazioni predefinite. Conviene controllare gli strumenti di scrittura ed eliminazione, come caricamenti, spostamenti di file, eliminazioni e modifiche alle condivisioni, prima di automatizzarli.
+
+In un workspace gestito, le azioni a tua disposizione potrebbero essere controllate anche dall’amministratore del workspace.
+
+</Step>
+
+<Step title="Usa gli strumenti di Frame.io">
+
+Chiedi a ChatGPT di usare Frame.io quando è pertinente, seleziona **Frame.io** dal composer oppure menzionalo direttamente con **@Frame.io**.
+
+<Tip>
+
+Per verificare che la connessione funzioni, chiedi: *“@Frame.io Elenca i miei account Frame.io.”*
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="VS Code">
+
+## Connessione a VS Code {#connecting-to-vs-code}
+
+Fai clic sul pulsante qui sotto per aprire VS Code con Frame.io MCP pronto per essere aggiunto. Fai clic su **Install**, quindi accedi con il tuo account Adobe quando richiesto.
+
+[Installa in VS Code](vscode:mcp/install?%7B%22name%22%3A%22frameio%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.frame.io%2Fv1%2Fmcp%22%7D)
+
+<Tip>
+
+Per verificare che la connessione funzioni, chiedi: *“Elenca i miei account Frame.io.”*
+
+</Tip>
+
+<AccordionGroup>
+
+<Accordion title="Configurazione manuale">
+
+<Steps>
+
+<Step title="Aggiungi il server">
+
+Apri la Command Palette con `Cmd+Shift+P` (macOS) o `Ctrl+Shift+P` (Windows, Linux) ed esegui **MCP: Add Server**. Quando richiesto:
+
+1. Seleziona **HTTP (HTTP or Server-Sent Events)**
+2. Inserisci l’URL: `https://mcp.frame.io/v1/mcp`
+3. Inserisci un nome: `frameio-mcp`
+4. Seleziona **Global** per rendere il server disponibile in tutti i workspace
+
+VS Code scrive automaticamente la configurazione del server.
+
+</Step>
+
+<Step title="Autenticati">
+
+Si apre una finestra del browser su Adobe IMS. Accedi con l’Adobe ID associato al tuo account Frame.io e autorizza l’accesso.
+
+</Step>
+
+<Step title="Controlla i permessi degli strumenti">
+
+La prima volta che esegui uno strumento di Frame.io, VS Code ti chiede di confermare che consideri attendibile il server. Successivamente, per impostazione predefinita, chiede conferma prima di ogni chiamata a uno strumento. Usa il pulsante **Configure Tools** nella vista Chat per abilitare o disabilitare i singoli strumenti di Frame.io ed esegui **MCP: Reset Trust** dalla Command Palette per confermare nuovamente il server. Prima di preapprovare qualsiasi cosa, leggi la sezione [Impostazioni di approvazione degli strumenti](#tool-approval-settings) più avanti.
+
+Per maggiori dettagli, consulta la documentazione di VS Code sulla [gestione di approvazioni e permessi](https://code.visualstudio.com/docs/agents/run/approvals).
+
+</Step>
+
+<Step title="Usa gli strumenti di Frame.io nella vista Chat">
+
+Apri la **vista Chat** (`Ctrl+Alt+I` / `⌃⌘I`) e passa alla **modalità Agent**, in cui sono disponibili gli strumenti di Frame.io. Fai la tua richiesta in linguaggio naturale e VS Code sceglierà lo strumento giusto.
+
+</Step>
+
+</Steps>
+
+</Accordion>
+
+</AccordionGroup>
+
+</Tab>
+
+<Tab title="Cursor">
+
+## Connessione a Cursor {#connecting-to-cursor}
+
+Fai clic sul pulsante qui sotto per aprire Cursor con Frame.io MCP pronto per essere aggiunto. Fai clic su **Install** per aggiungere l’MCP. Quindi fai clic su **Authenticate** per accedere con il tuo account Adobe quando richiesto.
+
+[Installa in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=frame-io-mcp&config=eyJ1cmwiOiJodHRwczovL21jcC5mcmFtZS5pby92MS9tY3AiLCJ0eXBlIjoiaHR0cCJ9)
+
+<Tip>
+
+Per verificare che la connessione funzioni, chiedi: *“Elenca i miei account Frame.io.”*
+
+</Tip>
+
+<AccordionGroup>
+
+<Accordion title="Configurazione manuale" id="configure-manually-1">
+
+Cursor supporta i server MCP tramite un file di configurazione JSON. È necessario Cursor 0.45 o versioni successive.
+
+<Steps>
+
+<Step title="Aggiungi mcp.json">
+
+Crea `~/.cursor/mcp.json` con il seguente contenuto:
+
+```json
+{
+  "mcpServers": {
+    "frameio-mcp": {
+      "url": "https://mcp.frame.io/v1/mcp"
+    }
+  }
+}
+```
+
+Questa è la configurazione globale e rende il server disponibile in tutti i progetti. La chiave `frameio-mcp` è un identificatore locale e può essere rinominata a piacere.
+
+</Step>
+
+<Step title="Apri le impostazioni MCP">
+
+Apri le impostazioni di Cursor con `Cmd+,` (macOS) o `Ctrl+,` (Windows, Linux) e vai a **Features > MCP**. `frameio-mcp` comparirà nell’elenco dei server.
+
+</Step>
+
+<Step title="Autenticati">
+
+Fai clic su **Enable** accanto a `frameio-mcp`. Cursor apre una finestra del browser su Adobe IMS. Accedi con l’Adobe ID associato al tuo account Frame.io e autorizza l’accesso.
+
+</Step>
+
+<Step title="Controlla i permessi degli strumenti">
+
+Per impostazione predefinita, la modalità **Auto-review** di Cursor chiede l’approvazione prima delle chiamate a strumenti rischiose. Prima di passare a **Allowlist** o **Run Everything** in **Settings > Agents > Approvals & Execution**, oppure di aggiungere strumenti di Frame.io a una allowlist, leggi la sezione [Impostazioni di approvazione degli strumenti](#tool-approval-settings) più avanti.
+
+Per maggiori dettagli, consulta la documentazione di Cursor sulle [Run Modes](https://cursor.com/docs/agent/security/run-modes).
+
+</Step>
+
+<Step title="Usa gli strumenti di Frame.io in Cursor">
+
+Apri una finestra **Composer**, in cui sono disponibili gli strumenti di Frame.io. Fai la tua richiesta in linguaggio naturale e Cursor sceglierà lo strumento giusto.
+
+</Step>
+
+</Steps>
+
+</Accordion>
+
+</AccordionGroup>
+
+</Tab>
+
+<Tab title="GitHub Copilot CLI">
+
+## Connessione a GitHub Copilot CLI {#connecting-to-the-github-copilot-cli}
+
+Questi passaggi presuppongono che GitHub Copilot CLI sia già installato. Consulta la [documentazione di GitHub su Copilot CLI](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli) per configurarlo.
+
+<Steps>
+
+<Step title="Aggiungi il server">
+
+In una sessione attiva di Copilot CLI, esegui:
+
+```
+/mcp add frameio
+```
+
+La CLI ti guida attraverso un breve modulo, un campo alla volta:
+
+```
+Type: HTTP
+URL: https://mcp.frame.io/v1/mcp
+HTTP Headers: leave blank
+Tools: * to enable all of Frame.io's tools
+Defer Tools: Auto
+```
+
+**Tools** controlla quali strumenti del server sono disponibili. `*` li abilita tutti. Per abilitare solo strumenti specifici, elenca i nomi degli strumenti separati da virgole.
+
+**Defer Tools** controlla come vengono caricati questi strumenti. `Auto` li carica su richiesta tramite la ricerca degli strumenti, in modo che le loro definizioni non occupino la finestra di contesto finché non sono necessarie, il che è adatto a un insieme di strumenti ampio come quello di Frame.io. `Never` mantiene tutti gli strumenti caricati fin dall’inizio. In questo caso `Auto` è l’impostazione predefinita migliore.
+
+</Step>
+
+<Step title="Autenticati">
+
+Dopo il modulo, la CLI mostra `Server Saved` e `OAuth authentication is required`.
+
+Premi Invio per autenticarti: si aprirà una finestra del browser con l’accesso Adobe. Accedi con l’Adobe ID associato al tuo account Frame.io e autorizza l’accesso.
+
+Se l’operazione riesce, la CLI mostra `Successfully authenticated with frameio` e ti riporta a un elenco dei server MCP attivi.
+
+</Step>
+
+<Step title="Usa gli strumenti di Frame.io">
+
+Rivolgiti a Copilot in linguaggio naturale: utilizzerà gli strumenti di Frame.io quando la tua richiesta lo richiede. Esegui `/mcp show frameio` oppure `/mcp list` per verificare che il server risulti connesso.
+
+<Tip>
+
+Per verificare che la connessione funzioni, chiedi: *“Elenca i miei account Frame.io.”*
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Strumenti disponibili {#available-tools}
+
+Riferimento degli strumenti disponibili in Frame.io MCP. Se manca uno strumento o una funzionalità di cui hai bisogno, faccelo sapere.
+
+<Tip>
+
+**Una nota sui nomi**
+
+Questo MCP consolida l’elenco di file, cartelle e version stack in  `read_assets` . I valori dei metadati vengono letti direttamente negli oggetti file e cartella anziché tramite uno strumento di lettura dedicato.
+
+</Tip>
+
+Gli strumenti disponibili sono suddivisi nelle categorie **Setup**, **Read**, **Write**, **Delete** o **Feedback**.
+
+Gli strumenti **Read** recuperano dati senza apportare modifiche. Gli strumenti **Write** creano, aggiornano, spostano o ripristinano contenuti. Gli strumenti **Delete** rimuovono contenuti. I file e le cartelle eliminati possono essere ripristinati, ma le eliminazioni di altri tipi di risorse sono permanenti.
+
+La categoria di ciascuno strumento è indicata accanto a esso qui sotto.<br />
+<br />
+**Sfoglia gli strumenti:**[Configurazione e navigazione](#setup-and-navigation) · [Asset e struttura](#assets-and-structure) · [Commenti](#comments) · [Metadati](#metadata) · [Condivisione](#sharing) · [Membri](#membership) · [Caricamenti](#uploads) · [Eliminazione e diagnostica](#deletion-and-diagnostics)
+
+---
+
+### Impostazioni di approvazione degli strumenti {#tool-approval-settings}
+
+Collegare un qualsiasi server MCP, non solo questo, consente al tuo agente di IA di eseguire azioni con i tuoi accessi e le tue credenziali. Trattalo con la stessa attenzione che riserveresti a qualsiasi integrazione in grado di raggiungere il tuo account o i tuoi file.
+
+Prima di modificare le impostazioni dei permessi predefinite, scopri come funziona l’esecuzione degli strumenti.
+
+Quando una categoria di strumenti è impostata su **Always allow**, il tuo agente di IA chiama automaticamente quegli strumenti, senza conferma e senza un’anteprima di ciò che sta per accadere. Questo va bene per le consultazioni di sola lettura. Significa però che un prompt come *“organizza questi file nelle cartelle giuste”* potrebbe spostare i file nel posto sbagliato prima che tu abbia la possibilità di verificare dove sono finiti.
+
+**Impostazioni predefinite consigliate:**
+
+| Tipo di strumento | Gestione consigliata |
+| --- | --- |
+| Read | Si possono approvare automaticamente in sicurezza, se il client lo supporta |
+| Write | Controlla ogni chiamata prima che venga eseguita |
+| Delete | Controlla ogni chiamata prima che venga eseguita: questi strumenti rimuovono contenuti |
+
+<Tip>
+
+**Strumenti di sola lettura**
+
+Gli strumenti di sola lettura riportano l’annotazione standard `readOnlyHint`, che Claude, ChatGPT, VS Code e Cursor utilizzano per identificare le letture come operazioni che non apportano modifiche, di solito raggruppandole separatamente o saltando la richiesta di approvazione. La gestione esatta varia in base al client.
+
+</Tip>
+
+Ogni client implementa l’approvazione in modo diverso. Nessuna impostazione funziona allo stesso modo ovunque:
+
+- **Claude Desktop:** imposta i permessi per categoria di strumenti, oppure per singolo strumento tramite l’impostazione **Custom**, nel pannello delle impostazioni del connettore. Consulta la documentazione di Claude sui [permessi dei connettori](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)
+- **ChatGPT:** per impostazione predefinita chiede conferma prima di determinate azioni. Puoi memorizzare una scelta per il resto di una conversazione, ma viene reimpostata quando ne avvii una nuova. Per maggiori dettagli, consulta il [centro assistenza di OpenAI sulle app in ChatGPT](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt).
+- **VS Code:** conferma che consideri attendibile il server alla prima richiesta, quindi approva le chiamate agli strumenti man mano che vengono eseguite. Usa il pulsante **Configure Tools** nella vista Chat per abilitare o disabilitare i singoli strumenti e **MCP: Reset Trust** dalla Command Palette per confermare nuovamente un server. Per maggiori dettagli, consulta la documentazione di VS Code sulla [gestione di approvazioni e permessi](https://code.visualstudio.com/docs/agents/run/approvals).
+- **Cursor:** scegli una Run Mode in **Settings > Agents > Approvals & Execution**. Auto-review (l’impostazione predefinita) chiede conferma prima delle chiamate rischiose. Allowlist e Run Everything saltano completamente l’approvazione. Per maggiori dettagli, consulta la documentazione di Cursor sulle [Run Modes](https://cursor.com/docs/agent/security/run-modes).
+- **GitHub Copilot CLI:** Copilot chiede conferma prima di eseguire uno strumento, con la possibilità di consentirlo una sola volta o per l’intera sessione. Esegui `/mcp` per esaminare i server configurati e i relativi strumenti.
+
+In caso di dubbio, mantieni il comportamento di approvazione predefinito del client. Aggiunge un passaggio di conferma e ti aiuta a individuare un errore prima che accada.
+
+---
+
+### Configurazione e navigazione {#setup-and-navigation}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `mandatory_init` | Setup | Carica le indicazioni d’uso di Frame.io e, per impostazione predefinita, elenca la prima pagina degli account a cui puoi accedere. |
+| `read_context` | Read | Mostra l’utente che ha effettuato l’accesso e ti aiuta a sfogliare account, workspace e progetti. Puoi scegliere cosa visualizzare oppure aprire un account, un workspace o un progetto specifico tramite ID. |
+| `search_assets` | Read | Cerca in un account progetti, cartelle, file e version stack per nome o contenuto. |
+
+### Asset e struttura {#assets-and-structure}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `read_assets` | Read | Mostra un file, una cartella o un version stack, oppure elenca il contenuto di una cartella o le versioni di uno stack. I dettagli di file e versioni possono includere link ai media. |
+| `manage_assets` | Write | Sposta o copia file, cartelle e version stack. Spostare un file in un version stack lo aggiunge come nuova versione. |
+| `manage_versions` | Write | Crea un version stack da 2–10 file nella stessa cartella, oppure modifica l’ordine delle versioni in uno stack esistente. |
+| `change_structure` | Write | Crea workspace, progetti e cartelle; rinomina workspace, cartelle e file; oppure aggiorna il nome, lo stato o la restrizione di accesso di un progetto. |
+| `list_recently_deleted` | Read | Elenca i file, le cartelle e i version stack eliminati di recente in un progetto. |
+| `restore_assets` | Write | Ripristina un file, una cartella o un version stack eliminato di recente nella sua posizione originale. |
+
+### Commenti {#comments}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `read_comments` | Read | Mostra i commenti e le risposte di un file, oppure i dettagli di un commento specifico. |
+| `write_comments` | Write | Aggiunge o aggiorna un commento, lo contrassegna come completato o lo riapre, oppure allega un file. I commenti possono essere ancorati a un timecode video, a una pagina PDF o a una posizione in un’immagine. |
+
+### Metadati {#metadata}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `list_metadata_fields` | Read | Elenca i campi di metadati personalizzati di un account, inclusi i relativi tipi e le opzioni disponibili. |
+| `change_metadata` | Write | Crea o rinomina un campo di metadati personalizzato, oppure imposta i valori dei metadati sui file. Un aggiornamento dei metadati applica gli stessi valori a tutti i file selezionati in un progetto. |
+
+### Condivisione {#sharing}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `read_shares` | Read | Elenca le condivisioni di un progetto, oppure mostra i dettagli, il contenuto o i revisori di una condivisione. |
+| `manage_shares` | Write | Crea o aggiorna una condivisione, oppure aggiunge o rimuove contenuti da essa. Le condivisioni pubbliche sono accessibili a chiunque abbia il link. |
+| `manage_reviewers` | Write | Elenca, invita o rimuove i revisori di una condivisione protetta. Invitare dei revisori comporta l’invio di un’email. |
+
+### Membri {#membership}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `read_members` | Read | Elenca le persone e i loro ruoli a livello di account, workspace, progetto o cartella. |
+| `manage_members` | Write | Modifica il ruolo di un membro o rimuove la sua appartenenza diretta a livello di account, workspace, progetto o cartella. |
+
+### Caricamenti {#uploads}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `upload_media` | Write | Carica un file dal tuo computer oppure fa scaricare a Frame.io un file da un link web pubblico. |
+| `get_upload_status` | Read | Verifica l’avanzamento del caricamento e lo stato di elaborazione di un file. |
+
+### Eliminazione e diagnostica {#deletion-and-diagnostics}
+
+| Strumento | Tipo | Descrizione |
+| --- | --- | --- |
+| `delete_resources` | Delete | Elimina un file, una cartella, un progetto, un workspace, una condivisione, un commento o un campo di metadati. I file e le cartelle eliminati possono essere ripristinati; le altre risorse elencate vengono eliminate in modo permanente. |
+| `read_audit_logs` | Read | Mostra l’attività dell’account, incluso chi ha modificato una risorsa e quando. I risultati possono essere filtrati per data, evento o risorsa. |
+| `report_tool_issue` | Feedback | Invia un feedback al team di Frame.io MCP su un problema o su un flusso di lavoro complesso con questi strumenti. |
+
+---
+
+## Esempi {#examples}
+
+### Log di audit + report {#audit-logs-+-reporting}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+Genera un elenco di tutte le persone che hanno effettuato l’accesso al mio account Frame.io nell’ultimo periodo, con la data e l’ora dell’accesso.
+
+</Card>
+
+<Card title="">
+
+Genera un report di tutti i link di condivisione Frame.io creati nell’ultimo periodo, inclusi la data e l’ora di creazione, gli asset inclusi, chi ha aperto il link e se si trattava di una condivisione pubblica o protetta.
+
+</Card>
+
+<Card title="">
+
+Qual è l’attuale utilizzo dello spazio di archiviazione per workspace e per progetto nel mio account Frame.io?
+
+</Card>
+
+<Card title="">
+
+Genera un report di tutti gli utenti che hanno caricato contenuti nel mio account Frame.io, inclusi il nome di ciascun file, il tipo di file e il progetto o workspace in cui è stato caricato.
+
+</Card>
+
+<Card title="">
+
+Genera un report di tutti i file approvati nell’ultimo periodo, inclusi chi ha commentato, chi ha approvato ciascun file e in quale progetto o workspace si trovano tali file.
+
+</Card>
+
+</CardGroup>
+
+### Condividere per la revisione {#share-for-review}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+Carica il mio asset su Frame.io, genera un link di condivisione e richiedi una revisione alle seguenti persone.
+
+</Card>
+
+<Card title="">
+
+Recupera tutti i commenti sulla mia condivisione.
+
+</Card>
+
+<Card title="">
+
+Carica la nuova versione del mio asset e aggiorna lo stesso link di condivisione.
+
+</Card>
+
+</CardGroup>
+
+### Sfogliare + scoprire {#browse-+-discover}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+Mostrami tutti i progetti nel mio workspace principale.
+
+</Card>
+
+<Card title="">
+
+Trova tutti i file con ‘rough’, ‘draft’ o ‘wip’ nel nome in tutto il mio account.
+
+</Card>
+
+<Card title="">
+
+Trova la cartella ‘Final Delivery’ nel progetto ‘Fall Campaign’ ed elenca tutto ciò che contiene.
+
+</Card>
+
+<Card title="">
+
+Qual è lo stato di caricamento ed elaborazione di tutto ciò che si trova nella cartella ‘Final Deliverables’ del progetto ‘Q3 Campaign’?
+
+</Card>
+
+</CardGroup>
+
+### Panoramica tra account {#cross-account-overview}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+Quali progetti nei miei account hanno avuto caricamenti o commenti nelle ultime due settimane?
+
+</Card>
+
+<Card title="">
+
+Qual è lo stato di ogni progetto attivo in tutti i miei account? Raggruppa per workspace.
+
+</Card>
+
+</CardGroup>
+
+---
+
+## Disconnessione {#disconnecting}
+
+Ogni client prevede un metodo specifico per disconnettere o rimuovere Frame.io MCP:
+
+- **Claude Desktop:** vai a **Customize > Connectors**, trova Frame.io e rimuovilo. Per maggiori dettagli, consulta la documentazione di Claude sui [connettori](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities).
+- **ChatGPT:** sono disponibili due opzioni. Per **disconnetterlo** (mantenendo il plugin installato ma interrompendone l’accesso), apri **Settings > Plugins > Frame.io** e disattivalo; riattivalo per riconnetterlo. Per rimuoverlo completamente, apri **Plugins** nella barra laterale, seleziona **Frame.io** in **Installed** e scegli **Uninstall**. Per utilizzarlo di nuovo dovrai reinstallarlo dalla directory dei plugin. Per maggiori dettagli, consulta il [centro assistenza di OpenAI sulle app in ChatGPT](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt).
+- **VS Code:** rimuovi la voce di Frame.io dalla configurazione MCP. Per maggiori dettagli, consulta la documentazione di VS Code sulla [gestione dei server MCP](https://code.visualstudio.com/docs/agent-customization/mcp-servers).
+- **Cursor:** rimuovi la voce `frameio-mcp` da `~/.cursor/mcp.json`, lo stesso file utilizzato per aggiungerlo.
+- **GitHub Copilot CLI:** esegui `/mcp delete [server-name]` per rimuovere il server.
+
+---
+
+## Risoluzione dei problemi {#troubleshooting}
+
+### Frame.io MCP configurato prima del 7 ottobre 2026 {#configured-the-frame-io-mcp-before-october-7-2026}
+
+Verifica che l’URL del server corrisponda all’attuale URL V1: **`https://mcp.frame.io/v1/mcp`**
+
+Aggiornalo se necessario, quindi riavvia o riconnetti il server MCP.
+
+### Loop OAuth o errore di autenticazione {#oauth-loop-or-authentication-failure}
+
+Accedi con l’Adobe ID collegato al tuo account Frame.io. Se hai più account Adobe, verifica di utilizzare quello corretto. Rimuovere e aggiungere nuovamente Frame.io MCP nel client avvia una nuova sessione OAuth.
+
+### Errori di autenticazione multi-account AMA {#ama-multi-account-authentication-errors}
+
+Se Adobe IMS riutilizza silenziosamente una sessione del browser esistente, potresti autenticarti nell’organizzazione sbagliata senza che ti venga chiesto di scegliere. La soluzione consiste nel cancellare la sessione Adobe che viene riutilizzata. Cancella i cookie del browser relativi al dominio di accesso di Adobe prima di riconnetterti, oppure apri una scheda Adobe separata nello stesso browser ed esegui la disconnessione completa da lì. Una volta cancellata la sessione precedente, al momento dell’autenticazione ti verrà proposta un’opzione di selezione del profilo, che ti permetterà di scegliere l’organizzazione corretta.
+
+### Frame.io MCP non visibile o non si connette dopo l’aggiunta {#frame-io-mcp-not-visible-or-not-connecting-after-adding}
+
+Verifica che l’URL sia esattamente `https://mcp.frame.io/v1/mcp`. Potrebbe essere necessario riavviare il client dopo averlo aggiunto.
+
+### Strumenti non disponibili nella conversazione {#tools-not-available-in-conversation}
+
+Verifica che Frame.io MCP risulti connesso nel client. Se è connesso ma gli strumenti continuano a mancare, controlla che la categoria di strumenti non sia impostata su **Blocked** nei permessi.
+
+Inoltre,
+
+### Connessione riuscita ma non compaiono workspace o progetti {#connected-successfully-but-no-workspaces-or-projects-appear}
+
+Sei autenticato, ma potresti non avere workspace nell’account connesso oppure trovarti in un account completamente diverso. Chiedi prima al tuo agente di IA di elencare tutti gli account. Se hai accesso a più account, potrebbe essere necessario specificare un ID account diverso. Gli utenti AMA dovrebbero inoltre verificare di essersi autenticati nell’organizzazione Adobe corretta (vedi sopra).
+
+### Errori di permesso su strumenti specifici {#permission-errors-on-specific-tools}
+
+Le chiamate agli strumenti rispecchiano i permessi del tuo account Frame.io. I caricamenti richiedono l’accesso Contributor. Per maggiori dettagli, consulta [Gestione dei permessi utente](/it/platform/docs/guides/managing-user-permissions).
+
+### Caricamento bloccato o asset fermo in elaborazione {#upload-stalled-or-asset-stuck-in-processing}
+
+Chiedi al tuo agente di IA di verificare direttamente lo stato: *“Qual è lo stato di caricamento del mio file recente?”* Chiamerà `get_upload_status`. L’elaborazione di file di grandi dimensioni o ad alta risoluzione può richiedere diversi minuti.
+
+---

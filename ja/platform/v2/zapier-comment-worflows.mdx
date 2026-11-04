@@ -1,0 +1,108 @@
+---
+title: "Zapier を使ったコメントワークフロー"
+---
+
+## 概要 {#overview}
+
+このガイドでは、Frame.io の [Zapier アプリ](https://zapier.com/apps/frameio/)を使用して Frame.io からコメントを「キャッチ」し、Zapier 内の他のアプリを使ってそれを加工します。
+
+完全なワークフローを構築するために、[このテンプレート](https://zapier.com/apps/frameio/integrations/frameio/47537/translate-frameio-comments-with-zapier)に沿って進め、Frame.io のチーム上で残されたあらゆるコメントを自動翻訳できるようにします。
+
+上記のリンク先のテンプレートから始めることも、Zapier で新しい Zap を一から作成することもできます。本ガイドでは後者の方法で進めます。
+
+## 必要なもの {#things-you’ll-need}
+
+始める前に、次の 3 つが必要です。
+
+1. Frame.io アカウントへのアクセス (API トークンを作成するため)
+2. Frame.io のチームに対するチームマネージャーまたは管理者のアクセス権 (Webhook を作成するため)
+3. Zapier アカウント (無料プランで十分です) と [Frame.io の Zapier アプリ](https://zapier.com/apps/frameio/integrations)
+
+最初の 2 つを確認するには、[developer.frame.io](/ja/platform/v2) にアクセスしてサインインします。「Tokens」と「Webhooks」のメニュー項目 (下図) が表示されない場合は、Frame.io アカウントの管理者にお問い合わせください。
+
+## チュートリアル {#tutorial}
+
+### 1. 新しい Asset をアップロードしてコメントを残す {#1-upload-a-new-asset-and-make-a-comment}
+
+Frame.io の Zapier アプリは最新のデータを検索することに依存しています。そのため、コメントを扱う場合は、まず Frame.io を開いて新しい Asset をアップロードし、そこにコメントを残すのが最適な出発点です。コメントは親となる Asset に厳密に結び付いているため、こうすることで Zapier が確実に最新のサンプルを取得できるようになります。
+
+なお、Zapier の Webhook は Frame.io の単一のチームに固有のものです。ワークフローを導入したいチームに属する Asset にコメントを残すようにしてください。
+
+![Comment on a new Asset](/images/platform/v2/zapier-comment-worflows/1e5258be5ee86a989424885a821d593279bba52ee4cfc42f8222c2ef5a80b856.webp)
+
+### 2. Frame.io アカウントを接続してコメントを取得する {#2-connect-your-frame-io-account-and-fetch-your-comment}
+
+まず、Zapier ダッシュボードにある大きなオレンジ色の「Make a Zap」ボタンをクリックして、新しい Zap を作成します。次に「Frame.io」を検索して Frame.io アプリを選択し、「**New Comment**」トリガーを選びます。
+
+![4032c5d-2. Zapier trigger](/images/platform/v2/zapier-comment-worflows/82ec07bdfaf828fe1c1e9ee0f2ec440a0ca414ead914894bdff2aa321c95fe6c.webp)
+
+次の画面で、まだ Frame.io アカウントを接続していない場合は、API トークンを生成して入力する必要があります。
+
+### 2.5 API トークンを作成する {#2-5-create-an-api-token}
+
+[Frame.io Developer Portal](/ja/platform/v2) にアクセスし、Frame.io アカウントでサインインして「Tokens」をクリックし、新しい [API トークン](https://developer.frame.io/tokens/new)を作成します。
+
+新しいトークンにわかりやすい名前を付け、次のスコープを選択します。
+
+- **Accounts:** Read
+- **Projects:** Read
+- **Assets:** Read
+- **Team:** Read, Update
+- **Comment:** Create Read, Update
+- **Webhooks:**  Create, Read, Update, Delete (すべてのスコープ)
+
+完了したら「**Create**」をクリックし、トークンをコピーします。次に Zapier に移動して「**Connect an Account**」をクリックし、新しいトークンを入力します。
+
+![9c6282d-2.5 Token](/images/platform/v2/zapier-comment-worflows/5fec1fd7a8a456e390de9a6e2b7ad56e593fe13b8e7ab35fefc5e67509abddc1.webp)
+
+### 3. チームを選択してサンプルコメントを取得する {#3-select-a-team-and-grab-your-sample-comment}
+
+新しく接続したアカウントで保存したら、チームを選択して保存します。
+
+Zapier が「Samples」を検索します。その先頭には、ステップ 1 で残したコメントが表示されるはずです。展開して確認し、問題がなければ再度保存します。
+
+![5db288d-3. Sample search](/images/platform/v2/zapier-comment-worflows/2dc0dab4efff48d4b75619f00432d70e20018c89cff751a78d15ab479f6d2c63.webp)
+
+### 4. 翻訳アクションを追加する {#4-add-your-translation-action}
+
+Zap にアクションを追加しましょう。「Translate」で検索すると、「**Translate by Zapier**」アクションが見つかります。
+
+続く設定画面で、中央のボックスの右上にあるアイコンを選択し、トリガーステップから「Text」を選びます。これにより、この Zap に届く新しいコメントのテキストを、Zapier が常に動的に処理するようになります。
+
+次に言語を選択し、保存してテストします。
+
+問題がなければ確定し、「**Add a Step**」をクリックします。
+
+![de48d15-4. Translate Config](/images/platform/v2/zapier-comment-worflows/0aa91c5a7c923ade94fa0f01d7a613e7a753b8d5d51b93de613f3ffc919bc00f.webp)
+
+### 5. Frame.io のコメントを更新する {#5-update-your-frame-io-comment}
+
+元のテキストと翻訳後のテキストの両方がそろったので、コメントを作り直しましょう。
+
+Frame.io アプリを選択し、**Update Comment** アクションを選びます。
+
+次の画面の下部にある「Comment」フィールドでドロップダウンをクリックし、「**Use a Custom Value**」を選択します。次に、トリガーステップから「**ID**」を選びます。前のステップと同様に、これにより新しいコメントが常に動的に処理されるようになります。
+
+![Custom-value.png](/images/platform/v2/zapier-comment-worflows/07c9d89dbfd52426941a410869fd5d22a050e766288fe1d8a0a51c9c9a4850d1.webp)
+
+![8020a1d-5. Pick the ID](/images/platform/v2/zapier-comment-worflows/78cd6dd39ea6f26288a113288ba0bcd4058da55cb915945e45edbb82ee552870.webp)
+
+次に「Refresh Fields」をクリックし、元のテキストと翻訳後のテキストを組み合わせて、動的なコメントテキストを作成します。
+
+![c57593d-5. Final template](/images/platform/v2/zapier-comment-worflows/f680b858d4fb9c1a249d9bd3f7b11214f5127289c807e4e527e6d469fe0cdfe7.webp)
+
+### 6. アクションをテストする {#6-test-your-action}
+
+すべて問題なければ「**Continue**」をクリックし、アクションをテストします。これにより、翻訳されたコメントが Frame.io に送り返されます。
+
+Frame.io に移動し、期待どおりの結果が表示されていれば準備完了です。
+
+![2b95dcd-6. Confirm](/images/platform/v2/zapier-comment-worflows/26c303f216b40be6cb087ef89dfd29b15ab3471f122ffca9bafb6d73ea729416.webp)
+
+### 6.5. 仕上げ {#6-5-finishing-up}
+
+おめでとうございます! 難しい部分は終わりました。
+
+最後に「**Finish**」をクリックし、Zap に名前を付けてオンにします。これで、同じチームで残したコメントはすべてこのワークフローに従い、動的に翻訳されるようになります。
+
+![a35d3b5-6. All Done](/images/platform/v2/zapier-comment-worflows/3eeb71698cb39348baed2981fa9e3816b0583a8f67c6347b8454fdb7030b4704.webp)

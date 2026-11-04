@@ -1,0 +1,214 @@
+---
+title: "コンセプトと基礎"
+---
+
+## コアコンセプトを理解する {#understanding-core-concepts}
+
+C2C API は、インテグレーションプロジェクトを始める前に理解しておくべきいくつかの重要な技術に基づいています。この記事の見出しに目を通してください。なじみのない用語があれば、このガイドがその知識のギャップを埋める手助けとなります。特定のコンセプトで困ったことがあれば、私たちのチームが追加のリソースやサポートを提供します。
+
+## 知っておくべきこと {#what-you-need-to-know}
+
+C2C API とのインテグレーションを成功させるには、次の項目について基本的に理解しておく必要があります。
+
+<CardGroup cols={3}>
+
+<Card title="ネットワーク" icon="network-wired" iconType="solid">
+
+TLS/SSL、TCP/IP プロトコル、ネットワークの基礎
+
+</Card>
+
+<Card title="HTTPS" icon="globe" iconType="solid">
+
+安全な HTTPS リクエストの実装
+
+</Card>
+
+<Card title="認証" icon="shield" iconType="solid">
+
+認証と認可の方法論
+
+</Card>
+
+</CardGroup>
+
+## ネットワークの基礎と用語集 {#networking-basics-and-glossary}
+
+Frame.io API の本質は、Frame.io のサーバーとお使いのデバイスやアプリケーションとの間の通信を可能にすることであり、あらゆる操作にネットワークのやり取りが必要です。
+
+明確なコミュニケーションは、サーバーとクライアントの関係を含め、あらゆる関係において不可欠です。日常会話で誤解が生じるのと同じように、コンピューター同士が情報を交換する際にも同様の課題が存在します。
+
+一般的な通信上の問題に対処するだけでなく、機密データを安全に送信することも保証する必要があります。Frame.io はすべてのサーバー通信に暗号化を必須としており、通信プロセスに必要なセキュリティレイヤーを加えています。
+
+C2C API を実装する際は、ネットワークの詳細を処理するためにサードパーティのライブラリを使用することが多いでしょう。しかし、ネットワークコンポーネントは実環境でエラーを発生させることが多いため、Frame.io のサーバーとやり取りする際の基盤となるプロセスを理解しておくことは有益です。以下は重要な用語の簡潔な用語集です。
+
+<CardGroup cols={2}>
+
+<Card title="TCP/IP" icon="network-wired" iconType="solid">
+
+Transmission Control Protocol / Internet Protocol - グローバルなデータ転送を可能にする標準化されたコンポーネントとレイヤーです。詳しくは、こちらの[わかりやすい概要資料](https://www.freecodecamp.org/news/what-is-tcp-ip-layers-and-protocols-explained/)をおすすめします。
+
+</Card>
+
+<Card title="TLS/SSL" icon="shield-halved" iconType="solid">
+
+Transport Layer Security / Secure Socket Layer - 技術的には異なるものですが、今日では一般的に同じ意味で使われています。TLS は SSL の進化版ですが、元の略語も依然として広く使われています。TLS について詳しくは、[こちらの概要を参照してください](https://www.internetsociety.org/deploy360/tls/basics/)。
+
+</Card>
+
+</CardGroup>
+
+### 公開鍵と秘密鍵 {#public-and-private-keys}
+
+公開鍵は錠前のようなもので、秘密鍵はそれに対応する鍵の役割を果たします。
+
+次のようなシナリオを考えてみてください。同僚に機密メッセージを送りたいが、届くまでプライバシーを確保したいとします。
+
+まず、同僚に、本人だけが鍵を持っている錠前を送ってもらいます。
+
+その錠前を受け取ったら、それを使って機密メッセージを容器に入れて施錠します。容器を扱う人は誰でも錠前を目にすることができますが、中身にアクセスできる鍵を持っているのは同僚だけです。メッセージを見ようとする権限のない者にとって、錠前は何の価値もありません。あなた自身でさえ、鍵がなければ開けることはできません。
+
+同僚は施錠された容器を受け取ったら、自分の鍵を使って中身にアクセスするだけです。
+
+公開鍵と秘密鍵もこれと同じ仕組みで機能します。公開鍵は広く共有できます。受信者はこの鍵でメッセージを暗号化しますが、その通信を復号できるのは秘密鍵の所有者だけです。秘密鍵が機密に保たれている限り、公開鍵を使って、それが生成した暗号化メッセージを解読することはできません。
+
+この公開鍵/秘密鍵の仕組みは TLS の機能の基盤となっており、当事者同士がオープンに通信しながらも、安全でプライベートなチャネルを確立できるようにしています。
+
+### 証明書 {#certificates}
+
+証明書には公開鍵と秘密鍵が含まれており、信頼できる認証局によって認証されています。
+
+認証局が鍵を検証するということは、本質的にその鍵の真正性を保証するということです。Google などから公開鍵を受け取った側は、認められた認証局によるこの保証を確認できます。保証のない鍵は不正である可能性があると見なされ、セキュリティ警告が表示されます。
+
+Frame.io の証明書は、Amazon Root CA 1 認証局によって検証されています。これらの証明書は、Certifi ライブラリ (Mozilla や Python Requests ライブラリで使用) など、さまざまなリソースを通じて入手できます。
+
+実装にあたっては、api.frame.io への HTTPS リクエストを検証するために、Certifi の [GitHub リポジトリ](https://github.com/certifi/python-certifi)と[証明書 PEM バンドル](https://github.com/certifi/python-certifi/blob/master/certifi/cacert.pem)を使用することをおすすめします。
+
+<CardGroup cols={2}>
+
+<Card title="サーバー" icon="server" iconType="solid">
+
+他のコンピューターに情報を提供したり、情報を保存したりするコンピューターです。Web ブラウザーで Frame.io にアクセスすると、ブラウザーは Frame.io のサーバーにコンテンツをリクエストし、サーバーがそれに応答します。Frame.io 内でのあらゆる操作は、ブラウザーと当社サーバーとの間の通信を発生させ、サーバーはリクエストを処理して適切な結果を返します。Frame.io にメディアをアップロードするとき、メディアは当社のサーバーに送信されています。
+
+</Card>
+
+<Card title="クライアント" icon="laptop" iconType="solid">
+
+クライアントアプリケーションは、サーバーに情報をリクエストしたり、サーバーにデータを送信したりします。C2C API を実装する場合、あなたが開発するのは C2C クライアントです。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="HTTP/S" icon="globe" iconType="solid">
+
+Hypertext Transfer Protocol / Secure - TCP/IP モデルのアプリケーション層で動作します。HTTP と HTTPS の違いはセキュリティです。HTTPS はネットワーク通信に TLS/SSL による検証を組み込んでいます。HTTP はさまざまなバージョンを経て進化し、時代とともに新しい標準を確立してきました。バージョン 1.1 は現在もグローバル標準であり、Frame.io API との通信にはこのバージョンを使用してください。
+
+</Card>
+
+<Card title="RESTful API" icon="code" iconType="solid">
+
+REST (Representational State Transfer) は、HTTP のリクエスト/レスポンスパターンに基づいて API を開発するための設計手法です。REST は、API が REST の原則に厳密に従っていない場合でも、HTTP をプログラム間のやり取りに使用する一般的なアプローチ (ブラウザーと Web ページ間の通信とは区別されるもの) の略称としてよく使われます。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="JSON" icon="file-code" iconType="solid">
+
+JavaScript Object Notation - 標準化されたデータ交換フォーマットです。もともとは JavaScript オブジェクト用に開発されましたが、ネットワーク通信の汎用的な標準となっています。C2C API はレスポンスを JSON データとして返します。
+
+</Card>
+
+<Card title="AWS S3" icon="cloud" iconType="solid">
+
+Amazon の Simple Storage Service は、クラウドベースのデータストレージソリューションを提供します。S3 は Frame.io の動画および音声メディアを保存し、インテグレーションからのアップロード先として機能します。
+
+</Card>
+
+</CardGroup>
+
+## HTTP/S リクエスト {#http/s-requests}
+
+HTTP は Web ブラウジングのいたるところで使われており、ほぼすべての Web サイトのアドレスの先頭に現れます。HTTP (Hypertext Transfer Protocol) は、コンピューター間の通信のための標準化されたプロトコルを定めています。
+
+HTTP は、クライアントとサーバー間のやり取りのための標準化された書式システムと考えることができます。情報の請求やプログラムへの申し込みに必要な行政の申請書のようなものです。正しく記入された書類がなければ、行政機関はリクエストを処理したり応答したりできません。
+
+HTTP リクエストは、Frame.io アプリケーションのあらゆるやり取りを支えています。C2C API の枠組みでは、HTTP リクエストの種類が利用可能な機能を表しています。
+
+HTTP の包括的な概要については、[こちらの参考記事](https://www.freecodecamp.org/news/http-and-everything-you-need-to-know-about-it/)を参照してください。先に進む前に、これらの基礎を理解しておくことが不可欠です。HTTP リクエストを初めて扱う場合は、入門資料に目を通すことを検討してください。十分な準備のために、次の HTTP の概念に慣れておきましょう。
+
+<CardGroup cols={2}>
+
+<Card title="URL の構成要素" icon="link" iconType="solid">
+
+- プロトコル
+- ホスト
+- ポート
+- リソース
+
+</Card>
+
+<Card title="HTTP の要素" icon="list" iconType="solid">
+
+- ヘッダー
+- Content-Type/Mimetype
+- リクエストおよびレスポンスのペイロード
+- HTTP 動詞の用途: GET、POST、PUT、DELETE など
+- フォームデータ
+
+</Card>
+
+</CardGroup>
+
+通常はネットワークライブラリがリクエストの構築を処理しますが、必要に応じて [HTTP/1.1 RFC](https://greenbytes.de/tech/webdav/rfc2616.html) を参考資料として利用できます。
+
+## 認証と認可 {#authentication-and-authorization}
+
+これらのコンセプトについては後ほど詳しく説明しますが、次の基本原則を理解しておくことが重要です。
+
+<CardGroup cols={2}>
+
+<Card title="認証" icon="key" iconType="solid">
+
+認証は、リクエストが名乗っている送信元から来たものであることを検証します。ユーザー名とパスワードの資格情報で Web サイトにログインするとき、あなたはパスワードを知っていることを示して自分自身を認証しています。テキストメッセージで確認コードを受け取るなどの多要素認証は、追加の認証メカニズムです。
+
+</Card>
+
+<Card title="認可" icon="user-shield" iconType="solid">
+
+認可は、特定の操作を実行する権限があることを確認します。Frame.io のプロジェクトや Google ドキュメントにコラボレーターを追加するとき、あなたは彼らのアクセスを認可しています。Frame.io や Google はこれらのユーザーの身元をあらかじめ認証しているため、あなたは安心して彼らの参加を認可できます。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="OAuth" icon="lock" iconType="solid">
+
+OAuth (Open Authorization) は、サードパーティの認証サービスと統合することで、認可管理のための標準化されたフレームワークを提供します。
+
+</Card>
+
+<Card title="スコープ" icon="list-check" iconType="solid">
+
+スコープは、ユーザーが実行できる認可された操作を定義します。デバイスを Frame.io に接続する際は、特定の操作を認可するスコープをリクエストして受け取ります。たとえば、`asset_create` スコープはアセットの作成とアップロードを許可します。概念的には、スコープは権限セットとして機能します。
+
+</Card>
+
+</CardGroup>
+
+## 次のステップ {#next-steps}
+
+ご不明な点があればお気軽に私たちのチームにお問い合わせのうえ、ガイドの次のセクションに進んでください。皆さまのインテグレーションをサポートできることを楽しみにしています。
+
+技術的な概要については、[インテグレーションアーキテクチャガイド](/ja/camera-to-cloud/integration-architecture)を参照してください。
+
+まだご覧になっていない場合は、先に進む前に [Implementing C2C: Setting Up](/ja/camera-to-cloud/implementing-c2c-setting-up) ガイドを確認してください。
+
+[認証と認可のプロセス](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で取得した `access_token` が必要になります。

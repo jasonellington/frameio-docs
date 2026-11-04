@@ -1,0 +1,151 @@
+---
+title: "ハウツー: 認証の管理(アプリケーション)"
+sidebarTitle: "ハウツー - 認証の管理(アプリケーション)"
+---
+
+## はじめに {#introduction}
+
+このガイドでは、Frame.io の *C2C アプリケーション*の認可情報を更新、取り消し、保存する方法を学びます。
+
+## 必要なもの {#what-will-i-need}
+
+[C2C の実装: セットアップ](/ja/camera-to-cloud/implementing-c2c-setting-up)ガイドをまだ読んでいない場合は、先に進む前にざっと目を通してください。
+
+チームから提供された `client_id` と、[認証と認可のガイド](/ja/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application)で使用したものと同じ `device_id` が必要です。このガイドを完了するには、`access_token` と `refresh_token` も必要です。
+
+## 認可トークン {#authorization-tokens}
+
+[前のガイド](/ja/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application)では、ユーザーに認証を行ってもらい、プロジェクト上でデバイスを認可してもらうことで、新しい認可トークンを*生成*する方法を学びました。
+
+*アクセストークンの有効期間は約 1 時間で、その後は期限切れになります*。デバイスのユーザーに 8 時間ごとにサインインしてもらいたくはないので、前のガイドでは `offline` スコープをリクエストし、Frame.io で認可した際に*リフレッシュトークン*も取得しました。リフレッシュトークンは、現在のアクセストークンが期限切れになったときに新しいアクセストークンを生成するために使用できます。
+
+*リフレッシュトークンの有効期間は 30 日です*。access_token の有効期間を制限することで、トークンが漏洩した場合に起こりうる不正行為を抑えています。*リフレッシュトークン*が使用される前に認可が更新されない場合、ユーザーは再認証する必要があります。
+
+## アクセストークンを更新する {#refreshing-your-access-token}
+
+アクセストークンが必要な API を呼び出して、次のようなレスポンスが返された場合:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+…アクセストークンの有効期限が切れています。
+
+トークンを更新するには、次の呼び出しを行います。
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'scope=offline device.connect asset.create' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**これらの値がわからない場合**
+
+これらの値はすべて[前のガイド](/ja/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application)で生成されたものです。まだ読んでいない場合は確認してから、ここに戻ってきてください。
+
+</Info>
+
+(リフレッシュトークンだけでなく)これらすべての値を使用することで、漏洩したリフレッシュトークンだけでは新しい認可を生成できないようにしています。誰かがあなたのインテグレーションになりすましてトークンを生成しようとする場合、`refresh_token` *と* `client_id` の両方が必要になります。
+
+次のようなレスポンスが返されます。
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+これが新しい認可トークンです。*トークンを更新すると、古いトークンは使用できなくなる*ため、必ず手元に保管しておいてください。
+
+ここで古いリフレッシュトークンを使用して更新しようとすると、エラーが発生します。
+
+```json
+{
+    "error": "token_inactive",
+    "error_description": "Token is inactive because it is malformed, expired or otherwise invalid. Token validation failed."
+}
+```
+
+トークンはすでに更新されているため、既存のリフレッシュトークンを使用することは無効です。
+
+<Danger>
+
+**更新中に 401 が返される場合**
+
+トークンの更新中に `401 Not Authorized` レスポンスが返された場合、トークンはもう有効ではないため、認可プロセスを最初からやり直す必要があります。
+
+</Danger>
+
+## 更新レスポンスを受け取れなかった場合 {#missing-a-refresh-response}
+
+*リフレッシュトークンは 1 回しか使用できません*。トークンを更新するために Frame.io を呼び出したものの、ネットワークエラーや予期しない電源の再投入によってレスポンスを受け取れなかった場合、*認証/認可フロー全体をやり直す必要があります。*
+
+残念な事態ではありますが、安全を優先するに越したことはありません。
+
+## トークンを取り消す {#revoking-tokens}
+
+場合によっては、Frame.io から「サインアウト」したいことがあります。たとえば、ユーザーが撮影の完了後に接続を解除したいと判断することがあります。また、アプリが不正な状態になり、クリーンな状態にリセットする必要がある場合にも、認可を取り消すことをお勧めします。現在の認可を破棄する予定がある場合は、アプリで必ずその取り消しを試みてください。
+
+認可を取り消すには、次の呼び出しを行います。
+
+<Info>
+
+**再認可**
+
+この呼び出しを行った後は、[前のガイド](/ja/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application)で説明した認証と認可のプロセスをやり直す必要があります。
+
+</Info>
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/revoke \
+    --include \
+    --form 'client_id=[client_id]' \
+    --form 'token=[refresh_token]'
+```
+
+レスポンスにペイロードは含まれません。コマンドで `--include` を使用して返されたヘッダーを出力しています。呼び出しが成功した場合、ヘッダーはステータスコード `200` で始まります。
+
+```text
+HTTP/2 200
+...
+```
+
+トークンが取り消されたため、`access_token` を必要とする [Frame.io](http://frame.io/) へのすべての呼び出しは `Not Authorized` を返します。ユーザーが Frame.io 接続を再び使用したい場合は、Frame.io にサインインしてプロジェクトに再接続する必要があります。
+
+## トークンを保存する {#storing-tokens}
+
+電源の再投入後も機能を維持するには、認可ヘッダーを永続的に保存する必要があります。保存先は、ファイル、データベース、または独自のクラウドのいずれでもかまいません。認可トークンを保存する際のガイドラインを以下に示します。
+
+**ユーザーがトークンを表示したりアクセスしたりできないようにします**。ユーザーにトークンの表示や取得を許可してはいけません。トークンはアプリのみが管理する必要があります。
+
+**保存するトークンを暗号化します。** `client_id` と同様に、キーの盗難を防ぐため、アクセストークンとリフレッシュトークンは可能な限り暗号化して保存してください。*認可キーをプレーンテキストで保存しないでください。*
+
+**認可トークンを client_id と同じファイルに保存しないでください。** サンプルの Python アプリでは、`client_id` と `device_id` を認可トークンと同じファイルに保存しています。デモでは問題ありませんが、本番コードには適していません。`client_id` と `device_id` はデバイスの静的な値であり、*これらが失われるとデバイスは機能しなくなります。*
+
+認可トークンは静的ではなく、デバイスのライフタイム中に何度も書き換える必要があります。新しいトークンでファイルを更新している最中にデバイスの電源が切れると、そのファイルが破損して `client_id` が失われ、デバイスが Frame.io で*二度と*再認証できなくなる可能性があります。トークンを分けて保存しておけば、最悪の場合でも、ユーザーが Frame.io に再度サインインするだけで済みます。
+
+トークンの保存場所としては SQLite のような実績のあるデータベースが最適ですが、少なくとも認可データは他の値と分けて保存する必要があります。
+
+## 次のステップ {#next-up}
+
+まだの場合は、ぜひチームにご連絡のうえ、次のガイドに進んでください。ご連絡をお待ちしております。

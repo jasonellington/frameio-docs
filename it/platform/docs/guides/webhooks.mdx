@@ -1,0 +1,378 @@
+---
+title: "Webhook V4"
+sidebarTitle: "Webhook"
+---
+
+## Che cos'è un webhook? {#what’s-a-webhook}
+
+Un **webhook** è un callback HTTP di tipo push che Frame.io attiva **non appena accade qualcosa di rilevante** nel tuo account (ad esempio, un nuovo file completa la transcodifica, viene aggiunto un commento, viene creato un progetto).
+Invece di interrogare periodicamente l'API, fornisci un URL HTTPS pubblico; Frame.io invia un payload JSON a quell'URL in tempo reale, così puoi:
+
+<CardGroup cols={2}>
+
+<Card title="Sincronizzare i metadati con un DAM/MAM esterno" icon="arrows-rotate" iconType="solid" />
+
+<Card title="Popolare canali Slack o sistemi di ticketing" icon="bell" iconType="solid" />
+
+</CardGroup>
+
+Per maggiori informazioni su cos'è un webhook e su cosa fa, consulta [https://docs.webhook.site/](https://docs.webhook.site/).
+
+## Panoramica degli endpoint {#endpoint-overview}
+
+| **Operazione** | **Endpoint** | **Dettagli** |
+| --- | --- | --- |
+| **Creare** un webhook | POST /v4/accounts/\{account_id\}/workspaces/\{workspace_id\}/webhooks | Corpo con `name`, `url`, `events[]` |
+| **Elencare** tutti i webhook di un workspace | GET /v4/accounts/\{account_id\}/workspaces/\{workspace_id\}/webhooks | Supporta la paginazione |
+| **Visualizzare** un webhook | GET /v4/webhooks/\{webhook_id\} | Restituisce il segreto di firma solo al momento della creazione |
+| **Aggiornare** un webhook | PATCH /v4/webhooks/\{webhook_id\} | Modifica `url`, `events` o `is_active` |
+| **Eliminare** un webhook | DELETE /v4/webhooks/\{webhook_id\} | Interrompe immediatamente le consegne |
+
+<Warning>
+
+**Autenticazione**: tutti gli endpoint V4 richiedono un token di accesso OAuth 2.0 ottenuto tramite Adobe Developer Console. I token sviluppatore legacy e i JWT **non** sono accettati.
+
+</Warning>
+
+## Modifiche e aggiornamenti in Frame V4 {#changes-and-updates-in-frame-v4}
+
+<Info>
+
+I webhook creati in Legacy vengono trasferiti in V4 con le seguenti modifiche:
+
+1. **Struttura del payload**: è stato aggiunto l'Account ID al payload
+2. **Modifiche agli endpoint**: il `team_id` non viene più fornito nel payload JSON, ma si trova invece nel parametro di percorso dell'URL: `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/webhooks`
+3. **Integrazione API**: a causa delle modifiche alla struttura dell'API, agli endpoint e ai metodi di autenticazione, qualsiasi codice esistente per i webhook in arrivo che effettua chiamate successive all'API di Frame.io per arricchire e cercare le risorse deve essere aggiornato
+4. **Tipi di evento**: i webhook degli asset sono stati suddivisi in eventi distinti per File e Folder; tutti i webhook provenienti da Legacy con eventi asset devono essere aggiornati con gli eventi File e Folder appropriati
+
+</Info>
+
+<Warning>
+
+**Stato dei webhook dopo la migrazione**: quando il tuo account migra a Frame.io V4, i webhook esistenti delle versioni precedenti vengono disattivati automaticamente. In questo modo puoi modificare gli endpoint dei webhook e la logica di integrazione per adattarli agli aggiornamenti di V4 prima di riattivarli. I webhook non aggiornati per la compatibilità con V4 riscontreranno errori se attivati senza le opportune modifiche. Puoi verificare quali webhook sono inattivi esaminando il campo `is_active` tramite l'API oppure controllando le [impostazioni dei webhook](https://next.frame.io/settings/webhooks) prima di riattivarli.
+
+</Warning>
+
+## Sottoscrizioni agli eventi dei webhook {#webhook-event-subscriptions}
+
+Quando crei e aggiorni i webhook, indica gli eventi che ti interessano. Puoi sceglierne quanti ne vuoi, ma tieni presente che l'esperienza è migliore se ti abboni a meno eventi, suddividendo i webhook in modo logico con schemi di denominazione ed endpoint diversi, così da poter modellare la logica di business sul lato ricevente riducendo il filtraggio e l'instradamento nelle funzioni condivise.
+
+<Note>
+
+Ambito degli eventi: tutti gli eventi sono circoscritti al Workspace indicato durante la creazione del webhook. Ciò significa che gli eventi verranno inviati per le azioni eseguite in tutti i progetti di quel Workspace.
+
+</Note>
+
+### Progetti {#projects}
+
+| Evento | Descrizione |
+| --- | --- |
+| `project.created` | Un nuovo Project è stato **creato** |
+| `project.updated` | Le impostazioni di un Project sono state **aggiornate** |
+| `project.deleted` | Un Project è stato **eliminato** |
+
+### File {#files}
+
+| Evento | Descrizione |
+| --- | --- |
+| `file.created` | Un File è stato **creato** in Frame.io. *Nota:* questo evento si attiva prima che il caricamento del file sia terminato. Se il tuo handler ha bisogno del file completo, ti consigliamo di ascoltare invece l'evento `upload.completed` |
+| `file.ready` | Tutte le transcodifiche sono state **completate**, dopo che un file è stato caricato ed elaborato |
+| `file.updated` | Il nome o altre informazioni di un File sono cambiati |
+| `file.deleted` | Un File è stato **eliminato** (manualmente o in altro modo) |
+| `file.upload.completed` | Un File è stato **caricato** |
+| `file.versioned` | È stata **creata** una versione di un File |
+
+### Cartelle {#folders}
+
+| Evento | Descrizione |
+| --- | --- |
+| `folder.created` | Una nuova Folder è stata **creata** |
+| `folder.updated` | Le impostazioni di una Folder sono state **aggiornate** |
+| `folder.deleted` | Una Folder è stata **eliminata** |
+
+### Commenti {#comments}
+
+| Evento | Descrizione |
+| --- | --- |
+| `comment.created` | È stato **creato** un nuovo commento o una nuova risposta |
+| `comment.updated` | Un commento è stato aggiornato |
+| `comment.deleted` | Un commento è stato **eliminato** |
+| `comment.completed` | Un commento è stato contrassegnato come **completato** |
+| `comment.uncompleted` | Un commento è stato contrassegnato come **non completato** |
+
+### Metadati {#metadata}
+
+| Evento | Descrizione |
+| --- | --- |
+| `metadata.value.updated` | I campi dei metadati di un asset sono stati aggiornati |
+
+### Collection {#collections}
+
+| Evento | Descrizione |
+| --- | --- |
+| `collection.created` | Una nuova Collection è stata **creata** |
+| `collection.updated` | Una Collection è stata **aggiornata** |
+| `collection.deleted` | Una Collection è stata **eliminata** |
+
+### Campi personalizzati {#custom-fields}
+
+| Evento | Descrizione |
+| --- | --- |
+| `customfield.created` | Un nuovo campo personalizzato è stato **creato** |
+| `customfield.updated` | Un campo personalizzato è stato **aggiornato** |
+| `customfield.deleted` | Un campo personalizzato è stato **eliminato** |
+
+### Condivisioni {#shares}
+
+| Evento | Descrizione |
+| --- | --- |
+| `share.created` | Una nuova Share è stata **creata** |
+| `share.updated` | Una Share è stata **aggiornata** |
+| `share.deleted` | Una Share è stata **eliminata** |
+| `share.viewed` | Una Share è stata **visualizzata** |
+
+## Payload dei messaggi dei webhook {#webhook-message-payload}
+
+Tutti i payload dei webhook contengono un campo `type`, che indica l'evento che si è verificato, e un oggetto `resource`. L'oggetto `resource` contiene il `type` e l'`ID` della risorsa Frame.io correlata all'evento.
+
+### Esempio di payload {#example-payload}
+
+```json
+{
+  "account": {
+    "id": "6f70f1bd-7e89-4a7e-b4d3-7e576585a181"
+  },
+  "project": {
+    "id": "7e46e495-4444-4555-8649-bee4d391a997"
+  },
+  "resource": {
+    "id": "d3075547-4e64-45f0-ad12-d075660eddd2",
+    "type": "file"
+  },
+  "type": "file.ready",
+  "user": {
+    "id": "56556a3f-859f-4b38-b6c6-e8625b5da8a5"
+  },
+  "workspace": {
+    "id": "378fcbf7-6f88-4224-8139-6a743ed940b2"
+  }
+}
+```
+
+Nell'esempio precedente di un evento `file.created`, `resource.id` indica l'`ID` del File appena creato. Sono inoltre inclusi gli oggetti `workspace`, `project` e `user`, che contengono i relativi `workspace.id`, `project.id` e `user.id`. Questi valori possono essere utilizzati per ridurre le chiamate API filtrando gli eventi in arrivo o cercando dati memorizzati nella cache locale.
+
+<Warning>
+
+**Non includiamo alcuna informazione aggiuntiva sulla risorsa sottoscritta oltre al suo ID**.
+
+Se la tua applicazione richiede informazioni o contesto aggiuntivi, ti consigliamo di effettuare una chiamata API per ottenere maggiori informazioni sulle risorse a cui si fa riferimento.
+
+</Warning>
+
+## Sicurezza {#security}
+
+Per impostazione predefinita, tutti i webhook dispongono di una chiave di firma. Questo segreto di firma non configurabile può essere utilizzato per verificare che la richiesta provenga da Frame.io.
+
+Il payload di risposta del webhook che hai configurato include il segreto di firma specifico di quel webhook. Questo segreto viene **fornito solo in questa risposta iniziale di creazione del webhook**, quindi conservalo in un luogo sicuro, nel tuo archivio dei segreti o nelle variabili d'ambiente. Usalo in seguito per verificare che il webhook provenga direttamente dai nostri server e che non sia stato intercettato o manipolato in alcun modo.
+
+### Verificare le firme dei webhook {#verifying-webhook-signatures}
+
+Per proteggere un'integrazione dagli attacchi man-in-the-middle e di replay, è fondamentale verificare la firma del payload del webhook. La verifica garantisce che i payload dei webhook siano stati effettivamente inviati da Frame.io e che il loro contenuto non sia stato modificato durante il trasporto.
+
+La richiesta `POST` include i seguenti header HTTP:
+
+| Nome dell'header | Descrizione | Esempio |
+| --- | --- | --- |
+| `X-Frameio-Request-Timestamp` | Il timestamp di invio della richiesta | `1604004499` |
+| `X-Frameio-Signature` | La firma calcolata del webhook | `v0=a77ce6856e609c884575c2fd211d07a9ad1c3f72e19c06ff710e8f086ffca883` |
+| `user-agent: "Frame.io V4 API"` | User agent nell'header per V4 |  |
+| `user-agent: "Frame.io Legacy API"` | User agent nell'header per Legacy |  |
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify Webhook signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the Frame.io API for the given request
+        body (str): Webhook body from the received POST
+        secret (str): The secret for this Webhook that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+**Il timestamp** è l'ora di sistema dei sistemi di Frame.io al momento dell'invio del webhook in uscita. Può essere utilizzato per prevenire gli attacchi di [replay](https://en.wikipedia.org/wiki/Replay_attack). Consigliamo di verificare che questo orario rientri entro 5 minuti dall'ora locale.
+
+**La firma** è un hash HMAC SHA256 calcolato utilizzando la chiave di firma fornita al momento della creazione del webhook.
+
+**Segui questi passaggi per verificare la firma:**
+
+<Steps>
+
+<Step title="Estrai la firma">
+
+Estrai la firma dagli header HTTP.
+
+</Step>
+
+<Step title="Crea il messaggio da firmare">
+
+Crea un messaggio da firmare combinando la versione, l'ora di consegna e il corpo della richiesta: `v0:timestamp:body.`
+
+</Step>
+
+<Step title="Calcola l'HMAC SHA256">
+
+Calcola la firma HMAC SHA256 utilizzando il tuo segreto di firma.
+
+</Step>
+
+<Step title="Confronta le firme">
+
+Confronta la firma calcolata con quella fornita!
+
+</Step>
+
+</Steps>
+
+<Note>
+
+La firma fornita è preceduta dal prefisso `v0=`. Attualmente Frame.io dispone di questa sola versione per la firma delle richieste. Assicurati di anteporre questo prefisso alla firma calcolata.
+
+</Note>
+
+## Limiti di frequenza dei webhook {#webhook-rate-limits}
+
+Gli eventi dei webhook e delle Custom Action condividono i seguenti limiti per account:
+
+| Intervallo di tempo | Limite per account |
+| --- | --- |
+| 1 minuto | 1.000 eventi |
+| 1 ora | 20.000 eventi |
+
+Entrambi i limiti si applicano al volume combinato degli eventi dei webhook e delle Custom Action. Rispettare il limite al minuto non esonera un account dal limite orario. Questi limiti si applicano a livello di account, non separatamente a ciascuna sottoscrizione webhook o Custom Action.
+
+Si tratta di limiti sul volume degli eventi, non di limiti sulle richieste API per creare, elencare, aggiornare o eliminare sottoscrizioni webhook o Custom Action.
+
+<Warning>
+
+Quando viene raggiunto uno dei limiti a livello di account, gli ulteriori eventi dei webhook e delle Custom Action vengono **scartati**, non messi in coda per una consegna successiva. Gli eventi scartati non vengono ritentati o riprodotti automaticamente quando torna disponibile capacità. La policy di nuovi tentativi di consegna riportata di seguito non si applica agli eventi scartati a causa dei limiti di frequenza.
+
+</Warning>
+
+### Rispettare i limiti {#working-within-the-limits}
+
+Per rispettare i limiti dei webhook, ti consigliamo di abbonarti solo agli **[eventi](#webhook-event-subscriptions)** di cui la tua integrazione ha bisogno. Ad esempio, se il tuo flusso di lavoro inizia quando il caricamento di un file è terminato, abbonati a `file.upload.completed` invece che a tutti gli eventi relativi ai file. Esamina regolarmente le sottoscrizioni del tuo account e rimuovi quelle non più in uso.
+
+Se la tua integrazione carica molti file o esegue una serie di aggiornamenti, distribuisci queste operazioni nel tempo, ove possibile, per rispettare entrambi i limiti e lasciare capacità per le altre attività dell'account. Ciò aiuta a evitare eventi scartati, che non vengono ritentati.
+
+## Nuovi tentativi e registrazione {#retries-and-logging}
+
+<CardGroup cols={2}>
+
+<Card title="Policy di nuovi tentativi di consegna" icon="arrows-rotate" iconType="solid">
+
+- Tre tentativi in totale (iniziale + 2 nuovi tentativi)
+- Backoff esponenziale a partire da 15 s (+ jitter)
+- Una risposta HTTP `5xx`, un errore di connessione o un timeout superiore a 5 secondi attivano un nuovo tentativo
+- Le risposte HTTP `4xx`, incluso `429`, non vengono ritentate
+
+</Card>
+
+<Card title="Registrazione degli errori" icon="list" iconType="solid">
+
+Frame.io conserva un **log degli errori** con: `webhook_id`, `account_id`, `event_type`, `resource_id`, `user_id`.
+
+</Card>
+
+</CardGroup>
+
+## Tutorial sui webhook {#webhook-tutorial}
+
+### Passaggio 1: configura il lato ricevente (da fare per primo, così saprai quale sarà il tuo URL) {#step-1-setup-receiving-end-done-first-so-that-you-know-what-your-url-will-be}
+
+Qui utilizziamo [webhook.site](http://webhook.site/), che ti consente di avviare facilmente un ricevitore di webhook monouso utilizzabile per ispezionare i payload e inviare risposte di base senza alcuna logica di business effettiva. Quando accedi per la prima volta a [https://webhook.site](https://webhook.site/), viene creato per te un endpoint webhook univoco che puoi copiare e utilizzare subito.
+
+Questo URL è univoco per la tua sessione.
+
+<Frame>
+
+![Step 1 Example](/images/platform/docs/guides/webhooks/webhook_site_example.gif)
+
+</Frame>
+
+### Passaggio 2: scegli gli eventi a cui vuoi abbonarti {#step-2-choose-the-events-you-want-to-subscribe-to}
+
+Per questo tutorial, manterremo le cose semplici e configureremo questo webhook in modo che si abboni solo agli eventi `file.created`. Il payload JSON che utilizzeremo per la creazione del webhook sarà il seguente.
+
+```json
+{
+    "data": {
+        "name": "asset.created sample webhook",
+        "events": ["file.created"],
+        "url": "https://webhook.site/c05f2216-9558-4816-bc09-f77ee7b9de40"
+    }
+}
+```
+
+### Passaggio 3: crea una risorsa webhook con Postman {#step-3-create-a-webhook-resource-using-postman}
+
+Con Postman, effettua una chiamata API per creare la risorsa webhook, fornendo l'endpoint di [webhook.site](http://webhook.site/) nel payload.
+
+### Passaggio 4: prova! {#step-4-test}
+
+Ora che hai creato la sottoscrizione al webhook e hai configurato un endpoint per ricevere i webhook, è il momento di provarlo attivando il primo webhook tramite l'azione appropriata che ne provoca l'invio!
+
+Poiché il nostro esempio è stato configurato per attivarsi con il trigger `file.created`, caricheremo un nuovo asset in un qualsiasi Project all'interno dell'Account e del Workspace corrispondenti in cui è stato configurato il webhook.
+
+<Frame>
+
+![Step 4 Example](/images/platform/docs/guides/webhooks/trigger_asset_created_webhook.gif)
+
+</Frame>
+
+## Risorse aggiuntive {#additional-resources}
+
+<CardGroup cols={2}>
+
+<Card title="Ngrok" icon="globe" iconType="solid" href="https://ngrok.com/">
+
+**Ngrok** è uno strumento eccezionale per gli sviluppatori che lavorano con webhook da esporre su un URL accessibile pubblicamente. Crea tunnel sicuri dal tuo ambiente locale verso Internet, consentendoti di esporre il tuo server locale per ricevere i payload dei webhook in tempo reale.
+
+</Card>
+
+<Card title="Hookdeck" icon="webhook" iconType="solid" href="https://hookdeck.com/">
+
+**Hookdeck** è una piattaforma progettata per aiutare i team a gestire i webhook in modo affidabile, offrendo un gateway di eventi robusto. Centralizza la gestione dei webhook, garantendo che nessun evento vada perso, e offre funzionalità come il filtraggio, l'accodamento e i nuovi tentativi dei webhook non riusciti.
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Webhook.site" icon="webhook" iconType="solid" href="https://webhook.site">
+
+**Webhook.site** è uno strumento eccellente per la prototipazione e il test dei webhook, che offre una piattaforma semplice ma potente per acquisire e ispezionare le richieste HTTP inviate a URL univoci generati automaticamente.
+
+</Card>
+
+<Card title="Val.town" icon="code" iconType="solid" href="https://www.val.town/">
+
+**Val.town** è uno strumento eccellente per prototipare rapidamente gli handler dei webhook, perché semplifica la scrittura, il test e il deployment di piccole funzioni JavaScript e Python direttamente dal browser.
+
+</Card>
+
+</CardGroup>

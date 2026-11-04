@@ -1,0 +1,221 @@
+---
+title: "ハウツー: アップロード (基本)"
+sidebarTitle: "アップロード (基本)"
+---
+
+## はじめに {#introduction}
+
+インテグレーションの道のりにおいて、いよいよ心躍るマイルストーンに到達しました。Frame.io へのアセットのアップロードです。このガイドでは、基本的なアップロードプロセスを順を追って説明します。
+
+## 前提条件 {#prerequisites}
+
+まだご覧になっていない場合は、先に進む前に [Implementing C2C: Setting Up](/ja/camera-to-cloud/implementing-c2c-setting-up) ガイドを確認してください。
+
+[認証と認可のプロセス](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で取得した `access_token` が必要になります。
+
+このガイドでは、[こちらの Frame.io リンク](https://f.io/Rq1q5CzB)から入手できるサンプルのテストアセットを使用します。例に沿って進められるよう、このファイルをダウンロードしてください。サンプルコマンドの値と一致させることができます。
+
+## ステップ 1: アセットの作成 {#step-1-creating-an-asset}
+
+[サンプルファイル](https://f.io/Rq1q5CzB)をアップロードしてみましょう。このファイルは 10 秒前に作成されたものと仮定します。まず、Frame.io にアセットの参照を作成する必要があります。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/devices/assets` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/device-asset-create)にあります。従来のエンドポイント `/v2/assets` も引き続き機能しますが、新しいインテグレーションでは `/v2/devices/assets` を使用することをおすすめします。
+
+</Info>
+
+<Info>
+
+**JSON エンコーディング**
+
+これまでに使用した認証エンドポイントとは異なり、このエンドポイントは `form/multipart` ではなく `application/json` エンコーディングを受け付けます。`application/x-www-form-urlencoded` も受け付けます。
+
+</Info>
+
+<Info>
+
+**コマンド構文**
+
+この例では、[heredoc](https://linuxize.com/post/bash-heredoc/) を使用して、読みやすい複数行の形式で JSON ペイロードを `curl` に渡しています。`--data-binary @-` パラメーターは、標準入力から生データを読み取るよう `curl` に指示します。このアプローチについて詳しくは[こちら](https://unix.stackexchange.com/questions/88490/how-do-you-use-output-redirection-in-combination-with-here-documents-and-cat)をご覧ください。
+
+</Info>
+
+JSON ペイロードのパラメーターを見てみましょう。
+
+`name`: Frame.io に表示されるアセット名です。ディスク上のファイル名と一致している必要はありません。
+
+`filetype`: ファイルの [MIME タイプ](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types)です。ほとんどのプログラミング言語には、MIME タイプを検出するためのユーティリティが用意されています (例: [Go](https://golangcode.com/get-the-content-type-of-file/)、[Python](https://docs.python.org/3/library/mimetypes.html))。
+
+`filesize`: バイト単位のファイルサイズです。サンプルファイルは約 21.1 MB です。
+
+`offset`: ファイルが作成されてからの秒数です。省略した場合のデフォルトは 0 です。デバイスの一時停止によってファイルを拒否すべきかどうかを判断するのに役立つため、このパラメーターは必ず指定してください。詳しくは[応用アップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)で説明します。
+
+レスポンスは次のようになります (一部のフィールドは省略しています)。
+
+```json
+{
+    "_type": "file",
+    ...
+    "id": "9a280f99-8f4f-46b0-a4b4-ec4c2f95138e",
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ],
+    ...
+}
+```
+
+この時点では、ファイルをアップロードする意図を Frame.io に伝えただけで、実際のファイルデータはまだ転送されていません。プロジェクト内のデバイスのフォルダーを確認すると、「アップロード中」の状態のプレースホルダーアセットが表示されます。
+
+`upload_urls` フィールドには、ファイルのチャンクをアップロードする先の URL が含まれています。テストファイルの場合、2 つのアップロード URL が返されるはずです。
+
+## ステップ 2: ファイルをチャンクに分割する {#step-2-splitting-the-file-into-chunks}
+
+レスポンスには複数のアップロード URL が含まれていました。Frame.io にアップロードする際は、ファイルをチャンクに分割して個別にアップロードします。これにはいくつかの利点があります。
+
+- **信頼性の向上**: 1 つのチャンクが失敗しても、アップロード全体をやり直す必要がありません
+- **アップロードの高速化**: 複数のチャンクを並列でアップロードできます ([応用アップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)で説明します)
+
+最適なチャンクサイズを求めるには、次の式を使用します。
+
+```python title="Python"
+# We use math.ceil() to ensure we get the upper bound in the division
+chunk_size = math.ceil(float(file.size) / float(len(response.upload_urls)))
+```
+
+サンプルファイルの場合、計算は次のようになります。
+
+```python title="Python"
+math.ceil(21136250 / 2)
+# 10568125
+```
+
+つまり、各チャンクは 10,568,125 バイトにする必要があります。チャンクサイズは通常 25MB 前後を目標としており、正確な計算については[応用アップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)で説明します。
+
+<Info>
+
+**最後のチャンクのサイズ**
+
+ファイルサイズが均等に割り切れることはまれなため、最後のチャンクは計算した `chunk_size` よりも小さくなる場合があります。ファイルのチャンクを読み取る際は、実装でこの点を考慮してください。
+
+</Info>
+
+このデモでは、[head](https://man7.org/linux/man-pages/man1/head.1.html) コマンドと [tail](https://man7.org/linux/man-pages/man1/tail.1.html) コマンドを使用してファイルのチャンクを抽出します。
+
+## ステップ 3: チャンクのアップロード {#step-3-uploading-the-chunks}
+
+最初のチャンクをアップロードするには、次のようにします。
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Info>
+
+**コマンド構文**
+
+`--data-binary @-` パラメーターは、`head` コマンドから渡される標準入力の生データを使用するよう `curl` に指示します。
+
+</Info>
+
+リクエストには次のヘッダーが必要です。
+
+`content-type`: アセットの作成時に使用したものと同じ MIME タイプの値
+
+`x-amz-acl`: AWS S3 のアクセス許可用で、常に `private` に設定します
+
+アップロードに成功すると、次のレスポンスが返されます。
+
+```text
+HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+...
+```
+
+同様に、2 つ目のチャンクをアップロードします。
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+両方のアップロードが完了すると、Frame.io でアセットを再生できるようになります! 🎉
+
+<Warning>
+
+**アップロードエラー**
+
+チャンクをアップロードする際、データは Frame.io の API ではなく、AWS S3 に直接送信されます。エラーレスポンスは、標準的な Frame.io のエラーではなく、AWS S3 の形式に従います。S3 エラーの処理については、[エラー処理ガイド](/ja/camera-to-cloud/how-to-handle-errors)で説明します。
+
+</Warning>
+
+<Info>
+
+**チャンクの順序**
+
+概念的にはチャンクを順番にアップロードするほうがわかりやすいですが、実際には任意の順序でアップロードできます。アップロードの順序に関係なく、システムが正しく組み立てます。
+
+</Info>
+
+## すべてをまとめる {#putting-it-all-together}
+
+以下は、アップロードプロセス全体を示す、Python 風の簡略化した疑似コードの例です。
+
+```python title="Python"
+file = open("~/Downloads/C2C_TEST_CLIP.mp4")
+mimetype = mimetypes.for_file("~/Downloads/C2C_TEST_CLIP.mp4")[0]
+created_at = time.ctime(file.stat.ST_CTIME)
+
+asset = c2c.asset_create(
+    name="C2C_TEST_CLIP.mp4", 
+    filetype=mimetype, 
+    filesize=file.size,
+    offset=datetime.now() - created_at,
+    channel=0,
+)
+
+chunk_size = math.ceil(float(file.size) / float(len(asset.upload_urls)))
+
+for chunk_url in asset.upload_urls:
+   chunk = file.read(bytes=chunk_size)
+   c2c.upload_chunk(chunk, chunk_url, mimetype)
+```
+
+この例では、エラー処理や並列アップロードを含まない基本的な流れを示しています。これらについては、[エラー処理](/ja/camera-to-cloud/how-to-handle-errors)ガイドと[応用アップロード](/ja/camera-to-cloud/how-to-advanced-uploads)ガイドで説明します。
+
+## 次のステップ {#next-steps}
+
+Frame.io への最初のアセットのアップロードに成功しました。おめでとうございます! [応用アップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)では、本番環境に対応した実装のための、より高度なテクニックと要件について説明します。
+
+ご不明な点があればお気軽に私たちのチームにお問い合わせのうえ、[リアルタイムアップロードガイド](/ja/camera-to-cloud/how-to-upload-realtime)に進んで、作成中のアセットをアップロードする方法について学んでください。

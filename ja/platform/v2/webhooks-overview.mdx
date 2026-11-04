@@ -1,0 +1,284 @@
+---
+title: "Webhooks の概要"
+---
+
+<Info>
+
+**サンプルアプリケーション**
+
+Frame.io Webhooks の独自のコンシューマーを構築したい場合は、[Github のサンプルアプリ](https://github.com/Frameio/webhooks-example-app)を自由に入手して拡張してください。
+
+</Info>
+
+## はじめに {#introduction}
+
+Webhooks を使うと、Frame.io 内で発生したイベントを通知に変換し、外部システムに送信して、処理、API コールバック、最終的にはワークフローの自動化に活用できます。
+
+## 設定 {#setup}
+
+Webhooks は、[開発者サイトの Webhooks エリア](https://developer.frame.io/app/webhooks)で設定できます。Webhook には次のものが必要です。
+
+- Name — 開発者サイトにのみ表示されます。
+- URL — イベントの配信先です。
+- Team — この Webhook を追加する Team です。
+- Events — Webhook をトリガーするイベント(1 つまたは複数)です。
+
+## サポートされているイベント {#supported-events}
+
+1 つの Webhook で、次のイベントをいくつでもサブスクライブできます。
+
+### Projects {#projects}
+
+| イベント | トリガー |
+| --- | --- |
+| `project.created` | 新しい Project が作成された |
+| `project.updated` | Project の設定が更新された |
+| `project.deleted` | Project が削除された |
+
+### Assets {#assets}
+
+| イベント | トリガー |
+| --- | --- |
+| `asset.created` | Asset が Frame.io に初めて追加/作成された(ただし、Asset のアップロードが完了する前である可能性が高い) |
+| `asset.copied` | Asset がコピーされた |
+| `asset.updated` | Asset の説明、名前、またはその他のファイル情報が変更された |
+| `asset.deleted` | Asset が(手動またはその他の方法で)削除された |
+| `asset.ready` | Asset がアップロードされ処理された後、すべてのトランスコードが完了した |
+| `asset.label.updated` | Asset のステータスラベルが設定、変更、または削除された |
+| `asset.versioned` | Asset がバージョン管理された |
+
+<Warning>
+
+**Asset のバージョン管理**
+
+`asset.versioned` イベントが発生すると、バージョンスタック自体ではなく、バージョン管理された Asset の id を含むペイロードを受け取ります。そのため、その `id` をバージョンスタックの id だと考えて別の関数に渡すつもりなら、まずその特定の「親」リソースを検索して突き止める必要があります。
+
+</Warning>
+
+<Warning>
+
+**Asset のラベルの更新**
+
+パブリック API 経由で `/v2/assets/:id` エンドポイントへの `PUT` 呼び出しによってステータスラベルが変更された場合、`asset.label.updated` イベントは発生しません(`BES-408`)。ただし、Frame.io のネイティブアプリやインテグレーション(Web、iOS、Premiere、After Effects、FCPX など)を使ってステータスラベルが更新された場合は発生します。
+
+</Warning>
+
+### Comments {#comments}
+
+| イベント | トリガー |
+| --- | --- |
+| `comment.created` | 新しい Comment または返信が作成された |
+| `comment.updated` | Comment が編集された |
+| `comment.deleted` | Comment が削除された |
+| `comment.completed` | Comment が完了になった |
+| `comment.uncompleted` | Comment が未完了に戻された |
+
+### Review Links {#review-links}
+
+| イベント | トリガー |
+| --- | --- |
+| `reviewlink.created` | 新しい Review Link が作成された |
+
+### Collaborators {#collaborators}
+
+| イベント | トリガー |
+| --- | --- |
+| `collaborator.created` | コラボレーターが Account に追加された |
+| `collaborator.deleted` | コラボレーターが Account から削除された |
+
+### Team Members {#team-members}
+
+| イベント | トリガー |
+| --- | --- |
+| `teammember.created` | Team Member が Account に追加された |
+| `teammember.deleted` | Team Member が Account から削除された |
+
+## ペイロード {#payload}
+
+Frame.io は、指定された Webhook エンドポイントに JSON のペイロードを配信します。*asset.created* イベントのペイロードの例を次に示します。
+
+```json
+{
+  "type": "asset.created",
+  "resource": {
+    "type": "asset",
+    "id": "<asset-id>"
+  },
+  "user": {
+    "id": "<user-id>"
+  },
+  "team": {
+    "id": "<team-id>"
+  }
+}
+```
+
+すべてのペイロードには、発生したイベントのタイプを示す `type` フィールドと、`resource` オブジェクトが含まれます。`resource` オブジェクトは、このイベントに関連するリソースの `type` と `id` を指定します。
+
+上記の *asset.created* イベントの例では、これは新しく作成された Asset の `id` になります。さらに、`user` オブジェクトと `team` オブジェクトも含まれます。これらは、イベントをトリガーした User と、リソースの Team コンテキストを参照します。
+
+直接の User と Team のコンテキスト以外に、**サブスクライブされたリソースに関する追加情報は含まれません**。アプリケーションで追加の情報やコンテキストが必要な場合は、HTTP API を使ってフォローアップのリクエストを行うことをお勧めします。
+
+## 再試行 {#retries}
+
+サービスへの Webhook の配信中にエラー(200 以外のステータスコードのレスポンス)またはタイムアウトが発生した場合、ペイロードは 3 回再試行され、配信は合計 4 回試みられます。
+
+## セキュリティ {#security}
+
+デフォルトで、すべての Webhook には署名キーが提供されます。これは設定で変更できません。このキーを使って、リクエストが Frame.io から送信されたものであることを検証できます。
+
+### Webhook の署名を検証する {#verify-webhook-signatures}
+
+中間者攻撃やリプレイ攻撃からインテグレーションを守るには、Webhook の署名を検証することが不可欠です。検証により、Webhook のペイロードが実際に Frame.io から送信され、転送中にペイロードの内容が改ざんされていないことを確認できます。
+
+`POST` リクエストには、次のヘッダーが含まれます。
+
+| 名前 | 説明 |
+| --- | --- |
+| `X-Frameio-Request-Timestamp` | Webhook の配信時刻 |
+| `X-Frameio-Signature` | 計算された署名 |
+
+**タイムスタンプ**は、Frame.io のシステムから配信された時刻です。これを使ってリプレイ攻撃を防ぐことができます。この時刻がローカル時刻から 5 分以内であることを検証することをお勧めします。
+
+**署名**は、Webhook の初回作成時に提供される署名キーを使った HMAC SHA256 ハッシュです。
+
+署名を検証するには、次の手順に従います。
+
+1. HTTP ヘッダーから署名を取り出します
+2. バージョン、配信時刻、リクエストボディを組み合わせて、署名するメッセージを作成します: `v0:timestamp:body`
+3. 署名シークレットを使って HMAC SHA256 署名を計算します。*注: 提供される署名には `v0=` というプレフィックスが付いています。現在、Frame.io でリクエストの署名に使われるバージョンはこの 1 つだけです。計算した署名の先頭に必ずこのプレフィックスを付けてください。*
+4. 比較します!
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify Webhook signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the Frame.io API for the given request
+        body (str): Webhook body from the received POST
+        secret (str): The secret for this Webhook that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+```javascript
+const crypto = require('crypto');
+
+// Capture the signature, secret, timestamp and payload from a new webhook event:
+const 
+signature = 'v0=a77ce6856e609c884575c2fd211d07a9ad1c3f72e19c06ff710e8f086ffca883', 
+secret = 'yxSE59T0gtZOFZxw6UhLwTkhd2m8ntNSdSWnApQ0xOnMEzSoXbD8sGFP4bzb7MbS',
+timestamp = 1604004499,  // UNIX timestamp in seconds
+payload = {
+	"project": {
+		"id": "f348e9f4-f142-42f9-b3bf-478d93f0feb4"
+	},
+	"resource": {
+		"id": "6aad9151-c216-4d6f-b5e9-530df551a426",
+		"type": "asset"
+	},
+	"team": {
+		"id": "aa891687-4b1e-4150-9b6d-9e4911c5b436"
+	},
+	"type": "asset.label.updated",
+	"user": {
+		"id": "59c9ade1-311b-4c3b-8231-b9d88e9a1a85"
+	}
+},
+body = JSON.stringify(payload),
+
+// Validate that caught payload is not older than 5 minutes
+currentTimeUTC = (new Date()).getTime(),
+currentTimestamp = currentTimeUTC / 1000, // JavaScript uses milliseconds whereas Unix Time is in seconds.
+minutes = 5, 
+expired = (currentTimestamp - timestamp) > minutes*60
+hmac1 = crypto.createHmac('sha256', secret),
+generateSignature = hmac1.update(`v0:${timestamp}:${body}`).digest('hex')
+
+// Evaluates to true if the webhook is verified
+console.log(!expired && signature === `v0=${generateSignature}`)
+```
+
+```go
+// Full Go sample code: https://github.com/Frameio/webhooks-example-app/blob/master/main.go
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	out, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Println(string(out))
+
+	// Verify the message has been delivered in the last 5 minutes.
+	timestampStr := r.Header.Get("X-Frameio-Request-Timestamp")
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if time.Since(time.Unix(timestamp, 0)) > 5*time.Minute {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Verify request signature.
+	expected := r.Header.Get("X-Frameio-Signature")
+	signature, _ := computeSignature(r, timestamp, secretKey)
+	if expected != signature {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	var event *Event
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&event)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Handle webhook here.
+	log.Println(event.ID)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// The request includes headers to enable the recipient to validate
+// that the request is from Frame.io and that it's been delivered within
+// the expected time range. To learn more about how this works, take a
+// look at our docs https://docs.frame.io/docs/webhooks#section-security.
+func computeSignature(r *http.Request, timestamp int64, secret string) (string, error) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+	copy := body[:]
+	r.Body = ioutil.NopCloser(bytes.NewReader(copy))
+
+	msg := fmt.Sprintf("%s:%d:%s", version, timestamp, string(body))
+
+	key := []byte(secret)
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(msg))
+
+	result := fmt.Sprintf("%s=%s", version, hex.EncodeToString(h.Sum(nil)))
+
+	return result, nil
+}
+```

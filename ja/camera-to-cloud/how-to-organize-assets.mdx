@@ -1,0 +1,216 @@
+---
+title: "ハウツー: アセットの整理"
+sidebarTitle: "アセットの整理"
+---
+
+## はじめに {#introduction}
+
+このガイドでは、統合からのアセットが*どこに*アップロードされるかを、どのように、どの程度制御できるかを学びます。
+
+## 必要なもの {#what-will-i-need}
+
+[C2C の実装: セットアップ](/ja/camera-to-cloud/implementing-c2c-setting-up)ガイドをまだお読みでない場合は、先に進む前にざっと目を通してください。
+
+また、[C2C ハードウェア](/ja/platform/v2/implementing-c2c-authentication-and-authorization-hardware)または [C2C アプリケーション](/ja/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application)の認証と認可のガイドで受け取った `access_token` も必要です。
+
+## アセットのフォルダー構造 {#asset-folder-structure}
+
+デフォルトでは、アセットは次のフォルダー構造で作成されます。
+
+`Cloud Devices` > `{YYYY}_{MM}_{DD}` > `{ASSET_TYPE}` > `{YOUR_DEVICE}` > `{ASSET_NAME}`
+
+ここで、`{ASSET_TYPE}` は `VIDEO`、`AUDIO`、`DATA` のいずれか(デバイスモデルのチャンネルごとに設定)、`{YOUR_DEVICE}` はユーザーのプロジェクトに接続されたプロジェクトデバイスの名前、`{ASSET_NAME}` はアップロードしたアセットの名前で、Frame.io で実際に再生可能なアセットです。
+
+### 拡張子によるルーティング {#extension-routing}
+
+`{ASSET_NAME}` のファイル拡張子に基づいて、さまざまなアセットをカスタムの `{ASSET_TYPE}` フォルダーに振り分けるようにデバイスを設定できます。たとえば、統合が生成する複数の異なるファイルタイプが、それぞれ特定の由来に属しているとします。その場合、次のようにアセットをマッピングするよう私たちに指示できます。
+
+```text
+.mov -> VIDEO
+.mp4 -> VIDEO
+.raw -> STILLS
+.jpeg -> STILLS
+.pdf -> CAMERA REPORTS
+.las -> LiDAR Scans
+```
+
+これで、次のアセットを作成すると、
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_codes]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "IMAGE_0001.jpeg", 
+            "filetype": "image/jpeg", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/assets` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/device-asset-create)にあります。
+
+</Info>
+
+… `Cloud Devices` > `2022_04_01` > `STILLS` > `MY_DEVICE` > `IMAGE_0001.jpeg` のような場所に振り分けられます。
+
+ファイル名が `A001_C001.mov` だった場合は、`Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `A001_C001.mov` に振り分けられます。
+
+### トークン化されたアップロードパス {#tokenized-upload-paths}
+
+統合によっては、デバイスが作成するフォルダー構造をより細かく制御したい場合があります。一方で、[Frame.io](http://frame.io/) としては、C2C デバイスから [Frame.io](http://frame.io/) へのファイルのアップロード方法に一定の一貫性を確保し、特に C2C デバイスがプロジェクトのどの部分とやり取りできるかについて [Frame.io](http://frame.io/) のお客様に保証する必要があります。そのため、インテグレーターは `{YOUR_DEVICE}` フォルダー内でアセットのアップロード先をカスタマイズできますが、そのフォルダーの外にアセットをアップロードすることはできません。
+
+カスタムのフォルダー構造にアップロードするには、パートナーマネージャーと連携する必要があります。カスタムのフォルダー構造は、アセット作成時に指定する必要があるトークン化されたメタデータの集合です。簡単な例を見てみましょう。
+
+`"A001"`、`"A002"`、`"A003"` などの `reel_name` 値と、`"C001"`、`"C002"` などの `clip_number` 値を持つ 3D カメラリグがあるとします。クリップごとにフォルダーを作成し、そこに左目用と右目用のファイルを格納したいので、プロジェクト内のファイルは次のようになります。
+
+![トークン化されたフォルダーパス - 3D リグの例](/images/camera-to-cloud/how-to-organize-assets/e40b09128d1cbf3c876fd14169a6406642d50d13ce7ab802baff4bbaf50bfd4a.webp)
+
+これを実現するには、次の 2 つの設定を構成する必要があります。
+
+- 必須メタデータフィールド
+- トークン化されたファイルパス
+
+必須メタデータフィールドは、統合でアセットを作成する際に設定する必要があるキーの単純なリストです。
+
+```text
+[reel_name, clip_number]
+```
+
+次に、これらのキーのいずれかを使用して `/` 区切りのパスを作成します。フィールドの値を挿入する位置は `{field_name}` で示します。
+
+```text
+REEL_{reel_name}/{reel_name}_{clip_number}
+```
+
+これらの設定はどちらも、統合の詳細の一部として追加するために [Frame.io](http://frame.io/) の私たちのチームに提供していただく必要があります。設定が完了した後は、アセットを作成する際に、アセットの作成を成功させるためにペイロードのルートでこれらの値を指定する必要があります。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_LEFT.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10,
+            "metadata": {
+              "reel_name": "A001",
+              "clip_number": "C001"
+            },
+        }
+__JSON__
+} | python -m json.tool
+```
+
+上記により、`Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `REEL_A001` > `A001_C001` > `A001_C001_LEFT.mp4` のようなフルパスを持つファイルが作成されます。
+
+<Danger>
+
+**メタデータのエラー**
+
+これらのフィールドを許可するようにデバイスが明示的に設定されていない場合、同じ呼び出しを行おうとするとエラーが返されます。同様に、必須メタデータフィールドを設定した場合は、アセット作成のペイロードでそれらを必ず指定しなければなりません(MUST)。指定しないとエラーが返されます。
+
+</Danger>
+
+ペイロードには有効な JSON 値であれば何でも指定できます。文字列以外の値は次のように表現されます。
+
+- **整数**: 10 進数で表現されます: `10` -> `"10"`
+- **浮動小数点数**: Proceedings of the SIGPLAN '96 Conference on Programming Language Design and Implementation に掲載された "Printing Floating-Point Numbers Quickly and Accurately" で説明されているアルゴリズムに従い、最短の表現が使用されます。
+- **ブール値**: `true` と `false` は `"true"` と `"false"` として表現されます
+- **null**: 空文字列として表現されます。`reel_name` が `null` に設定されている場合、最初のカスタムフォルダーは `REEL_` として表現されます
+
+一般的には、値は文字列に限定し、それ以外の値は必要に応じて整形することをお勧めします(たとえば、整数は常に先頭のゼロなしで出力されますが、これを変更したい場合もあるでしょう)。
+
+一般的に、すべてのクリップで有効な値を持つフィールドのみを使用するべきです。フィールドが常に有効な値を持つとは限らない場合は、未設定または null の値をどのように表現するかを計画しておく必要があります。
+
+## バージョンスタック {#version-stacking}
+
+[Frame.io](http://frame.io/) は[バージョンスタック](https://support.frame.io/en/articles/4431-version-stacking-and-comparison)をサポートしています。これは、同じコンテンツの複数のイテレーションを UI 上でまとめる機能です。C2C API では、デバイスがアセットの新しいイテレーションをアップロードし、以前のバージョンとともにバージョンスタックに追加できます。
+
+バージョンスタックを作成するには、アセットがどのバージョンスタックに属するかを識別する `autoversion_id` を指定する必要があります。この値には、UUID やファイル名など、何でも使用できます。アセットフォルダー内で意図せず重複することのない値のみを使用するよう注意してください。たとえば、統合が同じファイル名を複数回作成する可能性がある場合、ファイル名は `autoversion_id` として使用するのに適した候補では*ありません*。
+
+autoversion_id は次のように指定します。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v01.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+これで、新しいアセットをアップロードする際に同じ autoversion_id を使用すると、そのアセットは元のアセットとともにスタックの最新バージョンとして追加されます。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v02_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+*アセットは同じフォルダーにアップロードされた場合にのみスタックされます*。そのため、バージョンスタックを実装する場合は、いくつかの点に留意する必要があります。
+
+- バージョンスタックを作成するには、トークン化されたメタデータが同じ親フォルダーに解決される必要があります。
+- 作成日はファイルパスの一部であるため、UTC の午前 0 時以降に作成された新しいバージョンは、元のアップロードの作成時刻に合わせたオフセットを指定しない限り、正しくスタックされない場合があります。
+
+この 2 点目は重要です。最初のアップロードから 48 時間後に、アセットの新しいバージョンが作成されたとします。元のアセットとスタックするには、48 時間前を示すオフセット、つまり 172800 秒を指定する必要があります。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v03_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 172800,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+現在のアセットが本来 `2022_04_03` にアップロードされる*はず*だった場合でも、今回は `2022_04_01` にアップロードされ、正しいアセットとスタックされます。
+
+## 次のステップ {#next-up}
+
+これで、優れた C2C 統合を作成するためのガイドは最後です!少し時間を取って、自分をほめてあげてください。おやつを食べるのもいいでしょう。残っているのは、インテグレーター向けチェックリストを確認することだけです。そこには、堅牢な統合を作成するために必要なことがすべてまとめられています。
+
+まだお済みでない場合は私たちのチームにご連絡のうえ、次のガイドへお進みください。ご連絡をお待ちしています!

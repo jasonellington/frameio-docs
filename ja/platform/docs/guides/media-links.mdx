@@ -1,0 +1,480 @@
+---
+title: "メディアリンク"
+---
+
+Frame.io は、プロジェクトにアップロードされた画像、動画、PDF などのファイルを保存および処理します。API でファイルを取得すると、基本レスポンスにはファイル名、ステータス、Frame.io アプリで開くための `view_url` などの主要なメタデータが含まれます。オリジナル、プレビュー、さまざまな品質のレンディションといった実際のファイルコンテンツにアクセスするには、**includes** を使用します。
+
+このガイドでは、**List Files** および **Get File** エンドポイントで利用できるメディアリンクの includes について、それぞれが何を返すか、どのような場合に使用するかを説明します。
+
+## includes とは {#what-are-includes}
+
+includes は、ファイルのレスポンスと一緒にリクエストできるオプションのフィールドです。デフォルトでは、API は名前、ステータス、タイプ、タイムスタンプ、`view_url` といった主要なファイルメタデータのみを返します。includes を使用すると追加データをオプトインで取得できるため、すべてが必要でない場合はレスポンスを軽量に保てます。
+
+### includes の追加方法 {#how-to-add-includes}
+
+任意の **Get File** または **List Files** リクエストで、include 名のカンマ区切りリストを `include` クエリパラメーターとして渡します。
+
+```bash title="Single include"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+```bash title="Multiple includes"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```bash title="Includes on List Files"
+GET /v4/accounts/{account_id}/folders/{folder_id}/files?include=media_links.thumbnail
+```
+
+includes は、単一ファイルのエンドポイントとリストのエンドポイントの両方で同じように機能します。List Files で使用した場合、includes はレスポンス内のすべてのファイルに対して解決されます。
+
+### SDK の例 {#sdk-examples}
+
+<CodeGroup>
+
+```python title="Python SDK"
+import frameio
+
+client = frameio.Frameio(auth="<YOUR_TOKEN>")
+
+file = client.files.get(
+    file_id="93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    include=["media_links.thumbnail", "media_links.original"]
+)
+
+print(file.media_links.thumbnail.url)
+```
+
+```typescript title="TypeScript SDK"
+import Frameio from "frameio";
+
+const client = new Frameio({ auth: "<YOUR_TOKEN>" });
+
+const file = await client.files.get("93e4079d-0a8a-4bf3-96cd-e6a03c465e5e", {
+  include: ["media_links.thumbnail", "media_links.original"],
+});
+
+console.log(file.media_links?.thumbnail?.url);
+```
+
+</CodeGroup>
+
+リクエストされなかった includes は、レスポンスから完全に省略されます。
+
+## メディアリンクの includes の概要 {#media-link-includes-overview}
+
+<CardGroup cols={2}>
+
+<Card title="media_links.original" icon="file-arrow-down" iconType="solid">
+
+アップロードされたオリジナルファイル（アップロードされたそのままの状態）
+
+</Card>
+
+<Card title="media_links.thumbnail" icon="image" iconType="solid">
+
+表示用の PNG プレビュー画像
+
+</Card>
+
+<Card title="media_links.high_quality" icon="star" iconType="solid">
+
+利用可能な最高品質の処理済みレンディション
+
+</Card>
+
+<Card title="media_links.efficient" icon="bolt" iconType="solid">
+
+低帯域幅のユースケース向けの、利用可能な最小のレンディション
+
+</Card>
+
+<Card title="media_links.video_h264_180" icon="film" iconType="solid">
+
+ストリーミングと再生用の低解像度 180p H264 動画トランスコード
+
+</Card>
+
+<Card title="media_links.scrub_sheet" icon="table-cells" iconType="solid">
+
+スクラブ UI を構築するための、動画フレームのサムネイルをまとめた WebP スプライトシート
+
+</Card>
+
+</CardGroup>
+
+## media_links.original {#media_links-original}
+
+**アップロードされたそのままのオリジナルファイル**を指す署名付き URL を返します。処理や変換は一切行われません。
+
+### フィールド {#fields}
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `download_url` | string \| null | ファイルのダウンロードを強制する署名付き URL（`Content-Disposition: attachment`） |
+| `inline_url` | string \| null | ファイルをブラウザで直接開く署名付き URL（`Content-Disposition: inline; filename=<name>`） |
+
+### 使用するタイミング {#when-to-use}
+
+ソースファイルが必要な場合に `media_links.original` を使用します。たとえば、ユーザーにオリジナルの MOV、MP4、MXF、AVI、PSD、PNG、TIFF をダウンロードさせる場合や、オリジナルのバイトを別のシステムに渡す場合などです。
+
+### リクエスト例 {#example-request}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.original
+```
+
+### レスポンス例 {#example-response}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+<Warning>
+
+これらの URL は**一時的な署名付き S3 URL** であり、有効期限があります。キャッシュや保存はせず、必要になるたびに新しい URL をリクエストしてください。
+
+</Warning>
+
+## media_links.thumbnail {#media_links-thumbnail}
+
+アセットの **PNG プレビュー画像**を返します。高さは最大 540px です。これはオリジナルファイルではなく処理済みのレンディションであり、アカウントの設定によってはウォーターマークが適用される場合があります。
+
+### フィールド {#fields-1}
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `download_url` | string \| null | PNG サムネイルのダウンロードを強制する署名付き URL |
+| `url` | string \| null | `Content-Disposition` ヘッダーなしで PNG サムネイルをインラインで提供する署名付き URL |
+
+### 使用するタイミング {#when-to-use-1}
+
+アセットの**視覚的なプレビューを表示する**必要がある場合に `media_links.thumbnail` を使用します。たとえば、グリッドビュー、ギャラリー、ファイルピッカーなどです。オリジナルよりも高速に読み込まれ、常に Web で安全に扱える PNG 形式です。
+
+### リクエスト例 {#example-request-1}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+### レスポンス例 {#example-response-1}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.high_quality {#media_links-high_quality}
+
+アセットの**利用可能な最高品質の処理済みレンディション**のダウンロード URL を返します。Frame.io は、最大 2160p までの解像度ラダーでアップロードを処理します。API は**リクエスト時点で**利用可能な最高のレンディションを返します。そのため、リクエストした時点で 540p のレンディションしか処理が完了していない場合、より高いレンディションの準備ができるまで API は 540p を返します。
+
+### フィールド {#fields-2}
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `download_url` | string \| null | リクエスト時点で利用可能な最高品質のレンディションの署名付き URL |
+
+### 使用するタイミング {#when-to-use-2}
+
+**オリジナルを必要とせずに最高品質のバージョン**が欲しい場合に `media_links.high_quality` を使用します。たとえば、下流の処理のために高解像度のレンディションをエクスポートする場合や、フル解像度のプレビューを表示する場合などです。可能な限り最高の品質が必要な場合は、ファイルの `status` フィールドを確認し、ファイルが `ready` になってからこの include をリクエストして、解像度ラダー全体の処理が完了していることを確認してください。
+
+### リクエスト例 {#example-request-2}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.high_quality
+```
+
+### レスポンス例 {#example-response-2}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "high_quality": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.efficient {#media_links-efficient}
+
+**利用可能な最小の処理済みレンディション**のダウンロード URL を返します。これは `high_quality` の逆で、Frame.io は利用可能な最も低い解像度のレンディションを選択します。
+
+### フィールド {#fields-3}
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `download_url` | string \| null | 最小/最も効率的なレンディションの署名付き URL |
+
+### 使用するタイミング {#when-to-use-3}
+
+**品質よりも帯域幅やファイルサイズが重要な場合**に `media_links.efficient` を使用します。たとえば、低帯域幅の環境で簡易プレビューを生成する場合や、フル解像度を必要としないサムネイルパイプラインにデータを渡す場合などです。
+
+### リクエスト例 {#example-request-3}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.efficient
+```
+
+### レスポンス例 {#example-response-3}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "efficient": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.video_h264_180 {#media_links-video_h264_180}
+
+アセットの**低解像度 180p H264 動画トランスコード**のストリーミング URL とダウンロード URL を返します。
+
+<Warning>
+
+これはレガシーの include です。アセットに対して 180p のトランスコードが生成されていない場合は `null` になります。ほとんどのユースケースでは、特定のトランスコードの存在に依存せず、利用可能な最適な低品質レンディションを選択する `media_links.efficient` を使用することをお勧めします。
+
+</Warning>
+
+### フィールド {#fields-4}
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `download_url` | string \| null | 180p H264 動画をダウンロードするための署名付き URL |
+| `url` | string \| null | 180p H264 動画をストリーミングするための署名付き URL |
+
+### 使用するタイミング {#when-to-use-4}
+
+180p H264 トランスコードが確実に必要な場合に `media_links.video_h264_180` を使用します。たとえば、この形式を厳密に必要とするレガシーのプレーヤーやパイプラインと統合する場合などです。特定のアセットにトランスコードが存在しない場合、両方の URL は `null` になります。
+
+<Warning>
+
+video_h264_180 ファイルには音声は含まれていません。必要に応じて非常に効率的なプレビューに使用することを目的としています。
+
+</Warning>
+
+### リクエスト例 {#example-request-4}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.video_h264_180
+```
+
+### レスポンス例 {#example-response-4}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "video_h264_180": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.scrub_sheet {#media_links-scrub_sheet}
+
+**WebP スプライトシート**を返します。これは、動画の長さ全体から均等にサンプリングされた動画フレームのサムネイルをグリッド状に並べた 1 枚の画像です。ユーザーがタイムライン上をドラッグするとプレーヤーがプレビューフレームを表示する、動画スクラブ UI の構築に使用されます。
+
+<Info>
+
+スクラブシートは**動画アセットに対してのみ**生成されます。画像、PDF、その他の動画以外のファイルの場合、この include は `null` の URL を返します。
+
+</Info>
+
+### フィールド {#fields-5}
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `download_url` | string \| null | WebP スプライトシートをダウンロードするための署名付き URL |
+| `url` | string \| null | WebP スプライトシートをインラインで読み込むための署名付き URL |
+| `metadata` | object \| null | 個々のフレームを抽出するためのタイルレイアウト情報（実験的 API のみ） |
+
+**`metadata` のフィールド：**
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `tile_x` | integer | グリッド内のサムネイルの列数 |
+| `tile_y` | integer | グリッド内のサムネイルの行数 |
+| `thumb_width` | integer | 各サムネイルの幅（ピクセル） |
+| `thumb_height` | integer | 各サムネイルの高さ（ピクセル） |
+| `padding` | integer | サムネイル間の間隔（ピクセル） |
+| `frames` | integer | シート内でサンプリングされたフレームの総数 |
+
+### 使用するタイミング {#when-to-use-5}
+
+ユーザーのスクラブ操作に合わせてプレビューサムネイルを表示する必要があるカスタム動画プレーヤーやタイムライン UI を構築する場合に `media_links.scrub_sheet` を使用します。フレームごとに個別のリクエストを行う代わりに、スプライトシートはすべてのプレビューフレームを 1 回の画像ダウンロードにまとめます。
+
+### リクエスト例 {#example-request-5}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.scrub_sheet
+```
+
+### レスポンス例 {#example-response-5}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "scrub_sheet": {
+        "download_url": "https://assets.frame.io/...",
+        "url": "https://assets.frame.io/...",
+        "metadata": {
+          "tile_x": 10,
+          "tile_y": 10,
+          "thumb_width": 160,
+          "thumb_height": 90,
+          "padding": 1,
+          "frames": 100
+        }
+      }
+    }
+  }
+}
+```
+
+### スプライトシートからフレームを抽出する {#extracting-a-frame-from-the-sprite-sheet}
+
+スプライトシートは、`tile_x` 列 × `tile_y` 行のグリッドです。特定のフレームインデックス（0 始まり）のサムネイルを表示するには、画像内でのその位置を計算します。
+
+```javascript
+function getFrameOffset(frameIndex, metadata) {
+  const { tile_x, thumb_width, thumb_height, padding } = metadata;
+
+  const col = frameIndex % tile_x;
+  const row = Math.floor(frameIndex / tile_x);
+
+  return {
+    x: col * (thumb_width + padding),
+    y: row * (thumb_height + padding),
+    width: thumb_width,
+    height: thumb_height,
+  };
+}
+```
+
+その後、CSS の `background-position` を使用して、スプライトシートから正しいタイルを表示できます。
+
+```javascript
+function applyFrameToElement(el, frameIndex, scrubSheet) {
+  const { x, y, width, height } = getFrameOffset(frameIndex, scrubSheet.metadata);
+
+  el.style.backgroundImage = `url(${scrubSheet.url})`;
+  el.style.backgroundPosition = `-${x}px -${y}px`;
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+}
+```
+
+再生位置（秒）をフレームインデックスに対応付けるには、動画の総再生時間とシート内のフレーム数を使用します。
+
+```javascript
+function positionToFrameIndex(currentSeconds, durationSeconds, metadata) {
+  const progress = currentSeconds / durationSeconds;
+  return Math.min(
+    Math.floor(progress * metadata.frames),
+    metadata.frames - 1
+  );
+}
+```
+
+<Info>
+
+`metadata` フィールドは実験的 API バージョンでのみ利用できます。安定版の v4 API では、`scrub_sheet` は `download_url` と `url` のみを返します。
+
+</Info>
+
+## 複数の includes を組み合わせる {#combining-multiple-includes}
+
+1 回の API 呼び出しで複数の includes をリクエストできます。
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      },
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## 適切な include の選択 {#choosing-the-right-include}
+
+| 目的 | 使用する include |
+| --- | --- |
+| UI にプレビュー画像を表示する | `media_links.thumbnail` |
+| ユーザーにオリジナルファイルをダウンロードさせる | `media_links.original` |
+| オリジナルファイルをブラウザで直接開く | `media_links.original` → `inline_url` |
+| エクスポート用に最高品質のレンディションを取得する | `media_links.high_quality` |
+| 低帯域幅での使用向けに小さなレンディションを取得する | `media_links.efficient` |
+| 低解像度の動画をストリーミングまたはダウンロードする（レガシー） | `media_links.video_h264_180` |
+| フレームプレビュー付きの動画スクラブ UI を構築する | `media_links.scrub_sheet` |
+| ユーザーを Frame.io 内のファイルに移動させる | 基本のファイルレスポンスにある `view_url` を使用 |
+
+<Info>
+
+`view_url` は、include を指定しなくてもすべてのファイルレスポンスで利用でき、Frame.io Web アプリへの永続的なディープリンクです。これはメディア URL **ではありません**。Frame.io の UI を開くもので、有効期限はありません。ファイルをプログラムで提供またはダウンロードする必要がある場合ではなく、Frame.io 上でアセットを直接レビューしたりコメントしたりするようユーザーを誘導したい場合に使用します。
+
+</Info>
+
+## include の利用可能性 {#include-availability}
+
+メディアリンクの includes は、Frame.io がアップロードされたファイルの処理を完了した後にのみ値が設定されます。アップロード直後に include をリクエストした場合、トランスコードの進行中は URL が `null` になることがあります。ファイルオブジェクトの `status` フィールドを確認してください。ステータスが `ready` になると includes が利用可能になります。

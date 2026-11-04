@@ -1,0 +1,134 @@
+---
+title: "Lavorare con gli audit log"
+---
+
+## Panoramica {#overview}
+
+Frame.io supporta e conserva gli audit log (Audit Logs) per la stragrande maggioranza delle attività svolte nelle sue applicazioni. Ciò include sia le operazioni CRUD di base sulle risorse principali, sia alcune astrazioni speciali (ad es. `AssetVersioned`).
+
+<Warning>
+
+**Gli audit log vengono troncati dopo 30 giorni**
+
+Gli audit log di Frame.io sono disponibili tramite API per una finestra mobile di 30 giorni, dopodiché vengono spostati in un archivio a freddo. Pertanto, se desideri conservare una lunga cronologia degli eventi di Frame.io, assicurati di archiviare i dati storici dei log in modo indipendente.
+
+</Warning>
+
+### Ambito e autorizzazioni {#scope-and-permissions}
+
+Solo gli amministratori dell'account (Account Admins) possono accedere agli audit log di un account, e tutte le chiamate all'endpoint degli audit log devono essere limitate a un `account_id` come segue:
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### Risposte {#responses}
+
+Le risposte degli audit log hanno tutte un formato simile:
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**Non dimenticare la paginazione!**
+
+I dati di risposta degli audit log possono essere piuttosto prolissi, quindi assicurati di conoscere bene la [paginazione](/it/platform/v2/key-concepts#pagination)!
+
+</Info>
+
+## Filtri {#filters}
+
+Gli audit log supportano diversi filtri, inclusi gli intervalli di date. A differenza degli endpoint di [ricerca](/it/platform/v2/search-for-assets) di Frame.io, i filtri possono essere inviati solo come parametri della query string `GET`.
+
+Tutti i filtri seguono la stessa formattazione:
+
+### GET + query string {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**Un valore per tipo di filtro**
+
+Attualmente gli audit log supportano un solo valore per tipo di filtro. Se fornisci due filtri dello stesso tipo (ad es. `filter[action]=ActionOne&filter[action]=ActionTwo`), avrà la precedenza il secondo filtro.
+
+</Info>
+
+### Tipi di filtro principali {#key-filter-types}
+
+I principali tipi di filtro per selezionare e consultare gli audit log sono:
+
+| Tipo di filtro | Descrizione | Valori di esempio |
+| --- | --- | --- |
+| `item_type` | Filtra tutte le risorse di un singolo tipo. | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Filtra una singola risorsa specifica, ad es. un asset o una presentazione. | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | Filtra una singola azione, solitamente associata a un `item_type` | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | Filtra in base all'ID di un utente specifico (actor). | *&lt;user-id>* |
+| `team_id` | Filtra le attività associate a un singolo team. Questo filtro è utile solo per gli account che hanno più team. | *&lt;team-id>* |
+| `inserted_at` | Filtra gli eventi di audit verificatisi prima o dopo una data e ora specifiche. Deve essere in formato ISO-8601, UTC. | *2022-08-25T00:00:00Z* |
+
+### Tipi di elemento e azioni {#item-types-and-actions}
+
+| Risorsa | Azioni |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## Esempi di filtri {#filter-examples}
+
+Tutti i filtri seguono un formato simile, come descritto sopra. Di seguito sono riportati alcuni esempi mirati a casi d'uso specifici che possono aiutarti a iniziare.
+
+| Scenario | Query string |
+| --- | --- |
+| Azioni eseguite da un singolo utente. | `?filter[actor_id]=<user-id>` |
+| Tutte le attività su una presentazione specifica. | `?filter[item_id]=<presentation-id>` |
+| Commenti lasciati da un utente. | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| Tutte le attività sui link di revisione di un team. | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## Intervalli di date {#date-ranges}
+
+Gli intervalli di date sono un caso leggermente particolare, poiché è necessario specificare sia il `value` della data e ora `inserted_at`, sia l'operazione (`op`) da applicare a tale data e ora.
+
+Di conseguenza, le query sugli intervalli di date avranno sempre due elementi di filtro, ciascuno dei quali sarà a sua volta annidato accanto a un parametro `[inserted_at]`.
+
+Le operazioni supportate includono:
+
+- **gt**: maggiore di
+- **gte**: maggiore o uguale a
+- **lt**: minore di
+- **lte**: minore o uguale a
+
+### Esempi di intervalli di date {#date-range-examples}
+
+| Scenario | Query string |
+| --- | --- |
+| Tutti i record degli audit log a partire da una data. | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| Tutti gli asset caricati da un utente specifico fino a una data. | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

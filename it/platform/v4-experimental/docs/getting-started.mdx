@@ -1,0 +1,208 @@
+---
+title: "Guida introduttiva"
+sidebarTitle: "Per iniziare"
+---
+
+## Adobe Developer Console {#adobe-developer-console}
+
+Il primo passo per utilizzare un'API Adobe è creare un **Project** nella Adobe Developer Console. I progetti nella Developer Console corrispondono a un'applicazione che stai sviluppando per utilizzare la Frame.io Developer API. Si tratta di un concetto distinto da un progetto all'interno di Frame.io.
+
+<CardGroup cols={2}>
+
+<Card title="Adobe Developer Console" icon="gear" iconType="solid" href="https://developer.adobe.com/developer-console/" />
+
+<Card title="Guida ai Projects" icon="folders" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/projects/" />
+
+</CardGroup>
+
+Dopo aver creato un progetto nella Developer Console, aggiungi a esso la Frame.io API.
+
+## Novità della Frame.io V4 Developer API {#what’s-new-in-the-frame-io-v4-developer-api}
+
+Così come l'applicazione Frame.io è stata completamente trasformata per la versione 4, anche l'API V4 è stata riprogettata da zero. Sebbene alcuni concetti chiave restino simili a quelli delle versioni legacy, molti sono stati sostituiti o riprogettati per supportare flussi di lavoro collaborativi e integrazioni più potenti. L'introduzione di un'API completamente nuova ci ha inoltre offerto l'opportunità di semplificare drasticamente le nostre operazioni e di dare priorità ai flussi di lavoro più importanti per i clienti.
+
+<Info>
+
+Un confronto tra Frame.io V4 e la versione legacy è disponibile [qui](https://help.frame.io/en/articles/9084073-frame-io-v4-legacy-feature-comparison).
+
+</Info>
+
+All'interno dell'API V4, alcune risorse, come i Workspace (chiamati Team nella versione legacy di Frame.io), sono state rinominate per allinearsi a Frame.io versione 4, mentre altre, come gli Asset della versione legacy, sono state rinominate per fare riferimento a specifiche entità di archiviazione (File, Folder e Version Stack) in modo da ridurre la confusione per gli sviluppatori. Altre ancora, ad esempio i Custom Field e gli Share, sono completamente nuove. Tra le altre modifiche sostanziali, abbiamo ridotto drasticamente la quantità di dati restituiti per impostazione predefinita nelle richieste di risorse, rinominato alcune proprietà nelle nostre risposte affinché siano più precise e coerenti in tutta l'API e adottato un nuovo meccanismo di paginazione basato su cursore. Per questo motivo è importante comprendere che, ad eccezione dell'API Camera to Cloud (C2C), i client che si integrano con l'API legacy non sono compatibili con l'API V4.
+
+Inoltre, alcune funzionalità sono ancora in fase di sviluppo e si prevede che arrivino ed evolvano rapidamente in risposta ai casi d'uso reali e al feedback dei clienti. Ne sono un esempio la possibilità di creare azioni personalizzate e version stack. Se una funzionalità disponibile in precedenza nella nostra API legacy sembra mancare, è molto probabile che esista un'alternativa o che sarà disponibile a breve, ma ci farebbe piacere ricevere il tuo feedback in merito.
+
+Prima di addentrarsi nell'API V4, è utile comprendere i concetti fondamentali espressi nell'applicazione Frame.io versione 4. Un buon punto di partenza è la [Knowledge Base di Frame.io V4](https://help.frame.io/en/). Concetti come Account, Utenti, Workspace, Progetti, Raccolte, Share e Custom Field (metadati) sono modellati come risorse distinte nell'API V4, e comprendere le loro relazioni e funzionalità nell'applicazione aiuterà a capire come funzionano nell'API V4.
+
+## Panoramica dell'API {#api-overview}
+
+L'API Frame.io V4 è progettata secondo i principi architetturali RESTful e utilizza metodi HTTP e codici di risposta standard insieme a URL univoci e specifici per ciascuna risorsa. Frame.io pubblica una [specifica OpenAPI 3.0](https://api.frame.io/v4/openapi.json) per l'API V4, che fornisce informazioni dettagliate su endpoint, parametri di richiesta e risposte. La specifica OpenAPI può essere utilizzata da diversi strumenti di generazione di codice di terze parti per facilitare lo sviluppo rapido di applicazioni client.
+
+### Convenzioni per URL e percorsi {#url-and-path-conventions}
+
+I percorsi URL pubblicati nella specifica OpenAPI riflettono in genere le relazioni di proprietà e di contenimento delle risorse. Per questo motivo, alcuni parametri di richiesta (ad es. ID account, ID cartella e così via) sono incorporati nel percorso della risorsa. Sebbene questi percorsi siano pensati per essere prevedibili e facili da comprendere, la struttura di alcuni URL restituiti dalle richieste API (ad es. URL di caricamento prefirmati o link di visualizzazione) può cambiare e non deve mai essere composta direttamente da un'applicazione client.
+
+### Parametri di query della richiesta {#request-query-parameters}
+
+I parametri di richiesta che controllano il comportamento della paginazione e l'inclusione facoltativa di risorse correlate negli oggetti di risposta sono definiti come un insieme standard di parametri di query: `include`, `page_size`, `include_total_count`. Alcune richieste possono supportare parametri di query aggiuntivi specifici per quella risorsa o operazione.
+
+```html
+GET https://api.frame.io/v4/accounts/{account_id}/folders/{folder_id}/children?&include=project&page_size=5&include_total_count=true
+```
+
+### Payload di richiesta e risposta {#request-and-response-payloads}
+
+I payload di richiesta e di risposta sono entrambi composti da oggetti JSON e, di conseguenza, l'header content-type di una richiesta HTTP POST, PUT o PATCH deve specificare il media type `application/json`. Quando si creano o aggiornano risorse, la proprietà `data` della richiesta deve contenere l'oggetto della risorsa. Gli attributi della risorsa da creare o aggiornare sono contenuti in questo oggetto. Analogamente, le risposte riuscite che includono risorse le forniscono all'interno della proprietà `data` della risposta.
+
+### Paginazione {#pagination}
+
+Le risposte che possono potenzialmente restituire un numero elevato di oggetti risorsa (ad es. elenchi di cartelle o di commenti) sono paginate per ridurre la latenza delle richieste man mano che l'insieme dei risultati cresce. Ciò significa che la risposta a una richiesta può includere una sola "pagina" di risultati. Come indicato sopra, un client può scegliere una dimensione di pagina specifica, fino a un massimo di 100 elementi, tramite il parametro di query `page_size` al momento della richiesta. Se non specificata, la dimensione di pagina predefinita è di 50 elementi. L'API V4 utilizza una forma di paginazione nota come *paginazione basata su cursore* e include, nella proprietà `links` dell'oggetto di risposta (vedi l'esempio seguente), un link relativo che contiene una stringa di cursore opaca (i client non devono tentare di costruire questa stringa autonomamente) nel parametro di query `after`, che consente al client di recuperare la pagina successiva dei risultati (vedi la risposta di esempio seguente) effettuando richieste successive. Attualmente l'API V4 supporta solo la paginazione unidirezionale.
+
+```json
+{
+    "data": [
+        {
+            "created_at": "2024-10-02T00:22:44.887775Z",
+            "creator_id": "8ea72912-d40d-4b88-8d31-3762e055a2aa",
+            "file_size": 102432,
+            "id": "df171f3e-c95f-4454-9071-825cd924b572",
+            "media_type": "application/pdf",
+            "name": "sample.pdf",
+            "parent_id": "e183c7ba-07d9-425a-9467-ebdf0223d9ce",
+            "project": {
+                "created_at": "2024-08-21T17:45:41.881596Z",
+                "description": "For demonstration purposes",
+                "id": "976dd413-a92b-4af6-b465-98aded0174a8",
+                "name": "Demo Project",
+                "owner_id": "8ea72912-d40d-4b88-8d31-3762e055a2aa",
+                "root_folder_id": "e183c7ba-07d9-425a-9467-ebdf0223d9ce",
+                "storage": 20881946,
+                "updated_at": "2024-10-02T00:22:47.168489Z",
+                "workspace_id": "378fcbf7-6f88-4224-8139-6a743ed940b2"
+            },
+            "project_id": "976dd413-a92b-4af6-b465-98aded0174a8",
+            "status": "created",
+            "type": "file",
+            "updated_at": "2024-10-02T00:22:44.927993Z"
+        }
+    ],
+    "links": {
+        "next": "/v4/accounts/6f70f1bd-7e89-4a7e-b4d3-7e576585a181/folders/e183c7ba-07d9-425a-9467-ebdf0223d9ce/children?after=g3QAAAACZAAGb2Zmc2V0YQVkAAR0eXBlZAANb2Zmc2V0X2N1cnNvcg%3D%3D"
+    },
+    "total_count": 21
+}
+```
+
+### Errori {#errors}
+
+Se si verifica un errore, la proprietà `errors` nell'oggetto di risposta conterrà un array di uno o più oggetti di errore che forniscono dettagli sugli errori verificatisi. Attualmente le operazioni batch non sono supportate dall'API V4, quindi non esistono casi in cui il client debba gestire un successo parziale insieme a errori.
+
+```json
+{
+    "errors": [
+        {
+            "detail": "Unexpected field: foo",
+            "source": {
+                "pointer": "/data/foo"
+            },
+            "title": "Invalid value"
+        }
+    ]
+}
+```
+
+La tabella seguente elenca i codici di stato più comuni utilizzati dall'API V4.
+
+| Codice di stato | **Stato** | Descrizione |
+| --- | --- | --- |
+| 200 | OK | Richiesta riuscita. |
+| 201 | Created | La risorsa è stata creata. |
+| 204 | No Content | La risorsa è stata eliminata. Nessun payload di risposta. |
+| 400 | Bad Request | La richiesta non era valida, spesso a causa di un parametro o di un payload malformato o mancante. |
+| 401 | Unauthorized | Il token di autorizzazione è mancante o non valido. |
+| 403 | Forbidden | Il token di autorizzazione non dispone di autorizzazioni sufficienti per questa richiesta. |
+| 404 | Not Found | La risorsa richiesta non esiste. |
+| 422 | Unprocessable Entity | Il payload e/o i parametri della richiesta sono ben formati ma comunque non validi, impedendo l'esecuzione della richiesta (in gran parte intercambiabile con 400 Bad Request). |
+| 429 | Too Many Requests | La richiesta ha superato il limite di frequenza dell'API per questo account. Per i dettagli, consulta la sezione Limiti di frequenza della guida introduttiva. |
+| 5xx | Server Errors | Il nostro server ha segnalato un errore imprevisto. I client devono attendere almeno 30 secondi prima di ripetere l'evento; gli eventuali tentativi automatici devono essere limitati e includere un intervallo casuale, oltre ad applicare un back-off esponenziale nelle richieste successive. |
+
+### Autenticazione e autorizzazione {#authentication-and-authorization}
+
+L'API V4 si basa su OAuth 2.0 e su [Adobe Identity Management Server (IMS)](https://experienceleague.adobe.com/en/docs/commerce-admin/start/admin/ims/adobe-ims-integration-overview) per autenticare un utente (AuthN) e generare token di accesso per conto di tale utente. Con ogni richiesta API è necessario fornire un token di accesso tramite l'header HTTP Authorization (ovvero autenticazione con Bearer token).
+
+<Note>
+
+Gli [scope dei token](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#scopes) generati da IMS sono statici, mentre l'autorizzazione (AuthZ), che determina ciò che l'utente è autorizzato a fare (e quali operazioni possono essere eseguite dall'API per conto di tale utente), è determinata dai ruoli e dalle autorizzazioni concessi all'utente in Frame.io. Per maggiori dettagli sulla generazione e la richiesta di token di accesso, consulta le sezioni Getting Started with the Developer Console e Authentication Setup (in Start Developing with Postman).
+
+</Note>
+
+### Versioni e retrocompatibilità {#versions-and-backward-compatibility}
+
+L'API Frame.io V4 *non* è retrocompatibile con le versioni precedenti delle API di Frame.io e, in generale, non può essere utilizzata per accedere o aggiornare risorse contenute in account legacy, poiché i concetti e il modello di dati della V4 sono cambiati in modo significativo. Per questo motivo, tutti gli URI associati all'API V4 includono il prefisso di percorso `/v4`. Tuttavia, l'API V4 è ancora in rapida evoluzione ed è possibile che occasionalmente nuove funzionalità richiedano modifiche incompatibili. Più comunemente, Frame.io rilascerà nuove *aggiunte* all'API che considereremo sperimentali per un certo periodo, in modo da ricevere e rispondere al feedback dei clienti e alle metriche di utilizzo. Consapevoli che la retrocompatibilità è una preoccupazione importante per i clienti che gestiscono integrazioni di livello produttivo con elevati requisiti di disponibilità, stiamo progettando l'API V4 in modo che supporti un ulteriore livello di versionamento tramite un header HTTP personalizzato, così da consentire ai client di scegliere di utilizzare endpoint sperimentali, evitare modifiche incompatibili e fornire garanzie di retrocompatibilità all'interno del namespace V4. Ulteriori dettagli saranno disponibili a breve ma, per ora, si può ritenere che la versione iniziale dell'API V4 sia stabile e che passerà del tempo prima che prendiamo in considerazione l'introduzione di modifiche incompatibili.
+
+### Limiti di frequenza {#rate-limiting}
+
+Tutte le chiamate all'API V4 sono soggette a limiti di frequenza, e ogni risorsa e operazione dell'API è configurata con un proprio limite. I limiti vanno da un minimo di 10 richieste al minuto a un massimo di 100 richieste al secondo. Attualmente ogni limite viene applicato per *utente*, ma le policy e i limiti stessi sono soggetti a modifiche.
+
+L'API V4 utilizza un algoritmo di limitazione progressiva della frequenza di tipo "[leaky bucket](https://wikipedia.org/wiki/Leaky_bucket)", in cui i limiti si ricaricano gradualmente nel corso della finestra temporale assegnata. In altre parole, non esiste un limite netto superato il quale i limiti di una determinata risorsa vengono ripristinati (come nelle strategie a "finestra fissa" e a "finestra scorrevole"). I limiti residui, invece, si ricaricano costantemente a un ritmo proporzionale al limite e alla finestra temporale della risorsa. Le richieste che superano il limite di frequenza di un determinato endpoint non andranno a buon fine e restituiranno un errore HTTP 429.
+
+La strategia che consigliamo per gestire gli errori 429 è generalmente nota come "back-off esponenziale".
+In breve:
+
+- Quando ricevi un `429`, attendi per un certo periodo (almeno un secondo) prima di ripetere la richiesta
+- Se ricevi un altro `429`, aumenta in modo esponenziale, o almeno raddoppia, il periodo di attesa precedente finché il funzionamento normale non riprende
+
+Per determinare i limiti di frequenza applicabili a una determinata richiesta, i client possono esaminare i seguenti header HTTP restituiti nella risposta:
+
+| Header | Descrizione del valore |
+| --- | --- |
+| `x-ratelimit-limit` | Il limite di frequenza per questo percorso di risorsa, misurato in richieste. |
+| `x-ratelimit-remaining` | Il numero di richieste rimanenti nella finestra temporale corrente. |
+| `x-ratelimit-window` | La finestra temporale dei limiti per questo percorso di risorsa, misurata in millisecondi (ms). |
+
+## Dettagli dell'API {#api-details}
+
+La documentazione di riferimento definitiva per l'API V4 è la nostra [Guida di riferimento dell'API](/it/platform/api-reference/account-permissions/account-user-roles-update), ma prima di inviare le prime richieste sarà utile comprendere la gerarchia delle risorse così come è modellata dall'API V4.
+
+### Gerarchia delle risorse {#resource-hierarchy}
+
+Un [Account](https://help.frame.io/en/collections/8779087-account-settings) è in genere associato a un'organizzazione e rappresenta la risorsa fondamentale che determina il piano di abbonamento, la proprietà dei contenuti, i ruoli e le autorizzazioni degli utenti e l'organizzazione dei Workspace. Per questo motivo, il percorso URL di quasi tutti gli endpoint dell'API V4 include un prefisso che identifica l'account in cui si trova la risorsa.
+
+I Workspace (chiamati Team nella versione legacy di Frame.io) e i [Progetti](https://help.frame.io/en/articles/9101006-project-settings) vengono utilizzati per organizzare sia i contenuti sia gli utenti, incluso chi ha accesso a quali contenuti.
+
+La gerarchia di base delle risorse di contenuto in Frame.io è la seguente:
+
+<CardGroup cols={2}>
+
+<Card title="Gerarchia delle risorse" icon="sitemap" iconType="solid">
+
+**Account → Workspace → Project → Folder → Folder / Version Stack / File**
+
+</Card>
+
+</CardGroup>
+
+Ogni asset caricato su Frame.io è in definitiva rappresentato come un [File](https://help.frame.io/en/articles/9436564-supported-file-types-on-frame-io), mentre le [Cartelle](https://help.frame.io/en/articles/9101044-creating-folders) e i [Version Stack](https://help.frame.io/en/articles/9101068-version-stacking) sono risorse di archiviazione che fungono da contenitori e costituiscono la base di un modello di archiviazione gerarchico che supporta asset con versioni. La maggior parte degli utenti conosce già il concetto di base di cartella in Frame.io: funge semplicemente da contenitore non ordinato di altre risorse di archiviazione (modellate come suoi `children`) e rappresenta un nodo all'interno dell'albero delle cartelle. Ogni progetto ha una cartella radice univoca (identificata dalla chiave `root_folder_id`), che funge da radice dell'albero delle cartelle in cui si trovano tutti gli asset del progetto.
+
+Un Version Stack è un contenitore ordinato di file. Il suo ordinamento è strettamente lineare e determina un numero di versione per ciascuno dei suoi elementi figli, ma i client possono riordinare i file all'interno del version stack come preferiscono. Un file sarà sempre figlio di (contenuto in) esattamente una cartella *o* un version stack in un dato momento. Analogamente, una cartella o un version stack sarà sempre figlio di esattamente una cartella (esclusa la cartella radice del progetto).
+
+Consulta la [Guida di riferimento dell'API](https://developer.frame.io/platform/v4-experimental/api/current) per maggiori dettagli sull'esecuzione delle operazioni CRUD di base su file e cartelle archiviati in Frame.io. Attualmente l'API V4 supporta i version stack solo nell'elenco dei contenuti di una cartella, ma gli endpoint per creare e aggiornare i version stack saranno disponibili a breve.
+
+## SDK {#sdks}
+
+Sono disponibili SDK per TypeScript e Python, che puoi installare con i comandi seguenti. La sezione SDK Reference della documentazione contiene i riferimenti completi per gli SDK [Python](/it/platform/docs/sdk-reference/python-sdk-reference) e [TypeScript](/it/platform/docs/sdk-reference/type-script-sdk-reference).
+
+### TypeScript {#typescript}
+
+```bash
+npm i -s frameio
+```
+
+Visualizza su [npm](https://www.npmjs.com/package/frameio)
+
+### Python {#python}
+
+```bash
+pip install frameio
+```
+
+Visualizza su [PyPi](https://pypi.org/project/frameio/)

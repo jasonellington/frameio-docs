@@ -1,0 +1,642 @@
+---
+title: "ハウツー: アップロード(リアルタイム)"
+sidebarTitle: "アップロード(リアルタイム)"
+---
+
+## はじめに {#introduction}
+
+基本的なアップロードの知識をもとに、作成中のアセットをリアルタイムでアップロードする方法を見ていきましょう。この方法では、収録、レンダリング、ストリーミングの最中、つまり最終的なサイズが判明する前にファイルをアップロードできます。
+
+Real-time Uploads API を使用すると、収録の完了からわずか数秒でアセットを Frame.io で再生できるようになり、ワークフローの効率が大幅に向上します。
+
+## デモ動画 {#demo-video}
+
+この機能の概要をすばやく確認するには、[デモ動画](https://f.io/qjwfGmTa)をご覧ください。このデモでは、Adobe Media Encoder からのレンダリングがリアルタイムでアップロードされ、レンダリング完了からわずか 5 秒後に Frame.io で動画が再生可能になる様子を紹介しています。
+
+## 前提条件 {#prerequisites}
+
+まだお済みでない場合は、[C2C の実装: セットアップ](/ja/camera-to-cloud/implementing-c2c-setting-up)ガイドをご確認ください。
+
+[認証と認可のプロセス](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で取得した `access_token` が必要になります。
+
+例では、基本的なアップロードガイドと同じ[テストアセット](https://f.io/Rq1q5CzB)を使用します。
+
+ここではその概念をもとに説明を進めるため、[基本的なアップロードガイド](/ja/camera-to-cloud/how-to-basic-upload)の内容を理解しておくことをお勧めします。
+
+## リアルタイムアセットの作成 {#creating-a-real-time-asset}
+
+リアルタイムアップロードは、変更されたアセット作成プロセスから始まります。アセットを作成する際は、作成時点では最終的なサイズがわからないため、`is_realtime_upload` を `true` に設定し、`filesize` パラメーターを省略します(または `null` に設定します)。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/devices/assets` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/device-asset-create)にあります。
+
+</Info>
+
+<Warning>
+
+**拡張子とファイル名**
+
+リアルタイムアセットにはファイル拡張子が必要です。アセットの作成時にファイル名がわからない場合は、代わりに `extension` フィールドを使用できます(形式: `'.mp4'`)。後でアセット名を更新する予定がある場合は、この方法が推奨されます。
+
+</Warning>
+
+リアルタイムアセットのレスポンスは、通常のアセット作成と比べて簡略化されています。
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "C2C_TEST_CLIP.mp4"
+}
+```
+
+`upload_urls` が含まれていないことに注意してください。リアルタイムアップロードでは、ファイルの作成に合わせてオンデマンドでアップロード URL を生成します。
+
+## アップロード URL のリクエスト {#requesting-upload-urls}
+
+前のレスポンスの `asset_id` を使用して、ファイルの前半部分(10,568,125 バイト)の URL をリクエストしてみましょう。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "parts": [
+                {
+                    "number": 1,
+                    "size": 10568125,
+                    "is_final": false
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/devices/assets/{asset_id}/realtime_upload/parts` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/device-create-realtime-upload-parts)にあります。
+
+</Info>
+
+リクエストパラメーターについて:
+
+- `parts`: URL が必要なアップロードパートのリスト。1 回の呼び出しで複数の URL をリクエストすると効率が向上します。
+
+  - `number`: 1 から始まる連続したパート番号。番号は飛ばしてもよく、パートは任意の順序でアップロードできますが、組み立ては番号順に行われます。10,000 を超えることはできません(AWS の制限)。
+  - `size`: バイト単位のパートサイズ。[AWS マルチパートアップロードの制限](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)に準拠する必要があります。
+  - `is_final`: これがファイルの最後のパートかどうかを示します。
+
+レスポンスには、リクエストしたアップロード URL が含まれます。
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]"
+    ]
+}
+```
+
+`upload_urls` のリストは、リクエストの `parts` の順序に直接対応しています。
+
+次に、基本的なアップロードガイドと同様に最初のチャンクをアップロードします。
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+続いて、2 番目かつ最後のパートの URL をリクエストします。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+次の重要な追加点に注意してください。
+
+- 最後のパートでは `is_final` が `true` に設定されており、このチャンクの後にアップロードが完了することを示します
+- `asset_filesize` はファイルの合計サイズを示し、いずれかのパートで `is_final: true` が指定されている場合は必須です
+
+レスポンスで URL を受け取ったら、
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ]
+}
+```
+
+最後のチャンクをアップロードします。
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Warning>
+
+**最後のパートの扱い**
+
+最後のパートがアップロードされると、Frame.io は完全なファイルの組み立てを開始します。このプロセスには、残りのパートが完了するまでの 60 秒の猶予期間が含まれます。最後のパートは、他のすべてのパートが正常にアップロードされた後にのみアップロードすることをお勧めします。
+
+</Warning>
+
+以上です!Frame.io にアクセスして、正常にアップロードされたリアルタイムアセットを確認してください。🎉
+
+## アセット名の管理 {#managing-asset-names}
+
+アセットの作成時にファイル名がわからない場合は、`name` を指定せずに `extension` フィールドを使用できます。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "extension": ".mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+システムによってデフォルトの名前が割り当てられます。
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "[new file].mp4"
+}
+```
+
+この名前は、アップロード URL をリクエストする際に `asset_name` フィールドを含めることで更新できます。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_name": "C2C_TEST_CLIP.mp4",
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+名前が更新されるのは、アセットがまだデフォルトの名前を持っている場合のみです。Frame.io の UI で名前が変更されている場合や、以前に更新されている場合、このリクエストは無視されます。
+
+## URL リクエストの最適化 {#optimizing-url-requests}
+
+効率を高めるため、URL はパートごとに個別にリクエストするのではなく、現在利用可能なデータがあるパートの数だけまとめてリクエストしてください。この方法は、アップロード速度がデータ生成に追いつかない可能性がある大きなファイルで特に効果的です。
+
+## メディアファイルヘッダーの扱い {#handling-media-file-headers}
+
+一部のメディア形式では、ファイルの先頭にヘッダーが必要ですが、そのヘッダーはファイル全体が完成するまで書き込まれません。ヘッダーが AWS の最小パートサイズである 5 MiB(5,242,880 バイト)より小さい場合、これが課題となります。
+
+推奨する方法は次のとおりです。
+
+1. メディアデータの最初の 5,242,880 バイトをアップロードせずに確保しておく
+2. `part_number=2` からパートのアップロードを開始する
+3. ファイルが完成したら、確保しておいたデータの先頭にヘッダーを付加する
+4. `part_number=1` の URL をリクエストし、この結合したチャンクをアップロードする
+
+この方法により、適切なファイル構造を維持しつつ、最初のチャンクが最小サイズの要件を満たすようにできます。
+
+## 最適なパフォーマンスのためのパートサイズのスケーリング {#scaling-part-size-for-optimal-performance}
+
+AWS には、アップロード戦略に影響する次の制限があります。
+
+- 最大ファイルサイズ: 5 TiB(5,497,558,138,880 バイト)
+- 最大パート数: 10,000
+- 最小パートサイズ: 5 MiB(5,242,880 バイト)
+
+パートサイズを固定すると、次のようなトレードオフが生じます。
+
+- 10,000 パートすべてに最小サイズ(5 MiB)を使用すると、ファイルの合計サイズは約 52.4 GB に制限されます
+- 最大ファイルサイズを均等に分割すると約 550 MB のチャンクが必要になり、小さなファイルを効率的にストリーミングするには大きすぎます
+
+これらの制約のバランスを取る式が必要です。最初は小さなパートで応答性の高いアップロードを行いつつ、必要に応じて非常に大きなファイルにも対応できるようにします。
+
+### 推奨されるパートサイズの式 {#recommended-part-size-formula}
+
+Python で推奨する方法は次のとおりです。
+
+```python title="Python"
+import math
+from typing import Callable
+
+# Constants
+MINIMUM_PART_SIZE = 5_242_880
+MAXIMUM_PART_COUNT = 10_000
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# Maximum uniform data rate that allows for 10,000 parts
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def part_size(part_number: int, format_bytes_per_second: int) -> int:
+    """
+    Returns the payload size for a specific part number given the file's
+    expected data rate.
+    """
+    if part_number < 1:
+        raise ValueError("part_number must be greater than 0")
+
+    if part_number > 10_000:
+        raise ValueError("part_number must be less than 10,000")
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    # Calculate a scalar given our data rate. We will explain this step
+    # futher on in the guides.
+    scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+    part_size = math.floor(scalar * pow(part_number, 2)) + data_rate
+
+    return part_size
+```
+
+… ここで、`part_number` は `1` 以上 `10_000` 以下の値、`format_bytes_per_second` はファイルが 1 秒あたりに消費すると予想される平均バイト数です。この式をどのように導き出したかについては、[後ほど](/ja/camera-to-cloud/how-to-upload-realtime#showing-our-work)説明します。
+
+<Info>
+
+**スカラー値**
+
+`scalar` 変数とその計算は一見わかりにくいかもしれませんが、これは数学的な仕組みです。`format_bytes_per_second` にどのような値を使用しても、`1` から `10_0000` までの許可されたすべての `part_number` 値を関数に渡すと、その合計が 5 TiB のファイルサイズ制限に*ちょうど*一致する(できる限り正確に)値の集合が得られることを保証します。この式にたどり着いた過程は、[後ほど詳しく説明します](/ja/camera-to-cloud/how-to-upload-realtime#showing-our-work)。
+
+</Info>
+
+<Info>
+
+**切り捨て**
+
+切り捨てを使用すると多少のバイトが使われずに残りますが、10,000 パートにわたって通常の四捨五入を行うことで、許可された最大ファイルサイズを誤って超えてしまうことを防げます。この方法で使われずに残るのは最大でも 10,000 バイト、つまり 10 KB であり、許容できるトレードオフです。
+
+</Info>
+
+この式の重要な特性は次のとおりです。
+
+- 10,000 パートをアップロードした場合、アップロードされるデータの合計量は 5 TiB のファイルサイズ制限との差が 10 KB 以内に収まります。
+- 最初は小さく効率的なペイロードになるよう最適化されており、短い〜中程度の長さのクリップの応答性が向上します。
+- 非常に長いクリップでは、ファイルの書き込みが終了してから Frame で再生可能になるまでの応答性が低下します。
+
+2 点目と 3 点目のトレードオフは、ほとんどのクリップが 3 点目が問題になるサイズに達しないという事実によって緩和されます。*ほとんどの*ファイルの応答性を高める代わりに、ごく一部のファイルの応答性を低下させているのです。
+
+この式のより高度で効率的なバージョン(静的なスカラーとデータレートを事前に計算して組み込んだ匿名の `part_size_calculator` 関数を生成するもの)は、次のようになります。
+
+```python title="Python"
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    static_scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+
+    def part_size_calculator(part_number: int) -> int:
+        """Calculates size in bytes of upload for `part_number`."""
+        if part_number < 1:
+            raise ValueError("part_number must be greater than 0")
+
+        if part_number > 10_000:
+            raise ValueError("part_number must be less than 10,000")
+
+        return math.floor(static_scalar * pow(part_number, 2) + data_rate)
+
+    return part_size_calculator
+```
+
+### 式のパフォーマンス {#how-the-formula-performs}
+
+いくつかの一般的なファイルタイプについて、上記の式の出力特性を確認してみましょう。
+
+**例 1**: Web 形式
+
+レートが約 5.3MB/s 以下の Web 再生可能な形式(ほとんどの H.264/H.265/HEVC ファイル)では、ペイロードサイズは次のように推移します。
+
+| Total Parts | Payload Bytes | Payload MB | Total File Bytes | Total File GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 5,242,896 | 5.2 MB | 5,242,896 | 0.0 GB |
+| 1,000 | 21,575,817 | 21.6 MB | 10,695,361,357 | 10.7 GB |
+| 5,000 | 413,566,329 | 413.6 MB | 706,957,655,928 | 707.0 GB |
+| 10,000 | 1,638,536,679 | 1,638.5 MB | 5,497,558,133,921 | 5,497.6 GB |
+
+**表の列の説明**
+
+- `Total Parts`: AWS にアップロードされたファイルパートの合計数。
+- `Payload Bytes`: `part_number` が `Total Parts` と等しいときの AWS PUT ペイロードのサイズ。
+- `Payload MB`: `Payload Bytes` と同じですが、メガバイト単位です。
+- `Total File Bytes`: `Total Parts` 個の連続したパートがアップロードされた時点で、そのファイルについてアップロードされた合計バイト数。
+- `Total File GB`: `Total File Bytes` と同じですが、GB 単位です。
+
+これらの値は、リアルタイムアップロード、特に H.264 のような Web 再生用コーデックに対してバランスよく調整されています。ほとんどのファイルは 10.7 GB 未満となるため、1,000 パート以内で完了します。ペイロードサイズが 21.6 MB を超えることはありません。
+
+パートの半分を使い切った場合でも、ペイロードサイズが 413.5 MB を超えることはありません。アップロードの合計は 707 GB となり、大多数の Web ファイルには十分すぎる容量です。
+
+ファイルサイズが急激に大きくなり始めるのは、許可されたパート数の上限に近づいてからです。それでも 1.7 GB を超えることはなく、AWS のパートあたり 5 GiB の制限を大きく下回ります。
+
+**例 2**: Prores 422 LT
+
+Prores 422 LT は [102 Mbps のデータレートを持ち](https://www.wolframalpha.com/input?i=-%282+%28-68%2C719%2C476%2C736+%2B+125+12%2C750%2C000%29%29%2F8%2C334%2C583%2C375)、次のような表になります。
+
+| Total Parts | Payload Bytes | Payload MB | Total File Bytes | Total File GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 12,750,016 | 12.8 MB | 12,750,016 | 0.0 GB |
+| 1,000 | 28,857,758 | 28.9 MB | 18,127,308,783 | 18.1 GB |
+| 5,000 | 415,443,954 | 415.4 MB | 735,107,948,432 | 735.1 GB |
+| 10,000 | 1,623,525,817 | 1,623.5 MB | 5,497,558,133,958 | 5,497.6 GB |
+
+この表からは、Web に最適化した式と比べて有用な特性がわかります。最初の 1,000 パートで、8 GB 多くファイルをアップロードできます。初期のペイロードが大きいため、最初のうちに URL を頻繁にリクエストする必要がなく、高いデータレートに対してアップロードがより効率的になります。アップロードプロセスの終盤でも、ペイロードサイズは大きいままです。
+
+**例 2**: Camera RAW
+
+最後に、データレートが 280 MB/s の Camera RAW 形式を試してみましょう。これほど高速にデータが生成される場合、最初に 5 MiB のチャンクでアップロードしようとするのは意味がありません。
+
+| Total Parts | Payload Bytes | Payload MB | Total File Bytes | Total File GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 280,000,008 | 280.0 MB | 280,000,008 | 0.3 GB |
+| 1,000 | 288,091,460 | 288.1 MB | 282,701,200,139 | 282.7 GB |
+| 5,000 | 482,286,516 | 482.3 MB | 1,737,245,341,542 | 1,737.2 GB |
+| 10,000 | 1,089,146,065 | 1,089.1 MB | 5,497,558,133,870 | 5,497.6 GB |
+
+初期のペイロードがより効率的になるだけでなく、上限付近では 0.5 GB 以上を節約できるため、それらのネットワーク呼び出しが不利なネットワークイベントの影響を受けにくくなります。
+
+### 導出の過程 {#showing-our-work}
+
+すべてをまとめてアップローダーの例を作成する前に、この式にどのようにたどり着いたかを見てみましょう。
+
+必要だったのは、許可されたパートの終盤(ほとんどのアップロードは到達しない)の大きく重いペイロードと引き換えに、すべてのアップロードが恩恵を受けられる序盤のペイロードを軽く効率的にする式を考え出すことでした。同時に、アルゴリズムがパート番号 10,000 の*ちょうど*その時点で、5 TiB のファイルサイズ制限付近に到達するようにしたいと考えました。
+
+ここで微積分の出番です。
+
+グラフを指数的に増加させたいので、式はおそらく次のような形になります。
+
+```text
+n^2
+```
+
+… ここで、`n` はパート番号です。また、各パートが少なくとも式のデータレート(これを `r` と呼びます)になるようにしたいと考えます。
+
+```text
+n^2 + r
+```
+
+次に、最初の 10,000 個の自然数(1, 2, 3, …)について、*この*式の合計を求める式を見つける必要があります。シグマ記号 `Σ` は総和を表します。これを式に追加しましょう。
+
+```text
+Σxn^2 + r
+```
+
+… そして、`n` を 1 以上 10,000 以下の自然数の列として再定義します。
+
+この方程式は、まだあまり役に立ちません。直感的には正しい形をしていますが、希望どおり `n=10,000`、`r=5,242,880` と設定すると、[`385,812,135,000`(385 GB)という結果](https://www.wolframalpha.com/input?i=%CE%A3n%5E2+%2B+r+where+n+%3D+1+to+10%2C000+and+r+%3D+5%2C242%2C880)が出力されるだけです。この結果は 5 TiB のファイルサイズ制限を大きく下回るだけでなく、式を操作してその結果を出力させる方法もありません。
+
+そこで、調整用のダイヤルを用意しましょう。
+
+```text
+Σxn^2 + r
+```
+
+… ここで、`x` は結果が 5 TiB になるように解くことができるスカラーです。これで、方程式をファイルサイズ制限と等しいとおいて `x` について解くことができます。
+
+```text
+Σxn^2 + r = 5,497,558,138,880
+```
+
+総和は、`for` ループや `while` ループのように反復的に解かなければならないことがよくあります。しかし、私たちにぴったりの式があることがわかりました。最初の `n` 個の自然数の 2 乗の和を低コストで計算する[既知の方法](https://www.math-only-math.com/sum-of-the-squares-of-first-n-natural-numbers.html)です。
+
+```text
+Σn^2 = n(n+1)(2n+1)/6
+```
+
+多項式に並べ替えると、見やすくなります。
+
+```text
+Σn^2 = (2n^3 + 3n^2 + n)/6
+```
+
+変数 `x` と `r` を両辺に加えます。
+
+```text
+Σxn^2 + r = x(2n^3 + 3n^2 + n)/6 + rn
+```
+
+最後に、新しい式を 5 TiB と等しいとおきます。
+
+```text
+x(2n^3 + 3n^2 + n)/6 + rn = 5,497,558,138,880
+```
+
+あとは、合計パート数である `n=10,000` を設定して `x` について解くだけです。これにより、特定のデータレートに対する静的なスカラーを計算する方法が得られます。
+
+手計算する代わりに、[Wolfram Alpha に入力してみましょう](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000)。
+
+```text
+x = -(2 (125 r - 68719476736)) / 8334583375
+```
+
+だいぶ進展しました!データレートが最小パートサイズ(5 MiB)の場合、[次のような](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000+and+r+%3D+5%2C242%2C880)静的なスカラーが得られます。
+
+```text
+136,128,233,472 / 8,334,583,375
+```
+
+コンピューターの世界では、これは float64 値の `16.33293799427617` に相当します。この場合、パートサイズを求める式は次のようになります。
+
+```text
+s = 16.33293799427617n^2 + 5,242,880
+```
+
+ここで、`s` はパートサイズです。
+
+まだ問題が 1 つ残っています。現実の世界では、ペイロードに端数のバイトを含めることはできません。各値を丸める必要があります。Python を使用して切り捨てます。
+
+```python title="Python"
+math.floor(16.33293799427617 * pow(part_number, 2)) + 5_242_880
+```
+
+これで、このガイドの冒頭で示した関数の具体例にたどり着きました。
+
+## 基本的なアップローダーの作成 {#building-a-basic-uploader}
+
+このガイドで学んだことをすべて活用して、リアルタイムでレンダリング中のファイルをアップロードする、Python 風のシンプルな疑似コードを見てみましょう。
+
+```python title="Python"
+import math
+from datetime import datetime, timezone
+from typing import Callable
+
+# The minimum size, in bytes, for a single, non-final part upload.
+MINIMUM_PART_SIZE = 5_242_880
+# The maximum filesize in
+MAXIMUM_PART_COUNT = 10_000
+# The maximum size, in bytes, for an AWS upload.
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# The data rate at which every part is an equal size, and could not
+# be any uniformly larger without violating the maximum total file
+# size if 10_000 parts were to be uploaded. it works out to
+# ~549.8 MB per payload. By enforcing this we actually never need
+# to check if a part exceeds the maximum allowed part size, as our
+# parts will never exceed ~549.8 MB.
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+    ...
+
+def upload_render(data_stream: DataStream, channel: int = 0) -> None:
+    """
+    Uploads an asset for data_stream, which is a custom IO class that pulls remaining
+    upload data from an internal buffer or file, depending on how well the upload is
+    keeping pace with the render.
+
+    Uploads to `channel`
+    """
+
+    asset = c2c.asset_create(
+        extension=data_stream.extension, 
+        filetype=data_stream.mimetpye, 
+        channel=channel,
+        offset=datetime.now(timezone.utc) - data_stream.created_at()
+    )
+
+    calculate_part_size = create_part_size_calculator(data_stream.data_rate())
+    next_part_number = 0
+
+    while True:
+        next_payload_size = calculate_part_size(next_part_number)
+
+        # Waits until one or more chunks worth of data is ready for upload. Cache 
+        # whether our data stream has completed writing the file, and the current 
+        # number of bytes we have remaining to upload at this time.
+        available_bytes, stream_complete = data_stream.wait_for_available_data(
+            minimum_bytes=next_payload_size
+        )
+
+        # Build the list of parts to request based on our available data.
+        parts = []
+        while available_bytes > 0:
+            payload_size = calculate_part_size(next_part_number)
+
+            if available_bytes < payload_size and not stream_complete:
+                break
+
+            payload_size = min(payload_size, available_bytes)
+
+            parts.append(
+                c2c.RealtimeUploadPart(
+                    part_number=next_part_number,
+                    part_size=payload_size,
+                    is_final=False
+                )
+            )
+
+            available_bytes -= payload_size
+            next_part_number += 1
+
+        # If our stream is done writing, mark the last part as final.
+        if stream_complete:
+            parts[-1].is_final = True
+
+        # Create the part URLs using the C2C endpoint.
+        response = c2c.create_realtime_parts(
+            asset_id=asset.id,
+            asset_name=None if not stream_complete else data_stream.filename,
+            asset_filesize=None if not stream_complete else data_stream.size(),
+            parts=parts
+        )
+
+        # Upload each part to its URL.
+        for part, part_url in zip(parts, response.upload_urls):
+            part_data = data_stream.read(bytes=part.size)
+            c2c.upload_chunk(part_data, part_url, data_stream.mimetype)
+
+        if stream_complete:
+            break
+```
+
+<Warning>
+
+**高度なアップロード**
+
+上記のコードは、ファイルをリアルタイムでアップロードする基本的なフローを示しているにすぎません。実際には、このロジックを[エラー処理](/ja/camera-to-cloud/how-to-handle-errors)や[高度なアップロード](/ja/camera-to-cloud/how-to-advanced-uploads)の手法で強化する必要があります。
+
+</Warning>
+
+## 次のステップ {#next-up}
+
+リアルタイムアップロードを使用すると、統合の応答性を最大限に高めることができ、アセットは収録終了から数秒で Frame.io で再生可能になります。[後のガイド](/ja/camera-to-cloud/how-to-advanced-uploads)では、高度なアップロードの手法と要件について説明します。このガイドは基本的なアップロードを念頭に置いて書かれていますが、その大部分はリアルタイムアップロードにも当てはまります。
+
+まだお済みでない場合は私たちのチームにご連絡のうえ、次のガイドへお進みください。ご連絡をお待ちしています!

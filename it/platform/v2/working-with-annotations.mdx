@@ -1,0 +1,294 @@
+---
+title: "Lavorare con le annotazioni"
+---
+
+# Panoramica {#overview}
+
+In Frame.io le annotazioni sono rappresentate come un blob JSON serializzato di oggetti di disegno, completi di colori, coordinate e dimensioni. Nel blob, tutte le virgolette tranne la coppia esterna di delimitazione sono precedute da barre di escape (ad es. `\"key\":\"value\"`).
+
+Esistono tre forme di base — **arrow** (freccia), **rect** (rettangolo) e **line** (linea) — oltre al disegno a mano libera, che esula dall'ambito di questa guida ma segue gli stessi principi di base dei dati di coordinate serializzati.
+
+## Il sistema di coordinate {#the-coordinate-system}
+
+Tutte le forme sono posizionate su un sistema di coordinate cartesiane con origine nell'angolo in alto a sinistra e una scala da 0 a 1 su ciascun asse.
+
+![coordinate_plane.png](/images/platform/v2/working-with-annotations/099478340a4f8604fd4389c5d431ec9e9321f509f2d6055b0c92dd62e4e36147.webp)
+
+## Dati di base delle forme {#basic-shape-data}
+
+Tutte le forme sono posizionate sul piano illustrato sopra tramite una combinazione di coordinate e dati di stile. Ogni forma ha alcuni attributi comuni e, in aggiunta, un modo leggermente diverso di fare riferimento al sistema di coordinate.
+
+Tutti gli attributi di distanza/larghezza/altezza utilizzano la stessa scala da 0 a 1 della griglia di coordinate principale, ma in genere sono misurati a partire dal punto di origine della forma.
+
+In altre parole, se un video viene visualizzato in un viewport di 640x480, in quel contesto `x=1` corrisponderà a 640px assoluti. Ciò consente alle annotazioni di ridimensionarsi senza problemi mantenendo la loro posizione relativa al variare di schermo, dimensioni e contesto di visualizzazione.
+
+**Nota**: l'origine di un *rect* è sempre l'angolo in alto a sinistra della forma, indipendentemente dall'origine del disegno.
+
+### Attributi comuni {#common-attributes}
+
+| Attributo | Descrizione |
+| --- | --- |
+| `tool` | *arrow*, *rect* o *line*. Indica quale forma viene creata. |
+| `color` | Colore esadecimale a sei cifre della forma. |
+| `size` | Dimensione in pixel della linea della forma. Per le frecce si riferisce solo all'inizio della linea, poiché la larghezza finale è determinata a livello di codice. |
+
+### Arrow {#arrow}
+
+| Attributo | Descrizione |
+| :--- | :--- |
+| `x` | Coordinata x dell'origine della freccia. |
+| `y` | Coordinata y dell'origine della freccia. |
+| `w` | Differenza di posizione della freccia sull'asse y dall'inizio alla fine, rispetto all'origine della freccia. |
+| `h` | Differenza di posizione della freccia sull'asse x dall'inizio alla fine, rispetto all'origine della freccia. |
+
+### Rect {#rect}
+
+| Attributo | Descrizione |
+| :--- | :--- |
+| `x` | Coordinata x dell'angolo in alto a sinistra del rettangolo. |
+| `y` | Coordinata y dell'angolo in alto a sinistra del rettangolo. |
+| `w` | Larghezza del rettangolo, rispetto all'origine in alto a sinistra del rettangolo. |
+| `h` | Altezza del rettangolo, rispetto all'origine in alto a sinistra del rettangolo. |
+| `ix` | Origine x del disegno del rettangolo. (Non obbligatorio). |
+| `iy` | Origine y del disegno del rettangolo. (Non obbligatorio). |
+| `radius` | Raggio di arrotondamento degli angoli del rettangolo. Deve essere positivo. I valori superiori a 150 sono visivamente indistinguibili. |
+
+### Line {#line}
+
+| Attributo | Descrizione |
+| :--- | :--- |
+| `x1` | Coordinata x dell'origine della linea. |
+| `y1` | Coordinata y dell'origine della linea. |
+| `x2` | Coordinata x del punto finale della linea. Valore assoluto sul piano dell'immagine. |
+| `y2` | Coordinata y del punto finale della linea. Valore assoluto sul piano dell'immagine. |
+
+## Esempio semplice: il piano cartesiano {#simple-example-the-coordinate-plane}
+
+![plane-example.png](/images/platform/v2/working-with-annotations/99384da1b5af9a10636927f13840b9554fa518600b181af4f71f094dab50861c.webp)
+
+```text
+{"annotation": "[{\"tool\":\"line\",\"color\":\"#E74A3C\",\"size\":3,\"x1\":0.0028530670470756064,\"y1\":0.012680297987002695,\"x2\":0.9964336661911555,\"y2\":0.9903312727849104},{\"tool\":\"line\",\"color\":\"#34A3DB\",\"size\":3,\"x1\":0.004992867332382311,\"y1\":0.98779521318751,\"x2\":0.9942938659058488,\"y2\":0.012680297987002695}]}
+```
+
+```json
+{
+    "annotation": [
+        {
+            "tool": "line",
+            "color": "#E74A3C",
+            "size": 3,
+            "x1": 0.0028530670470756064,
+            "y1": 0.012680297987002695,
+            "x2": 0.9964336661911555,
+            "y2": 0.9903312727849104
+        },
+        {
+            "tool": "line",
+            "color": "#34A3DB",
+            "size": 3,
+            "x1": 0.004992867332382311,
+            "y1": 0.98779521318751,
+            "x2": 0.9942938659058488,
+            "y2": 0.012680297987002695
+        }
+    ]
+}
+```
+
+### Analisi {#breakdown}
+
+![blue-plane.png](/images/platform/v2/working-with-annotations/ced74a7487e5331393af727a794384e9e3294d7f048fda4c64e73b4ba32b4445.webp)
+
+```json
+{
+   "tool":"line",
+   "color":"#34A3DB",
+   "size":3,
+   "x1":0.004992867332382311,
+   "y1":0.98779521318751,
+   "x2":0.9942938659058488,
+   "y2":0.012680297987002695
+}
+```
+
+![plane-example-red.png](/images/platform/v2/working-with-annotations/35bbbbcbe89e4262ec4e0fedf5e13d48baeceb10421fe48bcb854eb216a28676.webp)
+
+```json
+{
+   "tool":"line",
+   "color":"#E74A3C",
+   "size":3,
+   "x1":0.0028530670470756064,
+   "y1":0.012680297987002695,
+   "x2":0.9964336661911555,
+   "y2":0.9903312727849104
+}
+```
+
+## Esempio complesso: tanti riquadri {#complex-example-lots-of-boxes}
+
+![lots-of-boxes.png](/images/platform/v2/working-with-annotations/9241b75e4785251c5c42b5b11306370df8d0510932e1537e20dbcde58977fea3.webp)
+
+```text
+{"annotation": "[{\"tool\":\"rect\",\"color\":\"#34A3DB\",\"size\":3,\"x\":0.008426966292134831,\"y\":0.02663337494798169,\"w\":0.0702247191011236,\"h\":0.10986267166042447,\"ix\":0.008426966292134831,\"iy\":0.02663337494798169,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#1ABCA1\",\"size\":3,\"x\":0.8932584269662921,\"y\":0.0449438202247191,\"w\":0.08895131086142327,\"h\":0.35122763212650854,\"ix\":0.8932584269662921,\"iy\":0.0449438202247191,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#E67422\",\"size\":3,\"x\":0.023408239700374533,\"y\":0.7873491468997087,\"w\":0.1254681647940075,\"h\":0.2047440699126093,\"ix\":0.023408239700374533,\"iy\":0.7873491468997087,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#E74A3C\",\"size\":3,\"x\":0.6919475655430711,\"y\":0.5409904286308781,\"w\":0.29868913857677903,\"h\":0.4427798585101955,\"ix\":0.6919475655430711,\"iy\":0.5409904286308781,\"radius\":8},{\"tool\":\"arrow\",\"color\":\"#E74A3C\",\"size\":3,\"x\":0.25374531835205993,\"y\":0.23137744486059092,\"w\":0.24250936329588013,\"h\":0}]}"
+```
+
+```json
+{
+    "annotation": [
+        {
+            "tool": "rect",
+            "color": "#34A3DB",
+            "size": 3,
+            "x": 0.008426966292134831,
+            "y": 0.02663337494798169,
+            "w": 0.0702247191011236,
+            "h": 0.10986267166042447,
+            "ix": 0.008426966292134831,
+            "iy": 0.02663337494798169,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#1ABCA1",
+            "size": 3,
+            "x": 0.8932584269662921,
+            "y": 0.0449438202247191,
+            "w": 0.08895131086142327,
+            "h": 0.35122763212650854,
+            "ix": 0.8932584269662921,
+            "iy": 0.0449438202247191,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#E67422",
+            "size": 3,
+            "x": 0.023408239700374533,
+            "y": 0.7873491468997087,
+            "w": 0.1254681647940075,
+            "h": 0.2047440699126093,
+            "ix": 0.023408239700374533,
+            "iy": 0.7873491468997087,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#E74A3C",
+            "size": 3,
+            "x": 0.6919475655430711,
+            "y": 0.5409904286308781,
+            "w": 0.29868913857677903,
+            "h": 0.4427798585101955,
+            "ix": 0.6919475655430711,
+            "iy": 0.5409904286308781,
+            "radius": 8
+        },
+        {
+            "tool": "arrow",
+            "color": "#E74A3C",
+            "size": 3,
+            "x": 0.25374531835205993,
+            "y": 0.23137744486059092,
+            "w": 0.24250936329588013,
+            "h": 0
+        }
+    ]
+}
+```
+
+### Analisi {#breakdown-1}
+
+Tenendo presente tutto ciò, è utile esaminare ciascun elemento dell'immagine precedente per farsi un'idea più chiara del sistema di coordinate delle annotazioni. Tieni presente che i valori `size` e `radius` di ciascun rettangolo in questo esempio corrispondono ai valori predefiniti dell'interfaccia di Frame.io.
+
+#### Rect blu {#blue-rect}
+
+![blue-box.png](/images/platform/v2/working-with-annotations/ccc803531559e559395c2811d2be436316bbce6249c89b4af0b366efcf6b4d27.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#34A3DB",
+   "size":3,
+   "x":0.008426966292134831,
+   "y":0.02663337494798169,
+   "w":0.0702247191011236,
+   "h":0.10986267166042447,
+   "ix":0.008426966292134831,
+   "iy":0.02663337494798169,
+   "radius":8
+}
+```
+
+#### Rect verde {#green-rect}
+
+![box-green.png](/images/platform/v2/working-with-annotations/4ce987f7843bf36e865fe0ceb6ae0ebbfa383cf719018754070a489fb3e3f17a.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#1ABCA1",
+   "size":3,
+   "x":0.8932584269662921,
+   "y":0.0449438202247191,
+   "w":0.08895131086142327,
+   "h":0.35122763212650854,
+   "ix":0.8932584269662921,
+   "iy":0.0449438202247191,
+   "radius":8
+}
+```
+
+#### Rect rosso {#red-rect}
+
+![red-box.png](/images/platform/v2/working-with-annotations/61638bc1073613b5456b11ac4ce287447c3aaade152c0e6faf7699d995b11b31.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#E74A3C",
+   "size":3,
+   "x":0.6919475655430711,
+   "y":0.5409904286308781,
+   "w":0.29868913857677903,
+   "h":0.4427798585101955,
+   "ix":0.6919475655430711,
+   "iy":0.5409904286308781,
+   "radius":8
+}
+```
+
+#### Rect arancione {#orange-rect}
+
+![orange-box.png](/images/platform/v2/working-with-annotations/b7a8f7c7feb18d0439ef14f7fe71441d3cada3f551dda44c9e69ef9c8b34a8d4.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#E67422",
+   "size":3,
+   "x":0.023408239700374533,
+   "y":0.7873491468997087,
+   "w":0.1254681647940075,
+   "h":0.2047440699126093,
+   "ix":0.023408239700374533,
+   "iy":0.7873491468997087,
+   "radius":8
+}
+```
+
+#### Freccia rossa {#red-arrow}
+
+![red-arrow.png](/images/platform/v2/working-with-annotations/1f3e9db0880bf0bef5aa305de38471893b8ae9901226383441ff08c317087160.webp)
+
+```json
+{
+   "tool":"arrow",
+   "color":"#E74A3C",
+   "size":3,
+   "x":0.25374531835205993,
+   "y":0.23137744486059092,
+   "w":0.24250936329588013,
+   "h":0
+}
+```

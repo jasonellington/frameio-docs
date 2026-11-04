@@ -1,0 +1,225 @@
+---
+title: "Cercare Asset"
+---
+
+# Panoramica {#overview}
+
+L'API di Frame.io supporta una ricerca approfondita e a facet degli Asset nell'intero Account, rispecchiando la funzionalità dell'applicazione web. Sebbene i filtri più comunemente utili siano Team, Project e Status, filtri e ordinamenti possono essere combinati in modi unici per ottenere insiemi estremamente specifici, basati sull'API. In generale, tutti i filtri a eccezione di `account_id`, `q` (query) e `sort` seguono la stessa struttura e sono tutti spiegati di seguito.
+
+![search-filters.png](/images/platform/v2/search-for-assets/d468e3a3b48184af611e5af020bee1474a328ab3fc5090df704dfd6c9b603ba7.webp)
+
+<Warning>
+
+**Discrepanza tra le dimensioni di pagina richieste e restituite**
+
+A marzo 2022 è noto un bug che interessa la funzione di paginazione dell'API di ricerca. Finché questo bug non sarà risolto, sconsigliamo di utilizzare l'API di ricerca per scorrere più pagine di risultati (ossia più di 100 asset), poiché la dimensione di pagina richiesta potrebbe non corrispondere al numero effettivo di asset restituiti.
+
+</Warning>
+
+## Valori predefiniti {#defaults}
+
+La richiesta API per avviare una ricerca è sempre la stessa:
+
+È sempre la stessa richiesta
+
+`POST` su `https://api.frame.io/v2/search/library`
+
+Se non forniti esplicitamente, i valori predefiniti per l'ottimizzazione della ricerca sono i seguenti:
+
+| Attributo | Valore predefinito | Descrizione |
+| :--- | :--- | :--- |
+| `page_size` | 10 | Verranno restituiti 10 Asset per pagina. |
+| `page` | 1 | La query restituirà la prima pagina della risposta. |
+| `sort` | `relevance` | "Relevance" tenta di ordinare gli asset in base a un insieme di attributi appositamente calibrato. In assenza di una query, la pertinenza è fortemente orientata verso i caricamenti più recenti. |
+
+## Informazioni su questa guida {#about-this-guide}
+
+Questa guida illustra il processo di creazione di una query di ricerca che corrisponda a:
+
+- Asset all'interno di un Account
+- Che corrispondono alla query `"moon"`
+- Che si trovano in un Project specifico
+- Che sono stati caricati tra il 1° e il 30 aprile 2020
+- E che sono stati contrassegnati come "Approved"
+
+Il corpo della nostra ricerca alla fine avrà questo aspetto:
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-30T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    },
+    "page_size": 10,
+    "page": 1
+}
+```
+
+### Account, query e ordinamento {#account-query-and-sort}
+
+L'Account (`account_id`), la query (`q`) e `sort` sono i tre elementi fondamentali più basilari che si trovano al di fuori di qualsiasi attributo `filter` in una query di ricerca.
+
+#### Contesto dell'Account {#account-context}
+
+Tecnicamente, l'unico attributo necessario per eseguire una ricerca è un `account_id`. In questo modo verranno semplicemente recuperati tutti gli Asset (cartelle incluse) dell'Account, con i valori di paginazione predefiniti (10 Asset per pagina, a partire dalla pagina 1).
+
+```json
+{
+    "account_id": "<account_id>"
+}
+```
+
+#### Query di ricerca {#search-query}
+
+Il successivo attributo più comune (e utile) da includere è la query stessa. Nota: poiché la ricerca dell'API di Frame.io accetta una query nulla, non è necessaria una query con carattere jolly (`*`). O stai cercando qualcosa, oppure stai richiedendo un ordinamento (eventualmente filtrato) di tutti gli Asset di un Account.
+
+Nel nostro caso, cercheremo il termine "moon".
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon"
+}
+```
+
+### Ordinamento {#sorting}
+
+![sort.png](/images/platform/v2/search-for-assets/bd057586bfc5499df0b46d41ae74d90e53beb6500bb87f639a730545ccb3f1c8.webp)
+
+Frame.io supporta diverse opzioni di ordinamento. La sintassi dell'ordinamento è simile per tutte le opzioni:
+
+- Esiste una direzione di ordinamento predefinita
+- Per invertire tale direzione, anteponi al valore di ordinamento un segno negativo `-`
+
+Ad esempio, per ordinare in ordine alfabetico inverso (dalla Z alla A), dichiareresti `"sort": "-name"`.
+
+L'operazione di ordinamento predefinita è "Relevance". Di conseguenza, non è necessario dichiararla e verrà applicata se non viene fornito alcun attributo `sort`.
+
+| Opzione di ordinamento | Attributo | Direzione predefinita |
+| :--- | :--- | :--- |
+| **Pertinenza** | n/d | n/d |
+| **Data di caricamento** | `inserted_at` | Prima i meno recenti |
+| **Nome** | `name` | Dalla A alla Z |
+| **Dimensione** | `filesize` | Prima i più piccoli |
+| **Autore del caricamento** | `creator.name` | Dalla A alla Z |
+
+Di conseguenza, mentre costruiamo la nostra query, possiamo ora aggiungere il `sort` per `name`, dalla A alla Z:
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name"
+}
+```
+
+### Filtri e paginazione {#filters-and-pagination}
+
+I filtri sono la funzionalità più complessa e al tempo stesso più potente della ricerca degli Asset di Frame.io. I filtri vengono scritti all'interno di un unico oggetto `filter` e seguono tutti lo stesso schema, composto da un'operazione (`op`) e da un `value`. I filtri utilizzano le seguenti abbreviazioni comuni, con le opzioni di confronto diverse da "uguale a" riservate alle query su date e dimensioni:
+
+- `eq` — uguale a
+- `lt` — minore di
+- `gt` — maggiore di
+- `lte` — minore o uguale a
+- `gte` — maggiore o uguale a
+- `match` — corrispondenza esatta, utilizzata solo per i filtri Uploader e Filetype
+
+Ad esempio, un `filter` per trovare la corrispondenza con un `project_id` noto verrebbe costruito come segue:
+
+```json
+{
+    "filter": {
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        }
+    }
+}
+```
+
+### Opzioni e operazioni {#options-and-operations}
+
+La tabella seguente descrive le opzioni e le operazioni associate a ciascun tipo di filtro.
+
+| Opzione di filtro | Attributo | Operazioni supportate | Valori supportati |
+| :--- | :--- | :--- | :--- |
+| **Archiviato** | `archived` | `eq` | `true`, `false` |
+| **Data di caricamento** | `inserted_at` | `eq`, `lt`, `gt`, `lte`, `gte` | `<datetime>` (ISO-8601, UTC) |
+| **Eliminato** | `deleted` | `eq` | `true`, `false` |
+| **Tipo di file** | `filetype` | `match` | `<MIME type>` |
+| **Privato** | `private` | `eq` | `true`, `false` |
+| **Project** | `project_id` | `eq` | `<project_id>` |
+| **Dimensione** | `filesize` | `eq`, `lt`, `gt`, `lte`, `gte` | `size` (in byte) |
+| **Stato** | `label` | `eq` | `none`, `in_progress`, `needs_review`, `approved` |
+| **Team** | `team_id` | `eq` | `<team_id>` |
+| **Tipo** | `asset_type` | `eq` | `audio`, `document`, `folder`, `image`, `other`, `stream`, `video` |
+| **Autore del caricamento** | `creator.name` | `match` | `<name>` |
+
+<Warning>
+
+**L'autore del caricamento deve essere un membro attivo dell'Account per popolare l'indice**
+
+La ricerca di autori che non sono più membri dell'account non funzionerà, poiché tali utenti non si trovano più nell'indice User Search.
+
+</Warning>
+
+Per continuare a costruire la nostra query, possiamo ora aggiungere un filtro per gli Asset che:
+
+- Si trovano in un Project specifico
+- Sono stati caricati tra il 1° e il 30 aprile 2020
+- Sono contrassegnati come "Approved"
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-28T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    }
+}
+```
+
+<Note>
+
+**Paginazione**
+
+L'endpoint di ricerca utilizza la paginazione esattamente come qualsiasi altro endpoint, tramite gli attributi `page_size` e `page` che si trovano al livello più esterno del corpo della richiesta. Per ulteriori dettagli sulla paginazione, consulta la guida dedicata [qui](/it/platform/v2/key-concepts#pagination).
+
+</Note>

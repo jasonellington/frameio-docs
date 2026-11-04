@@ -1,0 +1,138 @@
+---
+title: "Creare un’app OAuth 2"
+sidebarTitle: "Creare un’app OAuth2"
+---
+
+<Warning>
+
+**Questa guida presuppone che tu abbia già registrato un’app OAuth 2**
+
+In caso contrario, consulta [Flusso OAuth 2 Code](/it/platform/v2/oauth-2-code-authorization-flow) per configurare la tua applicazione.
+
+</Warning>
+
+## Nozioni di base sull’applicazione {#application-basics}
+
+**Nota**: dovresti conservare in modo sicuro il tuo `client_id` e (se non usi PKCE) il tuo `client_secret` e accedervi tramite il tuo ambiente. Gli esempi seguenti presuppongono la presenza di un file **.env** contenente le variabili `CLIENT_ID` e `CLIENT_SECRET`.
+
+```python title="Python"
+import urllib, requests, requests.auth
+import os
+
+CLIENT_ID = os.environ.get('CLIENT_ID')
+CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
+
+AUTHORIZE_URL = "https://applications.frame.io/oauth2/auth"
+TOKEN_URL = "https://applications.frame.io/oauth2/token"
+# The scopes you've chosen for your app, space-delimited
+SCOPE = "offline account.read asset.read" 
+# The callback URI for your app
+REDIRECT_URI = "https://yourapp.domain/callback"
+```
+
+## Chiamare il server di autenticazione {#invoking-the-auth-server}
+
+Innanzitutto, la tua applicazione dovrà chiamare il server di autenticazione di Frame.io, che reindirizzerà poi l’utente a una pagina di accesso.
+
+```python title="Python"
+import uuid
+from urllib.parse import urlencode
+
+def create_auth_url():
+ credentials = {
+  'response_type': 'code',
+  'redirect_uri': REDIRECT_URI,
+  'client_id': CLIENT_ID,
+  'scope': SCOPE,
+  'state': str(uuid.uuid4())
+ }
+ url = (AUTHORIZE_URL + "?" + urlencode(credentials))
+ return url
+```
+
+## Il callback {#the-callback}
+
+Il server di autenticazione effettuerà quindi una richiesta `GET` al tuo `REDIRECT_URI`, che a sua volta dovrà chiamare il `TOKEN_URL`. Questo callback sarà leggermente diverso a seconda che la tua applicazione sia configurata o meno per utilizzare PKCE.
+
+### Senza PKCE {#without-pkce}
+
+Se non utilizzi PKCE, il tuo callback deve includere un header `Authorization` contenente il tuo `CLIENT_ID` e il tuo `CLIENT_SECRET`.
+
+```python title="Python"
+def callback():
+   state = request.args.get('state')
+   scope = request.args.get('scope')
+   code = request.args.get('code')
+   error = request.args.get('error')
+
+   if error:
+     return "Error: " + error
+
+   # Set up for client authorization and set up the data you need to send.
+   client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET)
+
+   post_data = {
+     "grant_type": "authorization_code",
+     "code": code,
+     "redirect_uri": REDIRECT_URI,
+     "state": state,
+     "scope": SCOPE
+   }
+
+# Send a POST request with the data you need to receive an access token. 
+# If everything goes well, it will be returned to you and you can use it with
+# Frame.io.
+
+   response = requests.post(TOKEN_URL, auth=client_auth, data=post_data)    
+   return response.text
+```
+
+### Con PKCE {#with-pkce}
+
+Se utilizzi PKCE, il tuo callback *non* deve includere un header `Authorization`, ma *deve* includere il tuo `CLIENT_ID`  nel corpo della richiesta `POST` quando richiama il `TOKEN_URL`.
+
+```python title="Python"
+def callback():
+   state = request.args.get('state')
+   scope = request.args.get('scope')
+   code = request.args.get('code')
+   error = request.args.get('error')
+
+   if error:
+     return "Error: " + error
+
+# If using PKCE, you must include the CLIENT_ID in your request body  
+   post_data = {
+     "grant_type": "authorization_code",
+     "code": code,
+     "redirect_uri": REDIRECT_URI,
+     "state": state,
+     "scope": SCOPE
+     "client_id": CLIENT_ID 
+   }
+
+# Send a POST request with the data you need to receive an access token. 
+# If everything goes well, it will be returned to you and you can use it with
+# Frame.io
+
+  # If using PKCE, use the below request with no auth
+  response = requests.post(TOKEN_URL, data=post_data) 
+
+   return response.text
+```
+
+## Risposta riuscita {#successful-response}
+
+Se il callback va a buon fine, riceverai una risposta JSON simile alla seguente:
+
+```json
+{
+  "access_token":"BEARER_TOKEN",
+  "expires_in":3600,
+  "refresh_token":"REFRESH_TOKEN",
+  "scope":"account.read offline",
+  "token_type":"bearer"
+}
+```
+
+Ora puoi utilizzare l’`access_token` per effettuare chiamate API a Frame.io per conto dell’utente che ha effettuato l’accesso e il `refresh_token` per richiedere un nuovo `access_token` dopo la scadenza di questo token.

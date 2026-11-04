@@ -1,0 +1,287 @@
+---
+title: "インテグレーター向けチェックリスト"
+---
+
+## C2C 統合の要件 {#c2c-integration-requirements}
+
+このチェックリストでは、C2C エコシステムに参加するためのベストプラクティスと要件をまとめています。すべての項目がすべての C2C デバイスやアプリケーションに当てはまるわけではありませんが、C2C 認定プログラムの中で、C2C パートナーシップチームが皆様と協力して具体的な要件を定義します。
+
+## 基本的な統合要件 {#basic-integration-requirements}
+
+すべての統合には、次のものが含まれている必要があります。
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーコード" icon="keyboard" iconType="solid">
+
+6 桁のコードをユーザーに表示します。Web インターフェースや QR コードに対応したデバイスでは、`verification_url_complete` を使用して、ログインと接続先プロジェクトの選択を行うためのハイパーリンクをユーザーに提供します。
+
+</Card>
+
+<Card title="プロジェクトの表示" icon="folder" iconType="solid">
+
+接続中のプロジェクト名を表示し、ユーザーが [Frame.io](http://frame.io/) の UI を探し回らなくても、接続をすばやく確認できるようにします。
+
+</Card>
+
+<Card title="アップロードステータス" icon="upload" iconType="solid">
+
+次の項目をわかりやすく表示します。
+
+- 残りのファイル数
+- 残りのファイルの合計サイズ
+- 現在のファイルのアップロード進捗
+- 完了、キュー待ち、失敗したアップロードのステータス
+
+</Card>
+
+<Card title="ネットワークステータス" icon="network-wired" iconType="solid">
+
+ネットワーク接続ステータスを表示し、8 時間後にユーザー操作やアラートなしでアクセストークンを自動的に更新します(更新エラーが発生した場合を除く)。
+
+</Card>
+
+</CardGroup>
+
+追加の要件:
+
+- 各ステップでキャンセル可能な認可フロー
+- リアルタイム通信のためのソケットステータス
+- すべての HTTPS エンドポイント呼び出しでのファームウェアバージョンヘッダー
+
+## セキュリティ要件 {#security-requirements}
+
+[Frame.io](http://frame.io/) では、セキュリティを最も重視しています。要件は次のとおりです。
+
+<CardGroup cols={2}>
+
+<Card title="HTTPS と直接接続" icon="shield-halved" iconType="solid">
+
+- HTTPS のみのリクエスト(HTTP リクエストは拒否されます)
+- デバイスまたはアプリケーションから [Frame.io](http://frame.io/) への直接接続(中間サービスは不可)
+
+</Card>
+
+<Card title="認証情報の保護" icon="lock" iconType="solid">
+
+- `client_secret` と `client_id` の保護(ユーザーがアクセスできないこと)
+- `access_token` と `refresh_token` の認証情報の保護
+- シークレットとトークンの暗号化保存(任意ですが推奨)
+
+</Card>
+
+</CardGroup>
+
+## アップローダーの要件 {#uploader-requirements}
+
+特に厳しい条件下では、信頼性の高いメディアアップロードが極めて重要です。統合では次のことを満たす必要があります。
+
+<CardGroup cols={2}>
+
+<Card title="アップロード機能" icon="upload" iconType="solid">
+
+- 収録中のリアルタイム(推奨)またはファイル完成時の自動アップロードをサポートする
+- キューや結果を含め、アップロードステータスをわかりやすく表示する
+- ユーザーがアクセスできるローカルストレージにファイルを書き込む
+
+</Card>
+
+<Card title="キュー管理" icon="list" iconType="solid">
+
+次の状況に対応できる堅牢なアップロードキューを維持します。
+
+- 同時アップロード
+- ネットワークの中断
+- 電源の再投入
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="エラー処理" icon="triangle-exclamation" iconType="solid">
+
+次の場合に自動リトライを実装します。
+
+- ネットワークの問題
+- 電源の中断
+- 致命的でないエラー(タイムアウト、ネットワークエラー、期限切れのトークン)
+
+</Card>
+
+<Card title="アップロード制御" icon="play" iconType="solid">
+
+- 最後に成功したチャンクからアップロードを再開する
+- **PAUSED** 状態を尊重する
+- AWS の致命的でないエラーに対処する
+- 他のアップロードを妨げずに破損したメディアを管理する
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="アップロードオプション" icon="sliders" iconType="solid">
+
+柔軟なアップロードオプションを提供します。
+
+- 自動/手動アップロードの切り替え
+- 個別/一括のファイル選択
+- ファイルタイプの優先順位付け(任意)
+- キューの優先順位付け(任意)
+- 並列アップロード(任意)
+- 個別またはすべてのアップロードのキャンセルを許可する
+
+</Card>
+
+</CardGroup>
+
+## ネットワーク要件 {#networking-requirements}
+
+統合では次のことを満たす必要があります。
+
+<CardGroup cols={2}>
+
+<Card title="速度とセキュリティ" icon="gauge-high" iconType="solid">
+
+- 最低 50Mbps のアップロード速度を達成する(ネットワーク条件が許す場合)
+- WPA2 の Wi-Fi セキュリティをサポートする(イーサネットは任意ですが推奨)
+
+</Card>
+
+<Card title="ネットワーク管理" icon="network-wired" iconType="solid">
+
+- DHCP と固定 IP に対応する
+- ネットワークステータス(接続タイプ、速度、健全性)をわかりやすく表示する
+- プロジェクトの再ペアリングなしでネットワークを切り替える
+- 既知の Wi-Fi ネットワークを保存する
+
+</Card>
+
+</CardGroup>
+
+## テスト要件 {#testing-requirements}
+
+C2C は厳しい条件下での使用を前提に設計されているため、次の項目にわたる徹底的なテストが必要です。
+
+<CardGroup cols={2}>
+
+<Card title="ネットワーク構成" icon="network-wired" iconType="solid">
+
+該当するすべての接続タイプをテストします。
+
+- 以下を備えた業務用ルーター:
+
+  - 有線 WAN
+  - ボンディング対応セルラーモデム
+  - 業務用セルラーモデム
+  - ホットスポット型モデム
+
+- メッシュルーター構成(802.11r FT プロトコルを含む)
+
+- さまざまな種類のモデムへの直接接続
+
+</Card>
+
+<Card title="耐障害性テスト" icon="bolt" iconType="solid">
+
+- 予期しない停電
+- ネットワークの切断
+- ISP の問題
+- 破損したメディアの処理
+- オフラインでのアセット作成と再接続
+
+</Card>
+
+</CardGroup>
+
+## ワークフロー要件 {#workflow-requirements}
+
+C2C は単なる機能ではなく、エコシステムです。デバイスやアプリケーション固有の要件には次のものがあります。
+
+<CardGroup cols={2}>
+
+<Card title="SDI/HDMI 収録" icon="video" iconType="solid">
+
+- カメラからの自動収録トリガー
+- 柔軟なカメラオプション
+- タイムコードオフセットの調整
+- 手動収録機能
+- 一貫したファイル名の処理
+- 正確なタイムコード同期
+
+</Card>
+
+<Card title="プロキシファイル" icon="file-video" iconType="solid">
+
+- ヒーローファイル/OCF とファイル名、タイムコード、メタデータが一致すること
+- LTE に最適化されていること(1〜12Mbps のビットレート)
+- ビデオとオーディオの標準コーデックのサポート
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="一般要件" icon="list-check" iconType="solid">
+
+- ビデオ/オーディオのタイムコードストリーム
+- 複数フォーマットのアップロードのサポート(Proxy、OCF、LUT、WAV、RAW、JPG、HEIF、TIFF)
+- プロジェクト名の変更への対応(名前の文字列ではなく `project_id` を使用する)
+
+</Card>
+
+</CardGroup>
+
+## 品質保証 {#quality-assurance}
+
+[Frame.io](http://frame.io/) では、品質が不可欠です。主なテスト領域は次のとおりです。
+
+<CardGroup cols={2}>
+
+<Card title="基本機能" icon="check" iconType="solid">
+
+- 安定した起動と動作
+- プロジェクトへの接続
+- ハードウェアコードの生成
+- ログイン/ログアウト機能
+- プロジェクト/ユーザー情報の表示
+- デバイス管理
+- アセットのアップロード
+- フォーマットのサポート
+
+</Card>
+
+<Card title="技術要件" icon="gear" iconType="solid">
+
+- 中断後のアップロード再開
+- 進捗の表示
+- ネットワークステータスの表示
+- 8 時間の接続維持
+- キャンセル可能な認可
+- Frame.io への直接接続
+- 認証情報のセキュリティ
+- ネットワーク速度の最適化
+
+</Card>
+
+</CardGroup>
+
+## 今後の改善 {#future-improvements}
+
+[Frame.io](http://frame.io/) の Camera to Cloud API は継続的に進化しています。後方互換性を維持しつつ、API を実際の使用状況に沿ったものに保つため、今後の開発について継続的な対話を歓迎します。
+
+## 以上です! {#that’s-all-folks}
+
+UC2CIG (University of C2C Integration Guides) の修了おめでとうございます!このガイドがお役に立てば幸いです。
+
+わかりにくい点や不足している情報についてのフィードバックがあれば、ぜひお寄せください。また、C2C に関するご質問もお気軽にお問い合わせください。私たちがサポートします!
+
+まだお済みでない場合は、先に進む前に [C2C の実装: セットアップ](/ja/camera-to-cloud/implementing-c2c-setting-up)ガイドをご確認ください。
+
+[認証と認可のプロセス](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で取得した `access_token` が必要になります。
+
+このチェックリストは、[基本的なアップロードガイド](/ja/camera-to-cloud/how-to-basic-upload)と[高度なアップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)の内容を前提としています。

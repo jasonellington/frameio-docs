@@ -1,0 +1,58 @@
+---
+title: "Rate limit"
+---
+
+# Panoramica {#overview}
+
+Che un token venga distribuito tramite il Developer Portal, una concessione OAuth o il backend Accounts che serve le applicazioni di Frame.io, **tutte le chiamate API a Frame.io sono soggette a rate limit.**
+
+I rate limit si applicano a tutte le richieste API di un singolo utente (indipendentemente dal token o dal metodo di autenticazione utilizzato), si esauriscono e si ricaricano progressivamente e si riflettono negli header di risposta di ogni richiesta effettuata all'API di Frame.io. Ogni endpoint è configurato con i propri limiti, che vanno da un minimo di `10` richieste/minuto fino a un massimo di `100` richieste/secondo.
+
+Le richieste che hanno superato il rate limit di un determinato endpoint riceveranno in risposta un errore HTTP `429`.
+
+## Esaurimento e ricarica {#depletion-and-refill}
+
+L'API di Frame.io utilizza una strategia [leaky bucket](https://wikipedia.org/wiki/Leaky_bucket) di rate limiting progressivo, in cui i limiti si ricaricano gradualmente durante la finestra temporale assegnata. In altre parole, non esiste un limite netto oltre il quale i limiti di una determinata risorsa si ricaricano (come nelle strategie di applicazione "fixed window" e "sliding window"). I limiti residui, invece, si ricaricano costantemente a un ritmo proporzionale al limite e alla finestra temporale della risorsa.
+
+### Exponential backoff {#exponential-backoff}
+
+La strategia che consigliamo per gestire i rate limit è solitamente chiamata "exponential backoff".
+
+In breve:
+
+- Quando ricevi un `429`, metti in pausa per un certo periodo (normalmente un secondo)
+- Se ricevi un altro `429`, aumenta esponenzialmente il periodo di attesa finché il normale funzionamento non riprende
+
+## Header {#headers}
+
+Le risposte alle richieste API includono sempre i seguenti tre header, che dovresti utilizzare per limitare le tue richieste in uscita:
+
+| Header | Valore |
+| --- | --- |
+| `x-ratelimit-limit` | Il rate limit per questo percorso di risorsa, misurato in richieste. |
+| `x-ratelimit-remaining` | Il numero di richieste rimanenti nella finestra temporale corrente. |
+| `x-ratelimit-window` | La finestra temporale per i limiti di questo percorso di risorsa, misurata in millisecondi (ms). |
+
+### Esempio {#example}
+
+L'esempio seguente proviene dalla risposta a `GET v2/assets/:id/children`, che recupera gli asset figli di una root di Project, di una cartella o di un Version Stack. Il limite per quel percorso è di 40 richieste ogni 60.000 ms (un minuto) e, dopo aver effettuato una richiesta, ne rimangono 39.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Dettagli {#details}
+
+I rate limit variano notevolmente tra i diversi percorsi di risorsa dell'API di Frame.io. Di seguito sono riportati alcuni dettagli selezionati, espressi per leggibilità come risorsa e azione (ad es. "Assets — Update" invece di `PUT /assets/:id`).
+
+Come regola generale, i percorsi di risorsa che creano nuovi dati sono limitati a 100 chiamate al minuto o meno, mentre i percorsi di risorsa che recuperano elenchi di asset sono limitati a 200 chiamate al minuto.
+
+| Risorsa | Azione | Limite (richieste) | Finestra del limite (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1,000 |
+| **Assets** | `update` | `10` | 1,000 |
+| **Assets** | `read` | `5` | 1,000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60,000 |
+| **Search** | `read` | `200` | 60,000 |
