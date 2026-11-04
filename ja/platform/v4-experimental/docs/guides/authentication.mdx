@@ -1,0 +1,195 @@
+---
+title: "認証"
+---
+
+Frame.io V4 API は、Adobe の OAuth 2.0 ID プラットフォームである [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/) を使用します。認証には 2 つのカテゴリーがあります。
+
+<CardGroup cols={2}>
+
+<Card title="サーバー間認証" icon="server" iconType="solid">
+
+テクニカルアカウントまたはサービスアカウントのユーザーが、ユーザーの操作なしでアクションを実行できます。[Adobe Admin Console](https://adminconsole.adobe.com) で管理されている Frame.io V4 アカウントでのみ利用できます。
+
+</Card>
+
+<Card title="ユーザー認証" icon="user" iconType="solid">
+
+トークンの所有者であるユーザーとして動作します。Adobe Admin Console で管理されているすべての Frame.io V4 アカウントに加え、[Adobe 認証に切り替えた](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication) Frame 管理のアカウントで利用できます。
+
+</Card>
+
+</CardGroup>
+
+---
+
+## SDK 認証ガイド {#sdk-authentication-guides}
+
+Frame.io SDK は、認可 URL、トークン交換、自動リフレッシュ、取り消しといった OAuth のライフサイクル全体を処理します。使用する言語を選んで始めましょう。
+
+<CardGroup cols={2}>
+
+<Card title="Python SDK" icon="python" iconType="brands" href="/ja/platform/docs/guides/authentication/python-sdk">
+
+同期・非同期の両方をサポートする `ServerToServerAuth`、`WebAppAuth`、`SPAAuth`。
+
+</Card>
+
+<Card title="TypeScript SDK" icon="js" iconType="brands" href="/ja/platform/docs/guides/authentication/typescript-sdk">
+
+Node.js およびブラウザー環境向けの `ServerToServerAuth`、`WebAppAuth`、`SPAAuth`、`NativeApp` 認証。
+
+</Card>
+
+</CardGroup>
+
+<Tip>
+
+バックエンドサービスや自動化を構築する場合は、**Server-to-Server** から始めましょう。アプリにサインインするユーザーがいる場合は、**Web App** (クライアントシークレットを保存できる場合) または **SPA** (保存できない場合) を選択してください。
+
+</Tip>
+
+---
+
+## ユーザー認証 {#user-authentication}
+
+ユーザー認証の認証情報は [Adobe Developer Console](https://developer.adobe.com/console) で作成します。Adobe は 3 種類の認証情報をサポートしています。アプリケーションのアーキテクチャに合ったものを選択してください。
+
+<CardGroup cols={3}>
+
+<Card title="OAuth Web App" icon="globe" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-web-app-credential">
+
+クライアントシークレットを安全に保存できるサーバーサイドアプリケーション (Flask、Django、FastAPI、Express など) 向け。
+
+</Card>
+
+<Card title="OAuth Single Page App" icon="window" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-single-page-app-credential">
+
+クライアントシークレットを保存できないブラウザーベースのアプリケーション、CLI、デスクトップアプリ向け。PKCE を使用します。
+
+</Card>
+
+<Card title="OAuth Native App" icon="mobile" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-native-app-credential">
+
+カスタム URI スキームによるリダイレクトを使用するネイティブのモバイルアプリやデスクトップアプリ向け。
+
+</Card>
+
+</CardGroup>
+
+<Note>
+
+Python にはカスタム URI スキームハンドラーを登録する標準的な方法がないため、Frame.io Python SDK には Native App の認証情報クラスは含まれていません。代わりに、ローカルのコールバックサーバーと組み合わせて **Web App** を使用してください。TypeScript SDK は 3 種類すべての認証情報をサポートしています。
+
+</Note>
+
+---
+
+## サーバー間認証 {#server-to-server-authentication}
+
+サーバー間認証を使用すると、アプリケーションは人の介在なしに **サービスアカウントユーザー** として動作できます。アプリはクライアント認証情報で認証し、アクセストークンを直接受け取ります。サービスアカウントによるアクションは、Frame.io 上でサービスアカウントの名前で表示されます。
+
+サービスアカウントのアクセスは、[Adobe Admin Console](https://adminconsole.adobe.com/) と [Developer Console](https://developer.adobe.com/console) で管理します。現在、サービスアカウント名は変更できません。実装の詳細については、上記の各 SDK のガイドを参照してください。
+
+<Info>
+
+サービスアカウントのセットアップの詳細については、[Automate your setup using Frame.io server to server support](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html) を参照してください。
+
+</Info>
+
+---
+
+## Adobe IMS 認証の仕組み {#how-adobe-ims-authentication-works}
+
+Adobe Identity Management Service (IMS) は、認証をサポートする Adobe の OAuth 2.0 ベースの ID 管理機能です。アクセストークンを生成するには、次の 2 つのステップが必要です。
+
+<Steps>
+
+<Step title="ユーザーによる認可">
+
+まず、トークンが生成される前に、ユーザーがアプリケーションを認可します。詳細は[こちら](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims/#authorize-request)をご覧ください。
+
+</Step>
+
+<Step title="トークン交換">
+
+次に、アクセストークンを取得します。前のステップでは、このステップで必要となるコードがレスポンスボディで返されます。アクセスすべき正確なエンドポイントと使用するパラメーターについては、[こちら](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims/#fetching-access-tokens)を参照してください。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+上記のステップは、3 種類すべてのアプリ認証情報で必要です。トークンを取得するための IMS エンドポイント `/authorize/v2` と `/token/v3` へのアクセス方法には違いがあります。アクセストークンを取得したら、それを使用して Frame.io V4 API を操作できます。
+
+</Note>
+
+**Server-to-Server** 認証の場合、ユーザーによる認可のステップはありません。アプリケーションはクライアント認証情報を直接使用し、`client_credentials` グラントによってアクセストークンを取得します。
+
+### アクセストークンの使用 {#using-the-access-token}
+
+アクセストークンを取得したら、すべての API リクエストの `Authorization` ヘッダーに含めます。
+
+```
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+Frame.io SDK はこれを自動で処理します。クライアントの作成時にトークン (またはトークンを返す callable) を渡すだけです。
+
+### トークンの有効期間 {#token-ttl}
+
+アクセストークンは **短期間のみ有効** で、通常は 1 時間で期限切れになります。ユーザー認証フロー (Web App、SPA、Native App) では、Adobe IMS は **リフレッシュトークン** も返します。これを使用すると、ユーザーに再度サインインしてもらうことなく新しいアクセストークンを取得できます。リフレッシュトークンの有効期間はより長いものの、いずれは期限切れになります。
+
+サーバー間認証では、リフレッシュトークンはありません。クライアント認証情報自体は (手動でローテーションしない限り) 期限切れにならないため、アプリケーションはいつでも新しいアクセストークンをリクエストできます。
+
+Frame.io SDK はトークンのリフレッシュを自動で処理します。詳細は [SDK ごとのガイド](#sdk-authentication-guides)を参照してください。
+
+### スコープ {#scopes}
+
+[Adobe Developer Console](https://developer.adobe.com/console) で認証情報を作成する際に、アプリケーションがアクセスできる範囲を決める OAuth スコープを設定します。Frame.io SDK は次のデフォルトスコープを使用します。
+
+| フロー | デフォルトのスコープ |
+| --- | --- |
+| **Server-to-Server** | `openid AdobeID frame.s2s.all` |
+| **ユーザー認証** (Web App、SPA、Native App) | `openid email profile offline_access additional_info.roles` |
+
+<Note>
+
+ユーザー認証フローでリフレッシュトークンを受け取るには、`offline_access` スコープが必要です。このスコープがない場合はアクセストークンのみが返され、期限切れになるとユーザーは再認証する必要があります。
+
+</Note>
+
+---
+
+## レガシー開発者トークン {#legacy-developer-tokens}
+
+V4 に移行済みで、**まだ [Adobe Admin Console](https://adminconsole.adobe.com/) で管理されていない** アカウントの場合は、[Frame.io 開発者サイト](https://developer.frame.io/app/tokens)で管理されているレガシー開発者トークンを引き続き使用できます。トークンを SDK に直接渡します。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers={"x-frameio-legacy-token-auth": "true"},
+)
+```
+
+<Warning>
+
+V4 API でレガシー開発者トークンを使用する場合は、すべての API リクエストに値が `true` の `x-frameio-legacy-token-auth` ヘッダーを追加する必要があります。SDK を使用している場合は、クライアントのリクエストオプションで設定してください。
+
+</Warning>
+
+レガシー開発者トークンに有効期限はありませんが、移行期間用の仕組みです。新しいインテグレーションや本番環境のワークロードには、以下のいずれかの OAuth 2.0 フローを使用することをおすすめします。詳細は[移行ガイド](/ja/platform/docs/resources/migration#authentication)を参照してください。
+
+<Note>
+
+Frame.io Legacy から V4 に移行するエンタープライズのお客様は、レガシー開発者トークンと V4 のセットアップについて、担当の CSM にお問い合わせください。
+
+</Note>
+
+<Tip>
+
+レガシートークンから Adobe IMS 認証への移行の詳細については、[移行ガイド](/ja/platform/docs/resources/migration#authentication)を参照してください。
+
+</Tip>

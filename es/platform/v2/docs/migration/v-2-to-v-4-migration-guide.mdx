@@ -1,0 +1,85 @@
+---
+title: "Guía de migración de la API de Frame.io V3 → V4"
+sidebarTitle: "Guía de migración de V2 a V4"
+---
+
+La siguiente guía te ayudará a migrar de la API V3 de Frame.io (a la que a veces se hace referencia en la documentación como endpoint "legacy" o "v2") a la API V4 de Adobe Frame.io. Sigue el estilo y la estructura del ejemplo de migración de la API de Dropbox y ofrece una visión completa de las correspondencias de endpoints, los cambios en los payloads, las actualizaciones de autenticación y mucho más.
+
+---
+
+## Lista de comprobación de migración para desarrolladores {#migration-checklist-for-developers}
+
+1. **Identifica tu uso actual de V3:**
+
+   - Enumera todas las llamadas que realiza tu aplicación (por ejemplo, crear archivos, listar carpetas, añadir comentarios).
+   - Compara cada una con la tabla de correspondencias para encontrar su nuevo equivalente en V4.
+
+2. **Obtén credenciales de Adobe IMS (OAuth 2.0):**
+
+   - Crea una integración en la Adobe Developer Console.
+   - Configura las credenciales de cliente OAuth 2.0 y el scope (acceso a Frame.io).
+   - Sustituye los antiguos tokens de desarrollador de Frame.io por tu nuevo flujo de tokens IMS.
+
+3. **Actualiza las URL de tus endpoints:**
+
+   - **V3:** `https://api.frame.io/v2/...` con los assets manipulados mediante `assets/{asset_id}`.
+   - **V4:** `https://api.frame.io/v4/` y los endpoints incluyen `accounts/{account_id}` y rutas separadas `folders/{folder_id}` / `files/{file_id}`.
+
+4. **Ajusta los payloads de las solicitudes y el análisis de las respuestas:**
+
+   - V4 normalmente envuelve los datos en un objeto `data` (por ejemplo, `{"data": {...}}`).
+   - La creación de carpetas, la subida de archivos, etc., usan nuevos nombres de campo JSON (por ejemplo, `file_size`, `media_type`).
+   - **Cambios de Team → Workspace:** sustituye `team_id` (V3) por `workspace_id` (V4).
+
+5. **Rehaz el registro de los webhooks:**
+
+   - Elimina o desactiva tus antiguos webhooks de V3 (que ya no se activan en V4).
+   - Registra nuevos webhooks en `POST /v4/accounts/{account_id}/webhooks`.
+
+6. **Prueba la gestión de errores y los límites de frecuencia:**
+
+   - Asegúrate de que tu código gestiona las nuevas respuestas 4xx/5xx y los cambios en los formatos de solicitud/respuesta.
+   - V4 puede devolver estructuras de error diferentes (por ejemplo, JSON más estructurado, 409 para conflictos, etc.).
+
+7. **Confirma el acceso y los permisos:**
+
+   - Verifica que el token de Adobe IMS pertenece a un usuario (o cuenta de servicio) con los permisos de cuenta/workspace correctos.
+   - Los tokens legacy de V3 con scopes "a nivel de equipo" no son válidos en V4.
+
+8. **Implementa y supervisa:**
+
+   - Prueba primero tu código actualizado en un entorno sandbox o de desarrollo.
+   - Supervisa los registros en busca de errores 4xx/5xx o comportamientos inesperados; corrige cualquier problema antes de la implementación completa.
+
+---
+
+## Endpoints: correspondencia V3 → V4 {#endpoints-v3-→-v4-mapping}
+
+A continuación se muestra una comparación de los principales endpoints de Frame.io V3 (izquierda) y sus equivalentes en V4 (derecha). Esta sección se inspira en la tabla de "correspondencia v1 → v2" de Dropbox.
+
+> **Consejo:** esta tabla se centra en las operaciones habituales con archivos, carpetas y proyectos. Se omiten los endpoints especializados (por ejemplo, Camera to Cloud).
+
+### OAuth y autenticación {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| Token de desarrollador (Bearer `<token>`) u OAuth 2.0 de Frame.io con `Authorization: Bearer <token>` | OAuth 2.0 de Adobe IMS (debes crear un proyecto en la Adobe Developer Console) y usar: `Authorization: Bearer <adobe_access_token>` |
+
+**Nota:** los tokens de desarrollador legacy no se pueden convertir automáticamente. Debes implementar el nuevo flujo OAuth de IMS.<br />
+**Documentación:** [Cómo obtener un token de acceso de Adobe Frame.io](https://developer.adobe.com/frameio/api/current/)
+
+### Operaciones con carpetas y archivos {#folder-and-file-operations}
+
+#### Crear una carpeta {#create-a-folder}
+
+- **V3 (Crear carpeta):**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

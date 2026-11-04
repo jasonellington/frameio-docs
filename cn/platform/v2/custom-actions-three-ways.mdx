@@ -1,0 +1,84 @@
+---
+title: "部署 Custom Actions 的三种方式"
+---
+
+## 简介 {#introduction}
+
+部署 Custom Action 最快的方式是什么？哪种设置最灵活，能让你完全自定义工作流？你选择用来接收和处理 Custom Actions 的环境，是决定后续工作流步骤中能够如何处理数据的重要因素。基本选择如下：
+
+1. 无代码部署，使用 Zapier、Integromat 或 Microsoft Power Automate 等自动化平台
+2. 低代码方案，例如 AWS Lambda 或 Azure Functions，你可以在完全托管的环境中以"作业"的形式运行简单脚本；
+3. 由你自行运行和维护的服务器
+
+下图展示了 Custom Actions 的架构：
+
+![Custom Actions Diagram](/images/platform/v2/custom-actions-three-ways/a73b943-custom_actions_architecture.png)
+
+### 无代码：部署到 Zapier {#no-code-deploy-to-zapier}
+
+Zapier 的"点击即创建"界面非常适合基础自动化场景，例如将 Frame.io 中的 Asset、评论或状态事件发送到常用应用或生产力工具。
+
+![Zapier Setup](/images/platform/v2/custom-actions-three-ways/548d2d6-zapier_catch_webhook.png)
+
+#### 优点 {#pros}
+
+- 简单易用。通过点选即可创建自动化。
+- [Task history](https://zapier.com/learn/getting-started-guide/task-history/) 是 Zapier 的运行时日志工具，会汇总每次自动化运行中各个工作流步骤的数据输入/输出。
+- 付费购买高级账户可解锁 [Paths](https://zapier.com/paths)，这是一个为自动化添加分支逻辑的工具。
+
+#### 缺点： {#cons}
+
+- Zapier 对 webhook 的支持有限：当你的 Custom Action 运行时，它不支持返回详细消息，也不支持与 Frame.io 用户进行任何交互。Zapier 支持文档中对此限制的解释如下：
+
+> We \[Zapier\] always return a success message with a payload of debugging information when collecting a webhook - regardless of whether there is a Zap behind the webhook or if it is paused or not…There is no way to customize the response to the request you send to the Catch Hook URL, as the response is sent before the Zap triggers and runs on the webhook request.
+
+- 在验证 Custom Actions 是否正常运行时，Zapier 的 UI 可能比较繁琐。例如，测试期间需要检查并刷新 [Test Data](https://zapier.com/help/create/basics/change-the-test-data-in-your-zap-trigger)；如果测试数据与实际数据不匹配，即使你的 Zap 设计实际上是正确的，Zapier 也可能给出"假阴性"结果并显示错误。如果某个任务需要的关键数据（例如 `File URL`）不可用，你的 Zap 可能会出错或无法按预期运行。
+
+<Info>
+
+**我们为此编写了指南！**
+
+我们编写了大量关于如何设计 Zapier 集成的指南，其中包括一篇详细的 [如何将 Custom Actions 部署到 Zapier](/cn/platform/v2/deploy-custom-actions-to-zapier)。
+
+</Info>
+
+## 低代码：部署到 AWS {#low-code-deploy-to-aws}
+
+Custom Actions 可以发送到 AWS 中的 API Gateway，并与 Amazon [数量庞大](https://aws.amazon.com/what-is-aws/) 的云服务集成。最简单的模式是将 Custom Action 中包含的 Frame.io 事件代理到 AWS Lambda，这是一种用于运行无服务器函数的计算服务。下面是一个文件归档服务的示例设计：
+
+![AWS Lambda](/images/platform/v2/custom-actions-three-ways/2ef81ac-action-lambda.png)
+
+#### 优点： {#pros-1}
+
+- [AWS Free Tier](https://aws.amazon.com/free/?all-free-tier.sort-by=item.additionalFields.SortRank&all-free-tier.sort-order=asc&all-free-tier.q=Lambda&all-free-tier.q_operator=AND) 每月为你提供 320 万秒的计算时间，超出后才会开始收费。
+- API Gateway 和 Lambda 支持 CloudWatch 和 X-Ray 等出色的测试与监控工具。
+- 服务可以扩展以支持超大文件（500GB 以上）
+
+#### 缺点： {#cons-1}
+
+- 将多个服务串联起来（Webhook -> API Gateway -> Lambda 1 -> Lambda 2），或学习使用 AWS Fargate 等较新的服务，可能会很耗时。
+- AWS 文档经常过时或缺少关键细节。例如，在配置 API Gateway 时，很难判断 payload 是否会被 Base64 编码。
+- 配置通常有些复杂。
+
+[查看将 Custom Actions 部署到 AWS 的完整演练指南](https://medium.com/@frameiokyle/automatic-s3-backups-with-frame-io-custom-actions-and-aws-lambda-d3b8dbed0133)。注意：你可以将 Custom Actions 部署到任何云计算服务，而不仅限于 AWS（Azure、Google Cloud Platform、Digital Ocean 等）。
+
+### 运行服务器并托管你自己的代码 {#run-a-server-and-host-your-own-code}
+
+云服务非常便捷，但如果你希望在工作流中完全掌控自己的数据，可能会选择编写并部署自己的服务器。
+
+在 DevRel 团队，我们喜欢用 Python 编写 [FastAPI 服务器](https://fastapi.tiangolo.com/features/)。它们易于创建，并且非常契合 Custom Actions 的请求-响应模式。
+
+#### 优点： {#pros-2}
+
+- 端到端掌控数据流。绝无意外。
+- 将数据同步到 NAS 或文件系统，无需额外暴露到云端。
+
+#### 缺点： {#cons-2}
+
+- 需要管理服务器、自行构建安全功能、处理网络发现、负载等。
+
+克隆我们的 [示例代码](https://github.com/Frameio/custom-actions-app-python)，即可部署一个用于处理 Custom Actions 的 FastAPI 服务器。
+
+### 我们来聊聊最适合你需求的设计 {#let’s-talk-about-the-best-design-for-your-needs}
+
+将你的需求发布到我们的社区，我们很乐意帮助你找出最适合你工作流的设计。

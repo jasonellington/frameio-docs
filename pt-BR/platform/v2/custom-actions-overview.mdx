@@ -1,0 +1,296 @@
+---
+title: "Visão geral das Custom Actions"
+---
+
+<Info>
+
+**Apps de exemplo**
+
+Se você quiser criar seu próprio app de Custom Actions, nossos apps de exemplo vão ajudar você a começar:
+
+</Info>
+
+- [JavaScript](https://github.com/Frameio/custom-actions-example-app)
+- [Python](https://github.com/Frameio/custom-actions-app-python)
+
+As Custom Actions são uma forma de criar integrações diretamente no Frame.io como componentes de interface programáveis. Isso possibilita toda uma categoria de workflows que podem ser acionados pelos usuários dentro do app, aproveitando o mesmo roteamento de eventos subjacente dos [Webhooks](/pt-BR/platform/v2/webhooks-overview). Atualmente, as Custom Actions estão disponíveis para Assets e são exibidas no menu suspenso contextual (clique com o botão direito) disponível em qualquer Asset, como mostra a imagem abaixo.
+
+![actions-1](/images/platform/v2/custom-actions-overview/69bc65d3924a350e0c1d5a8062e41b15cbc3b01f1f3b8ec5050356b76aa1989a.webp)
+
+Um Asset é uma representação completa de um arquivo no S3 e de seu contexto no Frame.io. Isso inclui transcodificações, contexto de usuário/equipe/projeto e metadados. Quando um usuário clica em uma Custom Action em um Asset, o Frame.io envia um payload para uma URL fornecida por você. O aplicativo receptor pode então responder com um código de status HTTP para simplesmente confirmar o recebimento, ou pode responder com um callback personalizado capaz de renderizar uma interface adicional no Frame.io.
+
+## Configure sua Custom Action {#setup-your-custom-action}
+
+<Info>
+
+**Verifique suas permissões**
+
+Permissões de Team Manager são necessárias para criar Custom Actions para uma equipe. Peça ao seu administrador para alterar suas permissões caso você não tenha acesso.
+
+</Info>
+
+As Custom Actions podem ser configuradas na área [Custom Actions](https://developer.frame.io/actions) do [developer.frame.io](/pt-BR/platform/v2). Uma ação requer:
+
+| Nome do campo | Descrição |
+| --- | --- |
+| Name | O nome que você escolher para sua Custom Action. Ele será exibido no menu de Custom Actions disponíveis no Frame.io. |
+| Description | Explique o que a ação faz, para referência (a descrição não aparece no app web do Frame.io). |
+| Event | Chave de evento interna que ajuda você a diferenciar os eventos de webhook padrão dos seus próprios eventos. |
+| URL | Para onde os eventos serão entregues. |
+| Team | A equipe que usará a Custom Action. |
+
+## Clique: o que há no payload que você recebe do Frame.io {#click-what’s-in-the-payload-you-receive-from-frame-io}
+
+Quando o usuário clica na sua Custom Action, um payload é enviado para a URL que você especificou no campo URL.
+
+```json
+POST /your/url
+{
+  "action_id": "2444cccc-7777-4a11-8ddd-05aa45bb956b",
+  "interaction_id": "aafa3qq2-c1f6-4111-92b2-4aa64277c33f",
+  "project": {
+    "id": "a7d6a74b-d45d-4019-9069-24651e0b9f64"
+  },
+  "resource": {
+    "id": "9q2e5555-3a22-44dd-888a-abbb72c3333b",
+    "type": "asset"
+  },
+  "team": {
+    "id": "54353cd2-c6ee-4aa1-954a-ce9e19602aa9"
+  },
+  "type": "my.action",
+  "user": {
+    "id": "fb57eee0-79f2-4bc7-9b70-99fbc175175c"
+  }
+}
+```
+
+Você pode usar esse payload para identificar:
+
+- Qual das suas Custom Actions foi clicada
+- Qual recurso foi clicado
+- Qual usuário executou a ação
+
+| Nome do campo | Descrição |
+| --- | --- |
+| `action_id` | O id exclusivo desta Action. Ele será sempre o mesmo para uma determinada Action. |
+| `interaction_id` | Um identificador exclusivo gerado pelo Frame.io que você pode usar para acompanhar sua transação. Esse identificador será o mesmo ao longo de toda uma sequência de uma Action, incluindo formulários de callback. |
+| `type` | O nome do evento que você inseriu no campo Event ao configurar sua Action. |
+| `resource.id` | O id do recurso a partir do qual você acionou sua Action (normalmente um Asset). |
+| `resource.type` | O tipo de recurso a partir do qual você acionou sua Action (normalmente *asset*) |
+
+<Info>
+
+**Sobre interações**
+
+O `interaction_id` é fornecido como um identificador exclusivo para ajudar você a acompanhar a interação à medida que ela evolui ao longo do tempo. Se você não precisar responder ao usuário, basta retornar um código de status 200 e pronto. Embora seja opcional, recomendamos incluir alguma informação sobre o resultado da ação, como uma simples mensagem de sucesso ou um alerta de erro. As Custom Actions são compatíveis com callbacks de mensagem.
+
+</Info>
+
+<Info>
+
+**Novas tentativas e timeouts**
+
+Nosso aplicativo espera uma resposta em menos de 5 segundos e tentará novamente até 5 vezes enquanto aguarda uma resposta bem-sucedida. O ideal é responder imediatamente e executar quaisquer ações de forma assíncrona depois de acionado por uma Custom Action.
+
+</Info>
+
+## Crie um callback de mensagem {#create-a-message-callback}
+
+Na sua resposta HTTP ao evento de webhook, você pode retornar um objeto JSON descrevendo uma mensagem que será exibida ao usuário que iniciou a ação na interface do Frame.io. Se quiser experimentar criar uma mensagem e ver como ela vai ficar, você pode usar nosso [Custom Action Builder](https://next.frame.io/settings/actions), que permite configurar callbacks de mensagem ou formulários e ver como eles apareceriam no app web do Frame.io.
+
+Aqui está um objeto de exemplo:
+
+```json
+{
+  "title": "Success!",
+  "description": "The thing worked! Nice."
+}
+```
+
+Isso exibirá ao usuário um alerta com esta aparência:
+![actions-3](/images/platform/v2/custom-actions-overview/a7fe1ec18a4467f8b450b31d1e3a70ab26beece9f5ed828166f4d35973e55c3c.webp)
+
+As mensagens são uma forma simples de fechar o ciclo de vida da ação, oferecendo contexto variável ao usuário que a executou, sem pedir que ele mude de contexto.
+
+Isso é suficiente para muitos casos de uso, mas às vezes o payload inicial e as chamadas subsequentes à API do Frame.io não fornecem contexto suficiente para o aplicativo receptor. Para esses cenários, também oferecemos suporte a **callbacks de formulário**.
+
+## Crie um callback de formulário {#create-a-form-callback}
+
+Digamos que você precise de mais informações antes de iniciar seu processo. Por exemplo, você pode estar enviando conteúdo para um sistema que exige detalhes e configurações adicionais. Você pode "descrever" um formulário na sua resposta, e o usuário vai realmente vê-lo! E preenchê-lo! E ele será enviado de volta para você!
+
+Aqui está um exemplo que renderiza um formulário na interface do Frame.io que o usuário que iniciou a ação pode preencher e enviar:
+
+```json
+{
+  "title": "Need some more info!",
+  "description": "Getting ready to submit this file!",
+  "fields": [
+    {
+      "type": "text",
+      "label": "Title",
+      "name": "title",
+      "value": "MyVideo.mp4"
+    },
+    {
+      "type": "select",
+      "label": "Captions",
+      "name": "captions",
+      "options": [
+        {
+          "name": "Off",
+          "value": "off"
+        },
+        {
+          "name": "On",
+          "value": "on"
+        }
+      ]
+    }
+  ]
+}
+```
+
+![actions-form](/images/platform/v2/custom-actions-overview/4538043046be16b30b0230c21291dde8ae51554dc1da719bec8b9f7561c7c8a1.webp)
+
+Quando o usuário enviar o formulário, você receberá um evento na mesma URL do POST inicial:
+
+```json
+POST /your/url​
+{
+  "type": "your-specified-event-name",
+  "interaction_id": "the-same-id-as-before",
+  "action_id": "unique-id-for-this-custom-action",
+  "data":{
+    "title": "MyVideo.mp4",
+    "captions": "off"
+  }
+}
+```
+
+Todos os campos personalizados que você adicionou ao formulário aparecem na seção `data` do payload JSON enviado pelo Frame.io
+
+Use o `interaction_id` para associar a solicitação inicial a esses novos dados do formulário. E, novamente, se quiser, você pode responder com uma mensagem (ou até mesmo outro formulário!).
+
+Encadeando Actions, formulários e mensagens, você pode programar de forma eficaz workflows inteiros de Assets no Frame.io com a lógica de negócios de um sistema externo.
+
+Use a imaginação! O céu é o limite.
+
+### Detalhes do formulário {#form-details}
+
+Assim como as mensagens, os formulários aceitam os atributos `title` e `description`, que são renderizados no topo do formulário. Além disso, cada campo do formulário aceita os seguintes atributos básicos:
+
+- `type` — Informa à interface do Frame.io qual tipo de dado esperar e qual componente renderizar.
+- `label` — Aparece na interface como o cabeçalho acima do campo.
+- `name` — Chave pela qual o campo será identificado no payload subsequente.
+- `value` — Valor com o qual o campo será preenchido previamente.
+
+### Tipos de campo compatíveis {#supported-field-types}
+
+**Campo de texto**
+Um campo de texto simples, sem parâmetros adicionais.
+
+```json
+{  
+  "type": "text",
+  "label": "Title",
+  "name": "title",
+  "value": "MyVideo.mp4"
+}
+```
+
+**Área de texto**
+Uma área de texto simples, sem parâmetros adicionais.
+
+```json
+{  
+  "type": "textarea",
+  "label": "Description",
+  "name": "description",
+  "value": "This video is really, really popular."
+}
+```
+
+**Lista de seleção**
+Define uma lista de opções que o usuário pode escolher. Deve incluir uma lista `options`, em que cada item deve incluir um `name` legível por humanos e um `value` legível por máquina.
+
+```json
+{
+  "type": "select",
+  "label": "Captions",
+  "name": "captions",
+  "value": "off",
+  "options": [
+       {
+         "name": "Off",
+         "value": "off"
+       },
+       {
+         "name": "On",
+         "value": "on"
+      }
+   ]
+}
+```
+
+## Custom Actions e o modelo de permissões do Frame.io {#custom-actions-and-the-frame-io-permissions-model}
+
+Webhooks e Custom Actions têm um modelo de permissões especial: eles pertencem a uma **Team**, e não a um usuário específico que exista em uma Team ou Account. Isso significa que:
+
+- Qualquer Admin ou Team Manager pode criar uma Custom Action em uma Team.
+- Qualquer Admin ou Team Manager pode modificar ou excluir uma Custom Action existente em uma Team. Após a modificação, todos os usuários verão imediatamente o resultado da alteração.
+
+## Segurança {#security}
+
+Por padrão, todas as Custom Actions têm uma chave de assinatura gerada durante sua criação. Isso não é configurável. Essa chave pode ser usada para verificar se a solicitação vem do Frame.io.
+
+### Verificação {#verification}
+
+A solicitação `POST` inclui os seguintes itens
+
+| Nome | Descrição |
+| --- | --- |
+| `X-Frameio-Request-Timestamp` | O momento em que sua Custom Action foi acionada. |
+| `X-Frameio-Signature` | A assinatura calculada. |
+
+**O timestamp** é o momento em que a solicitação foi assinada ao sair da rede do Frame.io. Ele pode ser usado para evitar ataques de repetição (replay attacks). Recomendamos verificar se esse horário está dentro de 5 minutos do horário local.
+
+**A assinatura** é um hash HMAC SHA-256 gerado com a chave de assinatura fornecida quando a Custom Action é criada.
+
+#### Verificando a assinatura {#verifying-the-signature}
+
+1. Extraia a assinatura dos cabeçalhos HTTP
+2. Crie uma mensagem para assinar combinando a versão, o horário de entrega e o corpo da solicitação
+
+- `v0:timestamp:body`
+
+3. Calcule a assinatura HMAC SHA256 usando seu segredo de assinatura.
+
+- Observação: a assinatura fornecida tem o prefixo `v0=`. Atualmente, o Frame.io tem apenas essa versão para assinar solicitações. Você precisará adicionar esse prefixo à sua assinatura calculada.
+
+4. Compare!
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify webhook/custom action signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the frame.io API for the given request
+        body (str): Custom Action body from the received POST
+        secret (str): The secret for this Custom Action that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```

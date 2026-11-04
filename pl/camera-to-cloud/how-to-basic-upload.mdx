@@ -1,0 +1,221 @@
+---
+title: "Instrukcja: przesyłanie (podstawowe)"
+sidebarTitle: "Przesyłanie (podstawowe)"
+---
+
+## Wprowadzenie {#introduction}
+
+Dotarliśmy do ekscytującego etapu naszej drogi do integracji: przesyłania zasobów do Frame.io. Ten przewodnik przeprowadzi Cię przez podstawowy proces przesyłania.
+
+## Wymagania wstępne {#prerequisites}
+
+Jeśli jeszcze tego nie zrobiono, przed kontynuowaniem zapoznaj się z przewodnikiem [Implementing C2C: Setting Up](/pl/camera-to-cloud/implementing-c2c-setting-up).
+
+Będziesz potrzebować tokenu `access_token` uzyskanego podczas [procesu uwierzytelniania i autoryzacji](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+W tym przewodniku użyjemy przykładowego zasobu testowego dostępnego pod [tym linkiem Frame.io](https://f.io/Rq1q5CzB). Pobierz ten plik, aby śledzić nasze przykłady — dzięki temu wartości będą zgodne z tymi w przykładowych poleceniach.
+
+## Krok 1: tworzenie zasobu {#step-1-creating-an-asset}
+
+Prześlijmy [nasz przykładowy plik](https://f.io/Rq1q5CzB), zakładając, że został utworzony 10 sekund temu. Najpierw musimy utworzyć odwołanie do zasobu w Frame.io:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Specyfikacja endpointu API**
+
+Dokumentację endpointu `/v2/devices/assets` [znajdziesz tutaj](/pl/camera-to-cloud/api-reference/device-asset-create). Choć starszy endpoint `/v2/assets` nadal działa, w nowych integracjach zalecamy korzystanie z `/v2/devices/assets`.
+
+</Info>
+
+<Info>
+
+**Kodowanie JSON**
+
+W przeciwieństwie do używanych wcześniej endpointów uwierzytelniania ten endpoint przyjmuje kodowanie `application/json` zamiast `form/multipart`. Akceptuje również `application/x-www-form-urlencoded`.
+
+</Info>
+
+<Info>
+
+**Składnia polecenia**
+
+Ten przykład wykorzystuje [heredoc](https://linuxize.com/post/bash-heredoc/), aby przekazać ładunek JSON do `curl` w czytelnym, wielowierszowym formacie. Parametr `--data-binary @-` instruuje `curl`, aby odczytał surowe dane ze standardowego wejścia (stdin). Więcej informacji o tym podejściu znajdziesz [tutaj](https://unix.stackexchange.com/questions/88490/how-do-you-use-output-redirection-in-combination-with-here-documents-and-cat).
+
+</Info>
+
+Przyjrzyjmy się parametrom ładunku JSON:
+
+`name`: nazwa zasobu wyświetlana w Frame.io. Nie musi być zgodna z nazwą pliku na dysku.
+
+`filetype`: [typ MIME](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types) pliku. Większość języków programowania udostępnia narzędzia do wykrywania typu MIME (przykłady: [Go](https://golangcode.com/get-the-content-type-of-file/), [Python](https://docs.python.org/3/library/mimetypes.html)).
+
+`filesize`: rozmiar pliku w bajtach. Nasz przykładowy plik ma około 21,1 MB.
+
+`offset`: liczba sekund, które upłynęły od utworzenia pliku. W razie pominięcia przyjmuje wartość domyślną 0. Ten parametr należy podawać, ponieważ pomaga ustalić, czy pliki powinny zostać odrzucone z powodu wstrzymania urządzenia. Omówimy to szczegółowo w [przewodniku po zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads).
+
+Odpowiedź będzie wyglądać podobnie do poniższej (niektóre pola pominięto):
+
+```json
+{
+    "_type": "file",
+    ...
+    "id": "9a280f99-8f4f-46b0-a4b4-ec4c2f95138e",
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ],
+    ...
+}
+```
+
+Na tym etapie jedynie poinformowaliśmy Frame.io o zamiarze przesłania pliku — żadne rzeczywiste dane pliku nie zostały jeszcze przesłane. Jeśli zajrzysz do folderu urządzenia w swoim projekcie, zobaczysz zasób zastępczy w stanie „uploading”.
+
+Pole `upload_urls` zawiera adresy URL, pod które prześlemy fragmenty pliku. W przypadku naszego pliku testowego powinniśmy otrzymać dwa adresy URL do przesyłania.
+
+## Krok 2: dzielenie pliku na fragmenty {#step-2-splitting-the-file-into-chunks}
+
+Odpowiedź zawierała wiele adresów URL do przesyłania. Podczas przesyłania do Frame.io dzielimy pliki na fragmenty (chunki) i przesyłamy je osobno, co daje kilka korzyści:
+
+- **Większa niezawodność**: jeśli przesyłanie jednego fragmentu się nie powiedzie, nie musimy zaczynać całego przesyłania od nowa
+- **Szybsze przesyłanie**: możemy przesyłać wiele fragmentów równolegle (omówione w [przewodniku po zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads))
+
+Aby ustalić optymalny rozmiar fragmentu, użyj tego wzoru:
+
+```python title="Python"
+# We use math.ceil() to ensure we get the upper bound in the division
+chunk_size = math.ceil(float(file.size) / float(len(response.upload_urls)))
+```
+
+Dla naszego przykładowego pliku obliczenie wygląda następująco:
+
+```python title="Python"
+math.ceil(21136250 / 2)
+# 10568125
+```
+
+Oznacza to, że każdy fragment powinien mieć 10 568 125 bajtów. Docelowy rozmiar fragmentów wynosi zwykle około 25 MB, a dokładne obliczenia omówiono w [przewodniku po zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads).
+
+<Info>
+
+**Rozmiar ostatniego fragmentu**
+
+Ponieważ rozmiary plików rzadko dzielą się bez reszty, ostatni fragment może być mniejszy niż obliczony `chunk_size`. Twoja implementacja powinna uwzględniać to podczas odczytywania fragmentów pliku.
+
+</Info>
+
+Na potrzeby tej demonstracji użyjemy poleceń [head](https://man7.org/linux/man-pages/man1/head.1.html) i [tail](https://man7.org/linux/man-pages/man1/tail.1.html) do wyodrębnienia fragmentów pliku.
+
+## Krok 3: przesyłanie fragmentów {#step-3-uploading-the-chunks}
+
+Aby przesłać pierwszy fragment:
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Info>
+
+**Składnia polecenia**
+
+Parametr `--data-binary @-` instruuje `curl`, aby użył surowych danych ze standardowego wejścia, pochodzących z polecenia `head`.
+
+</Info>
+
+Żądanie wymaga następujących nagłówków:
+
+`content-type`: ta sama wartość typu MIME, której użyto przy tworzeniu zasobu
+
+`x-amz-acl`: dla uprawnień AWS S3 zawsze ustawiaj wartość `private`
+
+Pomyślne przesłanie zwraca:
+
+```text
+HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+...
+```
+
+W podobny sposób prześlij drugi fragment:
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+Po zakończeniu obu przesyłań zasób powinien dać się odtworzyć w Frame.io! 🎉
+
+<Warning>
+
+**Błędy przesyłania**
+
+Przesyłając fragmenty, wysyłasz dane bezpośrednio do AWS S3, a nie do API Frame.io. Odpowiedzi z błędami będą miały format AWS S3, a nie standardowy format błędów Frame.io. Obsługę błędów S3 omówimy w [przewodniku po obsłudze błędów](/pl/camera-to-cloud/how-to-handle-errors).
+
+</Warning>
+
+<Info>
+
+**Kolejność fragmentów**
+
+Choć koncepcyjnie prościej jest przesyłać fragmenty po kolei, w rzeczywistości można je przesyłać w dowolnej kolejności. System prawidłowo je połączy niezależnie od kolejności przesyłania.
+
+</Info>
+
+## Podsumowanie całości {#putting-it-all-together}
+
+Oto uproszczony przykład pseudokodu w stylu Pythona dla całego procesu przesyłania:
+
+```python title="Python"
+file = open("~/Downloads/C2C_TEST_CLIP.mp4")
+mimetype = mimetypes.for_file("~/Downloads/C2C_TEST_CLIP.mp4")[0]
+created_at = time.ctime(file.stat.ST_CTIME)
+
+asset = c2c.asset_create(
+    name="C2C_TEST_CLIP.mp4", 
+    filetype=mimetype, 
+    filesize=file.size,
+    offset=datetime.now() - created_at,
+    channel=0,
+)
+
+chunk_size = math.ceil(float(file.size) / float(len(asset.upload_urls)))
+
+for chunk_url in asset.upload_urls:
+   chunk = file.read(bytes=chunk_size)
+   c2c.upload_chunk(chunk, chunk_url, mimetype)
+```
+
+Ten przykład pokazuje podstawowy przepływ bez obsługi błędów i przesyłania równoległego, które zostaną omówione w przewodnikach po [obsłudze błędów](/pl/camera-to-cloud/how-to-handle-errors) i [zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads).
+
+## Następne kroki {#next-steps}
+
+Gratulujemy pomyślnego przesłania pierwszego zasobu do Frame.io! [Przewodnik po zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads) omawia bardziej zaawansowane techniki i wymagania dotyczące implementacji gotowych do użytku produkcyjnego.
+
+Zachęcamy do kontaktu z naszym zespołem w razie jakichkolwiek pytań oraz do przejścia do [przewodnika po przesyłaniu w czasie rzeczywistym](/pl/camera-to-cloud/how-to-upload-realtime), aby dowiedzieć się, jak przesyłać zasoby w trakcie ich tworzenia.

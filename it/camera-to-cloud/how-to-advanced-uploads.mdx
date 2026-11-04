@@ -1,0 +1,599 @@
+---
+title: "Procedura: caricamento (avanzato)"
+sidebarTitle: "Caricamento (avanzato)"
+---
+
+## Introduzione {#introduction}
+
+Il caricamento affidabile degli asset è la funzione principale di ogni integrazione C2C. Questa guida fornisce tecniche avanzate e best practice per creare un sistema di caricamento robusto, resiliente ed efficiente, che funzioni bene anche in ambienti difficili.
+
+## Prerequisiti {#prerequisites}
+
+Se non l'hai già fatto, consulta la guida [Implementing C2C: Setting Up](/it/camera-to-cloud/implementing-c2c-setting-up) prima di procedere.
+
+Ti servirà l'`access_token` ottenuto durante il [processo di autenticazione e autorizzazione](/it/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Continueremo a utilizzare lo [stesso asset di test](https://f.io/Rq1q5CzB) della [guida ai caricamenti di base](/it/camera-to-cloud/how-to-basic-upload).
+
+## Parametri avanzati degli asset {#advanced-asset-parameters}
+
+Quando crei asset in Frame.io, puoi utilizzare diversi parametri avanzati per personalizzare il comportamento del caricamento. Il parametro `offset` è particolarmente importante per un'integrazione corretta.
+
+### Offset: gestire i dispositivi in pausa {#offset---handling-paused-devices}
+
+Fornire un valore `offset` accurato è fondamentale. Questo parametro specifica quando è stato creato un contenuto multimediale e garantisce che il tuo dispositivo non carichi contenuti che non dovrebbero essere condivisi. Quando un dispositivo viene messo in pausa in Frame.io, l'utente sta indicando che i contenuti creati durante la pausa non devono essere caricati. Per maggiori dettagli, consulta la nostra [guida alla funzionalità di pausa](/it/camera-to-cloud/how-to-heartbeats-connection-info-and-status#managing-the-paused-status).
+
+### Ulteriori vantaggi del parametro offset {#additional-benefits-of-the-offset-parameter}
+
+Il parametro `offset` offre un altro vantaggio significativo per l'organizzazione dei contenuti all'interno di Frame.io. Quando carichi contenuti acquisiti in una data precedente, ad esempio quando un utente seleziona durante la riproduzione una foto scattata la settimana prima, il parametro `offset` garantisce che questi contenuti compaiano nelle cartelle corrispondenti alla data di acquisizione originale anziché alla data di caricamento corrente.
+
+Questa organizzazione cronologica mantiene una sequenza temporale logica nella struttura del progetto Frame.io. Senza il parametro `offset`, i contenuti storici verrebbero erroneamente raggruppati con quelli odierni, creando potenzialmente confusione per montatori e altri collaboratori.
+
+Potresti voler offrire agli utenti una scelta in merito tramite la tua interfaccia. Se gli utenti preferiscono organizzare tutti i caricamenti in base alla data corrente, indipendentemente da quando i contenuti sono stati acquisiti, puoi semplicemente omettere il parametro `offset`, poiché il valore predefinito è `0` quando non è specificato.
+
+Il design della nostra API elimina la necessità per il tuo dispositivo di tenere traccia dello stato di pausa. Al contrario, quando carichi un file, indichi quanti secondi fa è stato creato. Il nostro server confronta questo valore con le finestre di pausa e rifiuta il caricamento se il file è stato creato durante una pausa.
+
+Per provare questa funzionalità, metti in pausa il dispositivo dal menu con i tre puntini nella scheda C2C Connections.
+
+Ora prova a caricare un asset:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 0
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Specifica dell'endpoint API**
+
+La documentazione per `/v2/devices/assets` è [disponibile qui](/it/camera-to-cloud/api-reference/device-asset-create).
+
+</Info>
+
+Riceverai questo errore:
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+Se riattivi il dispositivo e riprovi con la stessa richiesta, l'asset verrà creato.
+
+Tuttavia, se l'asset è stato creato durante la finestra di pausa, devi impostare l'`offset` in modo che rifletta il momento effettivo della creazione:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 60
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Questo comunica a Frame.io che l'asset è stato creato 60 secondi fa (durante la pausa), il che attiva correttamente l'errore `Channel Paused`.
+
+*Valori di `offset` accurati sono essenziali* per evitare di caricare contenuti sensibili contro la volontà dell'utente, inclusi proprietà intellettuale protetta, filmati sensibili o altro materiale riservato.
+
+<Danger>
+
+**Offset e nuovi tentativi**
+
+Quando ripeti una chiamata di creazione di un asset non riuscita, ricorda di aggiornare il valore di `offset`. Durante periodi prolungati di nuovi tentativi, un offset statico potrebbe uscire dalla finestra di pausa pertinente, consentendo potenzialmente caricamenti che dovrebbero essere bloccati.
+
+</Danger>
+
+### Caricare su un canale specifico {#uploading-to-a-specific-channel}
+
+Se il tuo dispositivo ha più canali, puoi specificare quale utilizzare:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": -10,
+            "channel": 2
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Se non specificato, il canale predefinito è `0`. La maggior parte delle integrazioni non avrà bisogno di modificare questo valore.
+
+### Richiedere un numero di chunk personalizzato {#requesting-a-custom-chunk-count}
+
+Per impostazione predefinita, il backend di Frame.io suddivide i file in chunk di circa 25 MB. Per le reti molto congestionate, potresti preferire chunk più piccoli. Puoi richiedere un numero specifico di chunk con il parametro `parts`:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "name": "C2C_TEST_CLIP.mp4",
+            "filetype": "video/mp4",
+            "filesize": 21136250,
+            "offset": 0,
+            "parts": 4
+        }
+__JSON__
+} | python -m json.tool
+```
+
+La risposta includerà quattro URL di caricamento:
+
+```json
+{
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-01-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-02-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-03-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-04-path]"
+    ],
+    ...
+}
+```
+
+La dimensione dei chunk sarà:
+
+```python title="Python"
+math.ceiling(float(21136250) / float(4))
+# 5284063 bytes
+```
+
+L'ultimo chunk sarà di 5.284.061 byte (calcolato come `21136250 - 5284063 * 3`).
+
+Quando richiedi un numero di chunk personalizzato, tieni presenti i [limiti del caricamento multipart di AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html):
+
+- Ogni parte deve essere di almeno 5 MiB (5.242.880 byte), ad eccezione dell'ultima
+- Non possono esserci più di 10.000 parti
+
+Se la tua richiesta viola questi vincoli, riceverai un `500: INTERNAL SERVER ERROR`:
+
+```
+{
+    "code": 500,
+    "errors": [
+        {
+            "code": 500,
+            "detail": "There was a problem with your request",
+            "status": 500,
+            "title": "Something went wrong"
+        }
+    ],
+    "message": "Something went wrong"
+}
+```
+
+Verifica sempre che il numero di parti personalizzato sia conforme ai requisiti di S3.
+
+## Caricare in modo efficiente {#uploading-efficiently}
+
+I dispositivi C2C operano spesso in ambienti di rete difficili, quindi l'efficienza è fondamentale. Ecco alcune strategie per massimizzare il throughput.
+
+### Riutilizzo/pooling delle connessioni TCP {#tcp-connection-reuse/pooling}
+
+Stabilire connessioni crittografate richiede un notevole overhead di negoziazione. Per un funzionamento efficiente, riutilizza le connessioni TCP quando effettui più richieste. La maggior parte delle librerie HTTP fornisce un'astrazione `Client` o `Session` che mantiene connessioni persistenti.
+
+Il processo di negoziazione per una nuova connessione HTTPS include handshake crittografici e la convalida dei certificati. Riutilizzando le connessioni, questo overhead viene sostenuto una sola volta anziché per ogni richiesta.
+
+<Info>
+
+**Riferimento sull'handshake TCP**
+
+Per i dettagli tecnici sui processi di handshake TLS, consulta la [spiegazione di Cloudflare](https://www.cloudflare.com/learning/ssl/what-happens-in-a-tls-handshake/).
+
+</Info>
+
+Per dimostrare il riutilizzo delle connessioni con `curl`, crea prima un nuovo asset in Frame.io come descritto nella [guida al caricamento di base](/it/camera-to-cloud/how-to-basic-upload#step-1-creating-an-asset).
+
+Quindi, suddividi il file in chunk separati per il test:
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk01"
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk02"
+```
+
+Ora carica entrambi i chunk su un'unica connessione TCP utilizzando il parametro `--next` di curl:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+Confrontalo con connessioni separate:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+&& curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+<Info>
+
+**Riutilizzare gli URL dei chunk**
+
+Puoi caricare più volte sullo stesso URL di chunk, quindi sentiti libero di riutilizzare gli URL tra un esempio e l'altro.
+
+</Info>
+
+Nei test, il riutilizzo delle connessioni migliora in genere le prestazioni del 15-20% per i caricamenti sequenziali.
+
+### Caricamenti paralleli {#parallel-uploads}
+
+Per un throughput ancora maggiore, carica più chunk contemporaneamente:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path]\
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+Con una larghezza di banda sufficiente, i caricamenti paralleli si completano in circa il tempo del singolo caricamento più lento.
+
+Per un parallelismo ottimale, una buona regola pratica è di due caricamenti simultanei per core della CPU. Superare questo rapporto può causare contesa delle risorse e rendimenti decrescenti.
+
+<Warning>
+
+**Velocità dei caricamenti paralleli**
+
+Le condizioni di rete influiscono in modo significativo sulle prestazioni dei caricamenti paralleli. In alcuni ambienti, i caricamenti sequenziali possono risultare più veloci di quelli paralleli. Le implementazioni avanzate potrebbero monitorare il throughput e regolare dinamicamente la concorrenza. Profila sempre le prestazioni nel tuo ambiente di produzione effettivo anziché basarti sui tempi degli esempi.
+
+</Warning>
+
+### Combinare entrambi gli approcci {#combining-both-approaches}
+
+Per la massima efficienza, combina il pooling delle connessioni con i caricamenti paralleli. Crea più processi, ciascuno dei quali utilizza il pooling delle connessioni per la propria sequenza di caricamenti:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+<Info>
+
+**Funzionalità delle librerie HTTP**
+
+La maggior parte delle librerie HTTP fornisce astrazioni per il pooling delle connessioni e le richieste parallele. Sperimenta con le opzioni della tua libreria per determinare la configurazione ottimale per il tuo ambiente.
+
+</Info>
+
+## Monitorare l'avanzamento del caricamento {#tracking-upload-progress}
+
+La tua integrazione deve fornire agli utenti un'indicazione di base dell'avanzamento. Una granularità a livello di chunk è accettabile: per un caricamento in tre chunk, l'avanzamento potrebbe passare da 0% → 33% → 66% → 100% man mano che ogni chunk viene completato.
+
+Un report di avanzamento più dettagliato dipende dalle capacità della tua libreria HTTP. Contatta il nostro team se hai bisogno di indicazioni per implementare un monitoraggio dell'avanzamento più dettagliato.
+
+## Caricare in modo affidabile {#uploading-reliably}
+
+Per una gestione degli errori robusta, consulta la nostra [guida agli errori](/it/camera-to-cloud/how-to-handle-errors). Le sezioni seguenti presuppongono che tu abbia implementato le strategie di gestione degli errori descritte in quella guida.
+
+Creare un sistema di caricamento di qualità adatta alla produzione richiede considerazioni aggiuntive che vanno oltre la gestione degli errori delle singole richieste.
+
+### Creare una coda di caricamento {#creating-an-upload-queue}
+
+In scenari reali, il tuo dispositivo potrebbe generare contenuti più velocemente di quanto riesca a caricarli, oppure subire interruzioni prolungate della connessione. L'implementazione di un sistema di code separa la creazione dei contenuti dalla gestione dei caricamenti.
+
+Considera un'architettura a due code:
+
+1. Una **coda dei contenuti** per registrare i file locali in Frame.io
+2. Una **coda dei chunk** per caricare i singoli chunk dei file
+
+Ecco un'implementazione semplificata:
+
+```python title="Python"
+# Where we are going to queue new files.
+FILE_QUEUE = Queue()
+
+# Where we are going to queue new chunks.
+CHUNK_QUEUE = Queue()
+
+# The http session that will handle TCP 
+# connection pooling for us.
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Snaps a picture for the user."""
+
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+    FILE_QUEUE.add(file_path)
+
+def task_register_assets():
+    """
+    Pulls snapped pictures from the FILE_QUEUE, registers
+    with Frame.io, and adds the chunks to the CHUNK_QUEUE.
+    """
+    while True:
+        # Get the latest file added to the queue and register 
+        # a C2C Asset for it.
+        new_file = FILE_QUEUE.get()
+        asset = c2c.crete_asset_for_file(HTTP_SESSION, new_file)
+
+        # Calculate the size for each chunk
+        chunk_size = c2c.calculate_chunk_size(asset, new_file)
+
+        # Create a message for each chunk with it's parameters 
+        # and add it to the 
+        # queue.
+        chunk_start = 0
+        for chunk_url in asset.upload_urls:
+            message = {
+                "file_path": new_file,
+                "chunk_url": chunk_url,
+                "chunk_start": chunk_start,
+                "chunk_size": chunk_size,
+            }
+
+            # Put the message in the queue and 
+            CHUNK_QUEUE.put(message)
+            chunk_start += chunk_size
+
+def task_upload_chunk():
+    """Takes a chunks and uploads them."""
+
+    while True:
+        info = CHUNK_QUEUE.get()
+        c2c.upload_chunk(HTTP_SESSION, info)
+
+def launch_upload_tasks():
+    """Lauches our Frame.io upload tasks."""
+    # Create a list to hold all of our tasks.
+    tasks = list()
+
+    # Create one task for registering assets.
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Create 2 tasks per CPU core for uploading chunks.
+    for _ in range(0, GET_CPU_COUNT() * 2):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run these tasks until shutdown
+    run_forever(tasks)
+```
+
+<Warning>
+
+**Gestione degli errori**
+
+Nell'esempio precedente, presupponiamo che le funzioni invocate per le chiamate c2c gestiscano gli errori come descritto nella [guida agli errori](/it/camera-to-cloud/how-to-handle-errors).
+
+</Warning>
+
+### Code persistenti tra un ciclo di alimentazione e l'altro {#persistent-queuing-across-power-cycles}
+
+L'approccio con coda in memoria funziona bene finché il dispositivo resta acceso, ma cosa succede se l'alimentazione viene a mancare prima del completamento dei caricamenti? Per creare un'integrazione davvero resiliente, dobbiamo garantire che il dispositivo possa riprendere da dove si era interrotto dopo il riavvio.
+
+Ciò richiede di salvare in modo persistente lo stato della coda tra un ciclo di alimentazione e l'altro. Un database incorporato come [SQLite](https://www.sqlite.org/index.html) offre una base eccellente per questa funzionalità.
+
+L'implementazione della tua coda persistente dovrebbe supportare queste operazioni chiave:
+
+- Aggiungere i file appena creati alla coda di caricamento
+- Tenere traccia di quando gli asset vengono creati correttamente in Frame.io
+- Registrare quando la creazione di un asset non riesce a causa di errori
+- Archiviare le informazioni sui chunk dei file per le attività di caricamento
+- Recuperare il prossimo chunk da caricare
+- Contrassegnare i chunk come caricati correttamente
+- Registrare i caricamenti di chunk non riusciti
+- Fornire informazioni sullo stato dei file da mostrare all'utente
+
+Ecco come potremmo adattare l'esempio precedente per utilizzare un sistema di archiviazione persistente:
+
+```python title="Python"
+# Our persistence layer for queuing uploads, potentially using SQLite 
+# or another embedded database
+C2C_UPLOAD_STORE = NewC2CUploadStore()
+
+# HTTP session for connection pooling
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Captures an image and adds it to the upload queue."""
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+
+    # Register the file with our persistent store
+    C2C_UPLOAD_STORE.add_file(file_path)
+
+def task_register_assets():
+    """
+    Processes files from persistent storage and registers
+    them with Frame.io for upload.
+    """
+    while True:
+        # Get the next available file from our store
+        file_record = C2C_UPLOAD_STORE.get_file()
+
+        try:
+            # Register the asset with Frame.io
+            asset = c2c.create_asset_for_file(HTTP_SESSION, file_record)
+            chunk_size = c2c.calculate_chunk_size(asset, file_record)
+
+            # Create entries for each chunk in our persistent store
+            chunk_start = 0
+            for chunk_url in asset.upload_urls:
+                message = {
+                    "file_path": file_record,
+                    "chunk_url": chunk_url,
+                    "chunk_start": chunk_start,
+                    "chunk_size": chunk_size,
+                }
+                
+                C2C_UPLOAD_STORE.new_chunk(message)
+                chunk_start += chunk_size
+                
+        except BaseException as error:
+            # Record the error in our persistent store
+            C2C_UPLOAD_STORE.file_asset_create_error(file_record, error)
+        else:
+            # Mark the asset as successfully created
+            C2C_UPLOAD_STORE.file_asset_created(file_record)
+
+def task_upload_chunk():
+    """Uploads individual file chunks from the persistent queue."""
+    while True:
+        # Get the next chunk, marking it as "in progress" to prevent 
+        # other tasks from processing it simultaneously
+        chunk_record = C2C_UPLOAD_STORE.get_chunk()
+
+        try:
+            c2c.upload_chunk(HTTP_SESSION, chunk_record)
+        except BaseException as error:
+            # Record the error for potential retry
+            C2C_UPLOAD_STORE.chunk_error(chunk_record, error)
+        else:
+            # Mark successful completion
+            C2C_UPLOAD_STORE.chunk_success(chunk_record)
+
+def launch_upload_tasks():
+    """Launches Frame.io upload processing tasks."""
+    tasks = []
+
+    # Asset registration task
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Multiple parallel chunk upload tasks
+    worker_count = GET_CPU_COUNT() * 2
+    for _ in range(worker_count):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run indefinitely
+    run_forever(tasks)
+```
+
+Con questo approccio di archiviazione persistente, la tua integrazione diventa resiliente alle interruzioni di corrente. Al riavvio, il dispositivo riprende semplicemente l'elaborazione dall'ultimo stato salvato. Questa architettura fornisce anche la base per implementare funzionalità più avanzate, come il monitoraggio degli errori e il rilevamento dei caricamenti bloccati.
+
+### Monitorare gli errori di caricamento {#tracking-upload-errors}
+
+Un sistema di caricamento robusto deve monitorare attentamente gli errori. Dopo aver ritentato un'operazione utilizzando le strategie della [guida agli errori](/it/camera-to-cloud/how-to-handle-errors), registra questi errori nel tuo archivio persistente. Ciò consente al sistema di:
+
+1. Ridurre la priorità dei caricamenti problematici per evitare che blocchino l'intera coda
+2. Fornire informazioni accurate sullo stato agli utenti
+3. Consentire un intervento amministrativo in caso di problemi persistenti
+
+Quando si verifica un errore irreversibile, contrassegna l'elemento per evitare tentativi inutili.
+
+### Gestire i caricamenti bloccati {#managing-stalled-uploads}
+
+Implementa misure di protezione contro i caricamenti bloccati a tempo indeterminato. Imposta una durata massima (ad esempio, 30 minuti) dopo la quale un'attività di caricamento di un chunk deve essere terminata e riavviata. Questo evita scenari in cui tutti i worker di caricamento rimangono bloccati da operazioni che non rispondono.
+
+### Ripristino dopo errori silenziosi {#recovering-from-silent-failures}
+
+Arresti anomali del sistema, interruzioni di corrente o la terminazione dei processi possono impedire la normale segnalazione degli errori. Quando recuperi elementi dalla coda, registra l'orario di prelievo. Se un elemento rimane nello stato "in corso" oltre una soglia ragionevole (ad esempio, 30 minuti) senza segnalare successo o errore, rimettilo automaticamente a disposizione affinché possa essere elaborato da un altro worker.
+
+### Mitigare i caricamenti "avvelenati" {#mitigating-poisoned-uploads}
+
+Un elemento "avvelenato" della coda non riesce costantemente a causa di problemi intrinseci dei dati o dell'ambiente. Se questi elementi vengono rimessi in coda di continuo, possono di fatto bloccare l'intero sistema di caricamento. Considera queste strategie per gestire questi casi:
+
+- Dopo più errori, riduci la priorità dell'elemento in modo che i contenuti più recenti possano procedere
+- Tieni traccia sia degli errori espliciti sia del numero di tentativi di elaborazione
+- Segui le best practice relative a connessione e autorizzazione per distinguere tra problemi ambientali temporanei e problemi intrinseci dei file
+- Implementa limiti di tentativi crescenti (ad esempio, ritenta le singole operazioni 10 volte in ciascuno di 3 tentativi del job, per un totale di 30 tentativi)
+- Fornisci un'interfaccia utente per reimpostare manualmente i caricamenti problematici una volta risolti i problemi ambientali
+
+I caricamenti "avvelenati" possono derivare da:
+
+- Dati di file danneggiati che causano errori di I/O
+- Errori catastrofici dei processi che impediscono la segnalazione degli errori
+- Errori normalmente ritentabili causati da condizioni sottostanti permanenti
+
+### Riprovare dopo il riavvio del sistema {#retry-after-system-restart}
+
+Prima di abbandonare definitivamente i caricamenti problematici, contrassegnali per un ultimo tentativo dopo il successivo riavvio del sistema. Questo risolve i casi in cui i caricamenti non riescono a causa di problemi temporanei dello stato del sistema relativi a memoria, driver o allocazione delle risorse. Se un caricamento continua a non riuscire dopo un riavvio pulito, puoi contrassegnarlo con maggiore sicurezza come permanentemente problematico.
+
+## Svuotare la coda {#clearing-your-queue}
+
+Ricorda di rimuovere dalla coda i file non più disponibili. Quando i supporti vengono rimossi fisicamente o i file vengono eliminati, elimina le voci corrispondenti dalla coda di caricamento per evitare errori inutili.
+
+*È importante svuotare la coda di caricamento quando ci si connette a un nuovo progetto.* I contenuti in coda per un progetto non devono mai comparire in un altro. Quando un utente abbina il dispositivo a un progetto diverso, verifica se il progetto è cambiato e, in tal caso, svuota completamente la coda esistente.
+
+## Passaggi successivi {#next-steps}
+
+Ti invitiamo a contattare il nostro team per qualsiasi domanda e a proseguire con la [guida ai caricamenti avanzati](/it/camera-to-cloud/how-to-advanced-uploads). Siamo felici di supportarti nei progressi della tua integrazione.

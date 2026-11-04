@@ -1,0 +1,73 @@
+---
+title: "Korzystanie z ngrok"
+---
+
+Ngrok to łatwe w użyciu narzędzie, które pozwala utworzyć bezpieczny tunel na komputerze lokalnym wraz z publicznym adresem URL, którego możesz używać do testowania lokalnego projektu lub udostępniania swojej pracy do przeglądu klientowi czy członkowi zespołu. Możesz skonfigurować HTTP lub HTTPS, a dzięki popularności tego narzędzia, jeśli coś przestanie działać, znajdziesz mnóstwo artykułów opisujących różne sposoby rozwiązania problemu. W tym artykule omówiono kilka prostych sposobów instalacji ngrok oraz to, co zrobić, jeśli nie udaje się nawiązać komunikacji między aplikacją webową a ngrok.
+
+<Info>
+
+**ngrok**
+
+Nasi przyjaciele z ngrok napisali świetny artykuł poświęcony obsłudze webhooków Frame.io za pomocą ngrok. Znajdziesz go [tutaj](https://ngrok.com/docs/integrations/frameio/webhooks).
+
+</Info>
+
+## Instalacja ngrok {#install-ngrok}
+
+Z ngrok możesz korzystać na kilka różnych sposobów
+
+### Instalacja za pomocą instalatora ngrok {#install-via-the-ngrok-installer}
+
+1. Przejdź do witryny ngrok i postępuj zgodnie z podanymi tam instrukcjami: [https://ngrok.com/download](https://ngrok.com/download)
+2. Jeśli chcesz korzystać z funkcji dostępnych po połączeniu konta, postępuj zgodnie z tymi instrukcjami, aby założyć konto i uzyskać token.
+
+Nie musisz zakładać konta ani dodawać tokenu, ale koniecznie zajrzyj na stronę pobierania, aby sprawdzić, czy jest to coś, czego chcesz lub potrzebujesz.
+
+<Info>
+
+**Uwaga:**
+
+Jeśli użyjesz tej metody, ngrok będzie uruchamiany z miejsca, w którym go przechowujesz, chyba że udostępnisz go w całym systemie.
+
+</Info>
+
+### Instalacja za pomocą Homebrew {#install-with-homebrew}
+
+To moja ulubiona metoda instalacji ngrok. Jeśli masz zainstalowany Homebrew, wystarczy wpisać `homebrew cask install ngrok` . ngrok zostanie zainstalowany i będzie można go używać z dowolnego miejsca! A co najlepsze, nie musisz wpisywać `./ngrok` w terminalu na początku każdego polecenia – wystarczy wpisać `ngrok`. Więcej o tej opcji przeczytasz [tutaj](https://gist.github.com/wosephjeber/aa174fb851dfe87e644e).
+
+## Korzystanie z ngrok {#use-ngrok}
+
+Po skonfigurowaniu ngrok wybierz port, np. `3000`, i uruchom ngrok z wiersza poleceń terminala za pomocą polecenia ngrok http `3000`. Nie musisz używać portu `3000`, ale jest to port często wybierany podczas konfiguracji.
+
+Jeśli skonfigurowałeś ngrok tak, aby był uruchamiany z określonego folderu, musisz znajdować się w folderze, w którym umieściłeś ngrok, i użyć polecenia `./ngrok http 3000`.
+
+Uruchom serwer swojego projektu tak, aby nasłuchiwał na tym samym porcie, a uzyskasz dostęp do swojej pracy pod publicznym adresem udostępnionym przez ngrok.
+
+### Rozwiązywanie problemów z ngrok w aplikacji webowej – ukośnik na końcu {#troubleshooting-ngrok-with-your-web-app-trailing-slash}
+
+Problemem, na który możesz natrafić podczas korzystania z ngrok, jest brak możliwości połączenia z serwerem po skonfigurowaniu adresu URL ngrok do użytku z aplikacją webową. Frustrujące jest to, że ngrok nie zarejestruje, że cokolwiek do niego wysłano. Możesz otworzyć localhost:4040, aby sprawdzić, co się dzieje, ale nic tam nie zobaczysz. (localhost:4040 jest udostępniany przez ngrok, aby umożliwić monitorowanie wszystkich żądań przychodzących do serwera). Wygląda na to, że ngrok dopasowuje adresy do wzorca /(.*), a nie (/.*), więc jeśli nie dodasz ukośnika na końcu adresu i nic nie widzisz w narzędziach monitorujących ngrok, dzieje się tak dlatego, że ngrok nie znajduje dopasowania do podanego adresu.
+
+Oto przykład z dodanym ukośnikiem na końcu: `http://something.ngrok.io/`
+
+Możesz też napisać przykładowe aplikacje tak, aby kierowały do endpointu zawierającego ukośnik. Pamiętaj tylko, że aby aplikacja Frame.io mogła dotrzeć do Twojego serwera, jeśli przykładowa aplikacja używa endpointu `/actions`, musisz dodać endpoint /actions na końcu adresu ngrok. Na przykład jeśli adres ngrok to `http://something.ngrok.io`, w konfiguracji Custom Action musisz podać go jako `http://something.ngrok.io/actions`. W innych aplikacjach webowych może to wyglądać inaczej, więc jeśli nie wszystko od razu działa, poeksperymentuj z końcówką adresu ngrok.
+
+### Czy mogę użyć czegoś innego niż ngrok? Wypróbuj Glitch! {#can-i-use-something-besides-ngrok-try-glitch}
+
+Glitch to całkiem fajna alternatywa dla ngrok, którą szybciej się konfiguruje. Glitch pozwala założyć konto, a następnie budować własne aplikacje na serwerach Glitch z publicznie dostępnym adresem URL. Możesz współpracować z innymi, udostępniać kod publicznie lub prywatnie i wybierać spośród wielu języków i platform. Zajrzyj na [https://glitch.com/create](https://glitch.com/create), aby zobaczyć, co jest dostępne.
+
+Podczas konfigurowania projektu w Glitch w przypadku niektórych aplikacji webowych również występuje problem z ukośnikiem na końcu. W przypadku Frame.io, konfigurując Custom Action w [developer.frame.io](/pl/platform/v2), musisz dodać ukośnik na końcu adresu URL udostępnionego przez Glitch. Nie musisz dodawać niczego więcej, nawet dla endpointu /actions.
+
+### Czy jest coś gotowego, co mógłbym wypróbować już teraz? {#is-there-something-set-up-i-could-try-now}
+
+Tak. Jeśli nie chcesz używać ngrok ani tworzyć własnego projektu w Glitch, przygotowaliśmy przykładową aplikację, którą możesz wypróbować tutaj: [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me). Pamiętaj, aby dodać ukośnik na końcu, wpisując ten adres w sekcji Custom Actions \[/).
+
+### Zasoby {#resources}
+
+W tej sekcji zebrano zasoby wymienione w artykule:
+
+- **ngrok** [https://ngrok.com/](https://ngrok.com/)
+- **Glitch** [https://glitch.com/](https://glitch.com/)
+- **Platformy dostępne w Glitch** [https://glitch.com/create](https://glitch.com/create)
+- **Przykładowa aplikacja Glitch z Custom Action w JavaScript** [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me)
+- **Rejestracja i konfiguracja dla deweloperów Frame.io** [Witryna Frame.io dla deweloperów](/pl/platform/v2)
+- **Aplikacja webowa Frame.io** [https://app.frame.io/](https://app.frame.io/)

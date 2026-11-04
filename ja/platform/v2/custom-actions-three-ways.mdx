@@ -1,0 +1,84 @@
+---
+title: "Custom Actions をデプロイする 3 つの方法"
+---
+
+## はじめに {#introduction}
+
+Custom Action を最も速くデプロイする方法は何でしょうか。ワークフローを完全にカスタマイズできる、最も汎用性の高い構成はどれでしょうか。Custom Actions を受信して処理する環境の選択は、その後のワークフローステップでデータをどのように扱えるかを決定する重要な要素です。基本的な選択肢は次のとおりです。
+
+1. Zapier、Integromat、Microsoft Power Automate などの自動化プラットフォームを使用したノーコードのデプロイ
+2. AWS Lambda や Azure Functions などのローコードソリューション。完全に管理された環境で、シンプルなスクリプトを「ジョブ」として実行できます
+3. 自分で運用・保守するサーバー
+
+次の図は、Custom Actions のアーキテクチャを示しています。
+
+![Custom Actions Diagram](/images/platform/v2/custom-actions-three-ways/a73b943-custom_actions_architecture.png)
+
+### ノーコード: Zapier にデプロイする {#no-code-deploy-to-zapier}
+
+Zapier の「クリックして作成」するインターフェースは、Frame.io から一般的なアプリや生産性ツールに Asset、コメント、ステータスイベントを送信することが目的の、基本的な自動化に適しています。
+
+![Zapier Setup](/images/platform/v2/custom-actions-three-ways/548d2d6-zapier_catch_webhook.png)
+
+#### メリット {#pros}
+
+- 使い方が簡単です。ポイント&クリックで自動化を作成できます。
+- [Task history](https://zapier.com/learn/getting-started-guide/task-history/) は Zapier のランタイムログツールで、自動化の実行ごとに各ワークフローステップのデータ入出力をまとめて表示します。
+- プレミアムアカウントに課金すると、自動化に分岐ロジックを追加するためのツールである [Paths](https://zapier.com/paths) が利用可能になります。
+
+#### デメリット: {#cons}
+
+- Zapier の Webhook サポートには制限があり、Custom Action の実行時に詳細なメッセージや Frame.io ユーザーへのインタラクションを返すことはできません。この制限については、Zapier のサポートドキュメントで次のように説明されています。
+
+> We \[Zapier\] always return a success message with a payload of debugging information when collecting a webhook - regardless of whether there is a Zap behind the webhook or if it is paused or not…There is no way to customize the response to the request you send to the Catch Hook URL, as the response is sent before the Zap triggers and runs on the webhook request.
+
+- Custom Actions が正しく動作しているかを検証する際、Zapier の UI は手間がかかる場合があります。たとえば、テスト中は [Test Data](https://zapier.com/help/create/basics/change-the-test-data-in-your-zap-trigger) を確認して更新する必要があります。テストデータが実際のデータと一致しない場合、Zap の設計が実際には正しくても、Zapier が「偽陰性」を出してエラーを表示することがあります。`File URL` などの重要なデータが、Task が必要とするタイミングで利用できない場合、Zap がエラーになったり、想定どおりに動作しなかったりすることがあります。
+
+<Info>
+
+**ガイドを用意しています!**
+
+Zapier インテグレーションの設計方法について、[Custom Actions を Zapier にデプロイする方法](/ja/platform/v2/deploy-custom-actions-to-zapier)の詳細なガイドを含む、充実したガイドを用意しています。
+
+</Info>
+
+## ローコード: AWS にデプロイする {#low-code-deploy-to-aws}
+
+Custom Actions は AWS の API Gateway に送信し、Amazon の[膨大な](https://aws.amazon.com/what-is-aws/)クラウドサービス群と統合できます。最もシンプルなパターンは、Custom Action に含まれる Frame.io イベントを、サーバーレス関数を実行するためのコンピューティングサービスである AWS Lambda にプロキシすることです。以下は、ファイルアーカイブサービスの設計例です。
+
+![AWS Lambda](/images/platform/v2/custom-actions-three-ways/2ef81ac-action-lambda.png)
+
+#### メリット: {#pros-1}
+
+- [AWS Free Tier](https://aws.amazon.com/free/?all-free-tier.sort-by=item.additionalFields.SortRank&all-free-tier.sort-order=asc&all-free-tier.q=Lambda&all-free-tier.q_operator=AND) では、サービス料金が発生する前に、月あたり 320 万秒のコンピューティング時間が利用できます。
+- API Gateway と Lambda は、CloudWatch や X-Ray などの優れたテストおよびモニタリングツールをサポートしています。
+- 巨大なファイルサイズ(500GB 以上)にも対応できるようにサービスをスケールアップできます。
+
+#### デメリット: {#cons-1}
+
+- 複数のサービスをつなぎ合わせる(Webhook -> API Gateway -> Lambda 1 -> Lambda 2)ことや、AWS Fargate のような新しいサービスの使い方を習得することには時間がかかる場合があります。
+- AWS のドキュメントは古かったり、重要な詳細が欠けていたりすることがよくあります。たとえば、API Gateway を設定する際、ペイロードが Base64 エンコードされるかどうかを判断するのは簡単ではありません。
+- 設定は全般的にやや複雑です。
+
+[Custom Actions を AWS にデプロイする完全な手順については、こちらのガイドをご覧ください](https://medium.com/@frameiokyle/automatic-s3-backups-with-frame-io-custom-actions-and-aws-lambda-d3b8dbed0133)。注: Custom Actions は AWS だけでなく、任意のクラウドコンピューティングサービス(Azure、Google Cloud Platform、Digital Ocean など)にデプロイできます。
+
+### サーバーを運用して独自のコードをホストする {#run-a-server-and-host-your-own-code}
+
+クラウドサービスは非常に便利ですが、データを完全に管理したいワークフローでは、独自のサーバーを作成してデプロイすることもできます。
+
+DevRel チームでは、Python で [FastAPI サーバー](https://fastapi.tiangolo.com/features/)を書くのが好きです。作成が簡単で、Custom Actions のリクエスト/レスポンスのパターンにもよく合います。
+
+#### メリット: {#pros-2}
+
+- データのエンドツーエンドのフローを制御できます。予期しない事態はまったくありません。
+- クラウドへの追加の露出なしに、NAS やファイルシステムにデータを同期できます。
+
+#### デメリット: {#cons-2}
+
+- サーバーの管理、独自のセキュリティ機能の構築、ネットワーク検出や負荷の処理などが必要です。
+
+[サンプルコード](https://github.com/Frameio/custom-actions-app-python)をクローンして、Custom Actions を処理する FastAPI サーバーをデプロイしてください。
+
+### ニーズに最適な設計について相談しましょう {#let’s-talk-about-the-best-design-for-your-needs}
+
+要件をコミュニティに投稿してください。ワークフローに最適な設計を見つけるお手伝いをいたします。

@@ -1,0 +1,171 @@
+---
+title: "Gestire i Version Stack"
+---
+
+## Panoramica {#overview}
+
+I Version Stack sono un principio organizzativo di Frame.io che consente di "impilare" verticalmente gli Asset senza inserirli in cartelle. Le versioni impilate semplificano la navigazione da un Asset all'altro nell'interfaccia di Frame.io e supportano la revisione affiancata.
+
+Al momento non supportiamo il caricamento diretto in uno Stack, quindi la sequenza API per gestire un flusso di lavoro di base con i Version Stack segue la stessa sequenza dell'interfaccia di Frame.io:
+
+1. Carica l'Asset (facoltativo: contrassegnalo come privato).
+2. Assegna l'Asset allo Stack.
+
+I Version Stack esistenti possono essere riordinati e le singole versioni possono essere rimosse da uno stack. Infine, i Version Stack possono essere eliminati senza eliminare nessuno degli Asset che li compongono.
+
+<Info>
+
+**Tutti i Version Stack hanno un cover_asset**
+
+I Version Stack hanno sempre un attributo chiamato `cover_asset_id` al livello superiore. Si tratta dell'`id` dell'Asset la cui miniatura viene mostrata nell'interfaccia web di Frame.io, ed è la versione con il numero più alto nello stack.
+
+</Info>
+
+### Concetti fondamentali {#core-concepts}
+
+I **Version Stack**, come le **Cartelle**, sono `types` speciali di Asset. Puoi recuperarli con gli stessi endpoint e, in base al valore della chiave `type` nella risposta dell'API, analizzarli e instradarli di conseguenza. In pratica è generalmente semplice, ma può presentare un paio di complicazioni quando si gestiscono gli Stack su larga scala.
+
+La chiave per lavorare con i Version Stack è distinguere i **quattro scenari più comuni**:
+
+1. Un Asset può essere aggiunto a un altro Asset, creando uno Stack con un nuovo `id`.
+2. Un Asset può essere aggiunto a uno Stack esistente.
+3. Uno Stack può essere riordinato.
+4. Le singole versioni possono essere rimosse.
+
+**I primi due scenari** utilizzano la stessa [chiamata all'endpoint](/it/platform/v2/api-reference/assets/add-version-to-asset), quindi l'unica vera sfumatura sta nel sapere se stai creando un nuovo Stack (a partire da due Asset) o se stai aggiungendo il tuo Asset a uno Stack esistente. A parte questo, i vincoli sono prevedibili:
+
+1. Gli Stack devono corrispondere per `asset_type` (ad es. non puoi impilare un'*immagine* su uno *stream*).
+2. L'utente che esegue l'operazione deve avere le autorizzazioni sia per l'Asset di origine sia per l'Asset o lo Stack di destinazione.
+3. Gli Asset si impilano in sequenza.
+4. Non puoi impilare uno Stack su un altro Stack.
+5. Le cartelle sono escluse.
+
+**Gli ultimi due scenari** sono anch'essi piuttosto semplici, ma richiedono di conoscere un po' meglio lo Stack stesso. Ad esempio, per riordinare un Asset in uno Stack, dovrai conoscere gli `id` degli Asset su entrambi i lati del punto in cui vuoi collocare l'Asset di destinazione; e questo, in genere, significa che hai già recuperato l'intero Stack.
+
+### Scope richiesti {#required-scopes}
+
+Prima di iniziare questa guida, assicurati di avere un token che includa i seguenti scope:
+
+| Scope | Motivo |
+| --- | --- |
+| **Assets:** Read, Update | - Recuperare gli Asset di origine e di destinazione.<br />- Aggiungere un Asset a un Version Stack.<br />- Riordinare uno Stack.<br />- Rimuovere un Asset da uno Stack.<br />- Eliminare uno Stack. |
+
+## Aggiungere Asset ai Version Stack {#adding-assets-to-version-stacks}
+
+### Passaggio 1: individua la destinazione {#step-1-locate-your-destination}
+
+Il primo passaggio consiste nell'identificare in quale dei due scenari principali ti trovi: aggiungere un Asset a un altro Asset per creare uno Stack, oppure aggiungere un Asset a uno Stack per estenderlo.
+
+Se sai di lavorare con un Asset senza versioni, oppure hai già l'`id` di un Version Stack, puoi passare al Passaggio 2.
+
+In caso contrario, il modo più semplice per determinare se un Asset di destinazione fa già parte di uno stack è:
+
+1. Eseguire una `GET` sull'Asset di destinazione tramite una chiamata a `/v2/assets/:id​`
+2. Controllare il `type` restituito.
+
+- Se è *version_stack*, l'uuid che hai appena controllato è il tuo uuid di destinazione. Passa al Passaggio 2.
+
+3. Se il `type` è *file*, prendi il `parent_id`
+4. Esegui una GET sul padre tramite lo stesso endpoint e controlla il suo `type`.
+
+Se il `type` del padre è *version_stack*, usa il suo `id` come destinazione.
+
+Se il `type` è qualsiasi altro valore, hai a che fare con un normale Asset e puoi usare l'id originale come destinazione.
+
+### Passaggio 2: prepara il payload {#step-2-prepare-your-payload}
+
+Ora che hai l'uuid di destinazione, devi conoscere l'uuid dell'Asset che stai aggiungendo allo Stack.
+
+1. Se stai caricando un nuovo Asset, usa semplicemente l'id restituito nella risposta di successo quando [crei l'Asset](/it/platform/v2/api-reference/assets/create-asset).
+2. Se stai impilando un Asset esistente, dovresti avere l'`id` tramite il processo descritto sopra.
+
+L'unico parametro del corpo richiesto per l'aggiunta a un Version Stack è `next_asset_id`:
+
+```json
+{
+    "next_asset_id": "<source-asset-id>"
+}
+```
+
+### Passaggio 3: aggiungi l'Asset di origine alla destinazione {#step-3-add-your-source-asset-to-the-destination}
+
+Ora che hai entrambi i parametri `id` degli Asset, puoi eseguire una `POST` su `/assets/:id/version`, dove :id è l'Asset o il Version Stack di destinazione e l'Asset di origine (nuovo) si trova nel payload del corpo.
+
+## Riordinare i Version Stack {#reordering-version-stacks}
+
+I Version Stack si basano su un semplice concetto ordinale in cui ogni asset ha i vicini `next_asset_id` e `prev_asset_id`, dove l'ordine non si riferisce alla numerazione delle versioni, ma all'attributo `index` di ciascun Asset. L'`index` procede in senso opposto ai numeri di versione, quindi:
+
+- La prima versione (con il numero più basso) nello Stack ha un Asset `prev`, ma nessun Asset `next`
+- La versione più recente (con il numero più alto) nello Stack ha un Asset `next`, ma nessun Asset `prev`
+- Tutte le versioni "interne" hanno sia un Asset `prev` sia un Asset `next`, che sono rispettivamente gli Asset con ID di versione più alti e più bassi.
+
+Ciò dà luogo a tre scenari distinti, che si basano tutti sulla stessa chiamata all'endpoint:
+
+**Chiamata:**
+
+```
+PUT https://api.frame.io/v2/asset/:id/tween
+```
+
+**Corpo:**
+
+```json
+{
+  "prev_asset_id": "<asset_id>",
+  "next_asset_id": "<asset_id>"
+}
+```
+
+In tutti i casi, l'`id` nel percorso dell'URL sarà l'Asset che stai spostando.
+
+| Scenario | `prev_asset_id` | `next_asset_id` |
+| --- | --- | --- |
+| Spostare in cima allo Stack | `null` | `id` del precedente Asset in cima (numero di versione più alto). |
+| Spostare in fondo allo Stack | `id` del precedente Asset in fondo (v1). | `null` |
+| Spostare una versione all'interno di uno stack | `id` dell'Asset immediatamente *sopra* il punto in cui vuoi spostare l'Asset. | `id` dell'Asset immediatamente *sotto* il punto in cui vuoi spostare il nuovo Asset. |
+
+## Rimuovere Asset ed eliminare i Version Stack {#removing-assets-and-deleting-version-stacks}
+
+### Rimuovere Asset {#removing-assets}
+
+Quando un Asset viene spostato in un Version Stack, diventa figlio dello Stack stesso. Per spostare un Asset fuori da un Version Stack, ciò che devi fare è, di fatto, riassegnarlo come figlio della cartella che contiene lo Stack.
+
+1. Esegui una `GET` sul Version Stack stesso tramite una chiamata a `/v2/assets/:id`
+2. Prendi il `parent_id` dello Stack stesso (che diventa il nuovo `id` della cartella di destinazione)
+3. Sposta l'Asset di destinazione nella cartella come segue:
+
+**Chiamata**:
+
+```
+POST https://api.frame.io/v2/assets/:parent_id/move
+```
+
+**Corpo**:
+
+```json
+{
+    "id":"<asset_id>"
+}
+```
+
+### Eliminare i Version Stack {#deleting-version-stacks}
+
+Eliminare un Version Stack è estremamente semplice:
+
+```
+DELETE https://api.frame.io/v2/assets/:version_stack_id/unversion
+```
+
+Tutto qui. L'eliminazione di uno Stack riporta tutti gli Asset che lo compongono nella cartella che contiene lo Stack.
+
+<Info>
+
+**Gli Stack di dimensione 1 devono essere eliminati**
+
+Se rimuovi tutti gli elementi da un Version Stack, ti ritroverai con un Version Stack contenente un solo elemento. È facile da individuare: se esegui una `GET` sul Version Stack tramite il suo `id`, vedrai che ha un attributo `"version": 1`.
+
+</Info>
+
+Tecnicamente tutto ciò è accettabile: la versione singola verrà caricata e riprodotta, sarà possibile aggiungere nuove versioni e tutto continuerà a funzionare normalmente; tuttavia, per evitare di presentare una situazione confusa agli utenti nell'applicazione web di Frame.io e nelle altre applicazioni, consigliamo di eliminare gli Stack con un solo elemento.
+
+Per ulteriori informazioni sull'endpoint di Version Stacking, consulta la documentazione degli [Assets](/it/platform/v2/api-reference/assets/library-search-get).

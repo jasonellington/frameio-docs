@@ -1,0 +1,287 @@
+---
+title: "Lista kontrolna integratora"
+---
+
+## Wymagania dotyczące integracji C2C {#c2c-integration-requirements}
+
+Ta lista kontrolna przedstawia najlepsze praktyki i wymagania dotyczące dołączenia do ekosystemu C2C. Choć nie każdy punkt dotyczy wszystkich urządzeń lub aplikacji C2C, zespół ds. partnerstw C2C będzie współpracować z Tobą przy określaniu konkretnych wymagań w ramach programu certyfikacji C2C.
+
+## Podstawowe wymagania dotyczące integracji {#basic-integration-requirements}
+
+Wszystkie integracje muszą obejmować:
+
+<CardGroup cols={2}>
+
+<Card title="Kod użytkownika" icon="keyboard" iconType="solid">
+
+Wyświetlanie użytkownikowi 6-cyfrowego kodu. W przypadku interfejsów webowych lub urządzeń obsługujących kody QR użyj `verification_url_complete`, aby udostępnić użytkownikom hiperłącze umożliwiające zalogowanie się i wybór projektu, z którym ma nastąpić połączenie.
+
+</Card>
+
+<Card title="Wyświetlanie projektu" icon="folder" iconType="solid">
+
+Wyświetlanie nazwy połączonego projektu, aby użytkownicy mogli szybko zweryfikować połączenie bez przeszukiwania interfejsu [Frame.io](http://frame.io/)
+
+</Card>
+
+<Card title="Status przesyłania" icon="upload" iconType="solid">
+
+Czytelne wskaźniki dla:
+
+- Liczby pozostałych plików
+- Łącznego rozmiaru pozostałych plików
+- Postępu przesyłania bieżącego pliku
+- Statusu ukończonych, oczekujących w kolejce i nieudanych przesyłań
+
+</Card>
+
+<Card title="Status sieci" icon="network-wired" iconType="solid">
+
+Wyświetlanie statusu połączenia sieciowego oraz automatyczne odświeżanie tokena dostępu po 8 godzinach bez interakcji z użytkownikiem i bez alertów (chyba że wystąpi błąd odświeżania)
+
+</Card>
+
+</CardGroup>
+
+Dodatkowe wymagania:
+
+- Możliwość anulowania przepływu autoryzacji na każdym etapie
+- Status gniazda do komunikacji w czasie rzeczywistym
+- Nagłówek z wersją firmware'u we wszystkich wywołaniach endpointów HTTPS
+
+## Wymagania dotyczące bezpieczeństwa {#security-requirements}
+
+W [Frame.io](http://frame.io/) bezpieczeństwo jest najważniejsze. Nasze wymagania obejmują:
+
+<CardGroup cols={2}>
+
+<Card title="HTTPS i bezpośrednie połączenie" icon="shield-halved" iconType="solid">
+
+- Żądania wyłącznie przez HTTPS (żądania HTTP są odrzucane)
+- Bezpośrednie połączenie urządzenia/aplikacji z [Frame.io](http://frame.io/) (bez usług pośredniczących)
+
+</Card>
+
+<Card title="Ochrona danych uwierzytelniających" icon="lock" iconType="solid">
+
+- Chronione `client_secret` i `client_id` (niedostępne dla użytkownika)
+- Chronione dane uwierzytelniające `access_token` i `refresh_token`
+- Szyfrowane przechowywanie sekretów i tokenów (opcjonalne, ale zalecane)
+
+</Card>
+
+</CardGroup>
+
+## Wymagania dotyczące modułu przesyłania {#uploader-requirements}
+
+Niezawodne przesyłanie multimediów ma kluczowe znaczenie, zwłaszcza w trudnych warunkach. Integracje muszą:
+
+<CardGroup cols={2}>
+
+<Card title="Funkcje przesyłania" icon="upload" iconType="solid">
+
+- Obsługiwać automatyczne przesyłanie w czasie rzeczywistym podczas nagrywania (preferowane) lub po ukończeniu pliku
+- Wyświetlać czytelny status przesyłania, w tym kolejkę i wyniki
+- Zapisywać pliki w lokalnej pamięci dostępnej dla użytkownika
+
+</Card>
+
+<Card title="Zarządzanie kolejką" icon="list" iconType="solid">
+
+Utrzymywać niezawodną kolejkę przesyłania, która obsługuje:
+
+- Równoczesne przesyłanie
+- Przerwy w łączności sieciowej
+- Wyłączenia i ponowne włączenia zasilania
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Obsługa błędów" icon="triangle-exclamation" iconType="solid">
+
+Implementować automatyczne ponawianie w przypadku:
+
+- Problemów z siecią
+- Przerw w zasilaniu
+- Błędów niekrytycznych (przekroczenia limitu czasu, błędy sieci, wygasłe tokeny)
+
+</Card>
+
+<Card title="Kontrola przesyłania" icon="play" iconType="solid">
+
+- Wznawianie przesyłania od ostatniego pomyślnie przesłanego fragmentu
+- Respektowanie stanu **PAUSED**
+- Obsługa niekrytycznych błędów AWS
+- Obsługa uszkodzonych multimediów bez blokowania innych przesyłań
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Opcje przesyłania" icon="sliders" iconType="solid">
+
+Zapewniać elastyczne opcje przesyłania:
+
+- Przełączanie między przesyłaniem automatycznym a ręcznym
+- Wybór pojedynczych plików lub wielu plików naraz
+- Priorytetyzacja typów plików (opcjonalnie)
+- Priorytetyzacja kolejki (opcjonalnie)
+- Przesyłanie równoległe (opcjonalnie)
+- Możliwość anulowania pojedynczych lub wszystkich przesyłań
+
+</Card>
+
+</CardGroup>
+
+## Wymagania sieciowe {#networking-requirements}
+
+Integracje muszą:
+
+<CardGroup cols={2}>
+
+<Card title="Szybkość i bezpieczeństwo" icon="gauge-high" iconType="solid">
+
+- Osiągać prędkość wysyłania co najmniej 50 Mb/s (o ile pozwalają na to warunki sieciowe)
+- Obsługiwać zabezpieczenia Wi-Fi WPA2 (Ethernet opcjonalnie, ale zalecany)
+
+</Card>
+
+<Card title="Zarządzanie siecią" icon="network-wired" iconType="solid">
+
+- Obsługiwać DHCP i statyczny adres IP
+- Wyświetlać czytelny status sieci (typ połączenia, szybkość, kondycja)
+- Przełączać sieci bez ponownego parowania z projektem
+- Zapisywać znane sieci Wi-Fi
+
+</Card>
+
+</CardGroup>
+
+## Wymagania dotyczące testów {#testing-requirements}
+
+C2C zaprojektowano z myślą o trudnych warunkach, co wymaga dokładnych testów obejmujących:
+
+<CardGroup cols={2}>
+
+<Card title="Konfiguracje sieci" icon="network-wired" iconType="solid">
+
+Przetestuj wszystkie odpowiednie typy połączeń:
+
+- Router komercyjny z:
+
+  - Przewodowym łączem WAN
+  - Modemem z agregacją łączy komórkowych (bonding)
+  - Komercyjnym modemem komórkowym
+  - Modemem typu hotspot
+
+- Konfiguracje routerów w sieci mesh (w tym z protokołem 802.11r FT)
+
+- Bezpośrednie połączenia z różnymi typami modemów
+
+</Card>
+
+<Card title="Testy odporności" icon="bolt" iconType="solid">
+
+- Nieoczekiwane awarie zasilania
+- Rozłączenia sieci
+- Problemy z dostawcą internetu
+- Obsługa uszkodzonych multimediów
+- Tworzenie zasobów w trybie offline i ponowne połączenie
+
+</Card>
+
+</CardGroup>
+
+## Wymagania dotyczące przepływu pracy {#workflow-requirements}
+
+C2C to ekosystem, a nie tylko funkcja. Wymagania specyficzne dla urządzenia/aplikacji obejmują:
+
+<CardGroup cols={2}>
+
+<Card title="Nagrywanie SDI/HDMI" icon="video" iconType="solid">
+
+- Automatyczne wyzwalanie nagrywania z kamery
+- Elastyczne opcje kamery
+- Regulacja przesunięcia timecode'u
+- Możliwość ręcznego nagrywania
+- Spójna obsługa nazw plików
+- Dokładna synchronizacja timecode'u
+
+</Card>
+
+<Card title="Pliki proxy" icon="file-video" iconType="solid">
+
+- Zgodność nazwy pliku/timecode'u/metadanych z plikiem głównym (hero file)/OCF
+- Optymalizacja pod LTE (przepływność 1–12 Mb/s)
+- Obsługa standardowych kodeków wideo i audio
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Wymagania ogólne" icon="list-check" iconType="solid">
+
+- Strumienie timecode dla wideo/audio
+- Obsługa przesyłania wielu formatów (Proxy, OCF, LUT, WAV, RAW, JPG, HEIF, TIFF)
+- Obsługa zmiany nazwy projektu (używaj `project_id` zamiast ciągów z nazwą)
+
+</Card>
+
+</CardGroup>
+
+## Zapewnienie jakości {#quality-assurance}
+
+W [Frame.io](http://frame.io/) jakość jest kluczowa. Najważniejsze obszary testów obejmują:
+
+<CardGroup cols={2}>
+
+<Card title="Podstawowa funkcjonalność" icon="check" iconType="solid">
+
+- Stabilne uruchamianie i działanie
+- Połączenie z projektem
+- Generowanie kodu sprzętowego
+- Możliwość logowania/wylogowania
+- Wyświetlanie informacji o projekcie/użytkowniku
+- Zarządzanie urządzeniami
+- Przesyłanie zasobów
+- Obsługa formatów
+
+</Card>
+
+<Card title="Wymagania techniczne" icon="gear" iconType="solid">
+
+- Wznawianie przesyłania po przerwach
+- Wyświetlanie postępu
+- Wskazanie statusu sieci
+- Utrzymanie połączenia przez 8 godzin
+- Możliwość anulowania autoryzacji
+- Bezpośrednie połączenie z Frame.io
+- Bezpieczeństwo danych uwierzytelniających
+- Optymalizacja szybkości sieci
+
+</Card>
+
+</CardGroup>
+
+## Przyszłe usprawnienia {#future-improvements}
+
+API Camera to Cloud [Frame.io](http://frame.io/) stale się rozwija. Zachowując kompatybilność wsteczną, chętnie prowadzimy stały dialog na temat przyszłych zmian, aby nasze API odpowiadało rzeczywistym zastosowaniom.
+
+## To już wszystko! {#that’s-all-folks}
+
+Gratulujemy ukończenia UC2CIG (University of C2C Integration Guides)! Mamy nadzieję, że ten przewodnik okazał się dla Ciebie przydatny.
+
+Podziel się z nami opinią na temat niejasnych lub brakujących informacji albo skontaktuj się z nami w sprawie pytań dotyczących C2C. Jesteśmy tu, aby pomóc!
+
+Jeśli jeszcze tego nie zrobiłeś, zapoznaj się z przewodnikiem [Implementacja C2C: Konfiguracja](/pl/camera-to-cloud/implementing-c2c-setting-up), zanim przejdziesz dalej.
+
+Będziesz potrzebować `access_token` uzyskanego podczas [procesu uwierzytelniania i autoryzacji](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Ta lista kontrolna bazuje na [przewodniku po podstawowym przesyłaniu](/pl/camera-to-cloud/how-to-basic-upload) oraz [przewodniku po zaawansowanym przesyłaniu](/pl/camera-to-cloud/how-to-advanced-uploads).

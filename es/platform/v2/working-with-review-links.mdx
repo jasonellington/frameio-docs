@@ -1,0 +1,82 @@
+---
+title: "Trabajar con Review Links"
+---
+
+## Descripción general {#overview}
+
+Los Review Links son una función esencial de Frame.io para reunir Assets y compartirlos para recibir comentarios mediante una única URL, sin necesidad de acceso explícito a un Team o a un Project. En esencia, son una representación de Assets de un único Project, por lo que esta guía da por hecho que:
+
+1. Ya tienes Assets a mano o sabes cómo [subir Assets mediante la API](/es/platform/v2/uploading-assets).
+2. Conoces el ID del Project en el que quieres crear el Review Link.
+3. Tu objetivo es obtener una URL que puedas distribuir fuera de Frame.io (p. ej., por correo electrónico, chat u otro medio).
+
+### Conceptos fundamentales {#core-concepts}
+
+Los Review Links pertenecen estrictamente a los Projects, y un Asset dentro de un Review Link se representa como un tipo de recurso especial llamado **Review Link Item**, que siempre contiene el `review_link_id` y el `asset_id` que vincula, así como el payload completo del Asset asociado.
+
+Aunque no es necesario rastrear ni gestionar los Review Link Items por separado, son una estructura útil para entender el flujo de trabajo completo que se describe en esta guía. Así, la jerarquía de un Review Link es la siguiente:
+
+Project > Review Link > Review Link Item > Referencia al Asset
+
+### Scopes necesarios {#required-scopes}
+
+Antes de comenzar esta guía, asegúrate de tener un token que incluya al menos los siguientes scopes:
+
+| Scope | Motivo |
+| --- | --- |
+| **Projects:** Read | No es estrictamente obligatorio, pero es necesario para obtener el `root_asset_id` de un Project. |
+| **Assets:** Read | No es estrictamente obligatorio, pero es necesario para navegar hasta los `asset_ids` mediante la API. |
+| **Review Links:** Create, Read, Update | Crear el Review Link, añadir Assets y obtener información (especialmente si se hace un seguimiento en otro sistema). |
+
+## 1. Reúne tus ID {#1-gather-your-ids}
+
+Para crear un Review Link, necesitarás reunir:
+
+1. Un ID de Project
+2. Los ID de uno o varios Assets de ese Project
+
+Si no tienes el ID del Project a mano, pero tienes acceso a Frame.io y sabes qué Project quieres usar, puedes ver el ID en la barra de direcciones al navegar al proyecto: `https://app.frame.io/projects/<project-id>`.
+
+Del mismo modo, si no tienes a mano los ID de los Assets, navega hasta los assets que quieras y copia los ID desde la barra de direcciones del navegador: `https://app.frame.io/player/<asset-id>`.
+
+## 2. Crea el Review Link {#2-create-the-review-link}
+
+Para crear la base de tu enlace, tendrás que decidir qué opciones quieres para el Review Link e incluirlas en un payload JSON. Como mínimo, necesitarás definir un `name`.
+
+Este es un payload de ejemplo; para mayor comodidad, muestra los valores predeterminados de cada campo en caso de que decidas crearlo solo con un `name`:
+
+```json
+{    
+    "name": "New Review Link",
+    "allow_approvals": true,
+    "current_version_only": false,
+    "enable_downloading": true,
+    "expires_at": null,
+    "has_password": false
+}
+```
+
+Ahora realiza una solicitud `POST` autorizada a `https://api.frame.io/v2/projects/:id/review_links`, usando tu payload como cuerpo de la solicitud.
+
+¡Enhorabuena! Acabas de crear un Review Link. En el cuerpo de la respuesta verás dos atributos importantes:
+
+- **`id`**: es la referencia al contenedor de tu enlace. Guárdalo, ya que lo necesitarás para añadir Assets en el siguiente paso.
+- **`short_url`**: es la URL de tu Review Link que finalmente distribuirás. Tendrá un aspecto similar a `https://f.io/_aBcDeF`
+
+## 3. Añade los Assets al Review Link {#3-add-the-assets-to-the-review-link}
+
+Ahora que tienes un Review Link, es momento de añadirle algunos Assets. Empieza por preparar un payload JSON con un array de cadenas con los `id` de tus Assets:
+
+```json
+{
+    "asset_ids":[
+        "<asset-id-1>",
+        "<asset-id-2>",
+        "<asset-id-3>"
+    ]
+}
+```
+
+Ahora realiza una solicitud `POST` autorizada a `https://api.frame.io/v2/review_links/:id/assets`, usando el `id` del Review Link del paso 2 en la ruta y los `id` de tus Assets en el cuerpo de la solicitud.
+
+¡Listo! Ya puedes distribuir tu `short_url`.

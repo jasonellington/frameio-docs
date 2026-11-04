@@ -1,0 +1,277 @@
+---
+title: "Frame.io Python SDK — przewodnik po przesyłaniu"
+sidebarTitle: "Przesyłanie w Python SDK"
+---
+
+Ten przewodnik wyjaśnia, jak przesyłać pliki do Frame.io za pomocą **Frame.io Python SDK** (`frameio`). SDK obsługuje wieloczęściowe przesyłanie fragmentów do S3 przez wstępnie podpisane adresy URL, z równoległymi wątkami roboczymi, automatycznym ponawianiem prób i opcjonalnym śledzeniem postępu.
+
+Ogólne koncepcje API przesyłania (adresy URL przesyłania, nagłówki, dzielenie na fragmenty) opisano w artykule [Jak działa przesyłanie lokalne i zdalne](/pl/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work).
+
+---
+
+## Wymagania wstępne {#prerequisites}
+
+<Steps>
+
+<Step title="Uwierzytelnianie">
+
+Masz działającego klienta `Frameio`. Instrukcje konfiguracji znajdziesz w [przewodniku po uwierzytelnianiu](/pl/platform/docs/guides/authentication/python-sdk).
+
+</Step>
+
+<Step title="Zainstaluj SDK">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="Folder docelowy">
+
+Potrzebujesz `account_id` i `folder_id` miejsca, do którego plik ma zostać przesłany. Użyj SDK, aby je znaleźć:
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## Szybki start {#quick-start}
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+To wszystko. SDK dzieli plik na fragmenty na podstawie adresów URL przesyłania zwróconych przez API, przesyła je równolegle i automatycznie ponawia próby.
+
+---
+
+## Jak to działa {#how-it-works}
+
+Przesyłanie lokalne to proces dwuetapowy:
+
+<Steps>
+
+<Step title="Utwórz zasób pliku">
+
+Wywołaj `client.files.create_local_upload()` z nazwą i rozmiarem pliku. API tworzy zastępczy plik i zwraca wstępnie podpisane adresy URL S3 dla żądań PUT — po jednym na fragment. Liczba adresów URL (a więc i fragmentów) zależy od rozmiaru pliku.
+
+</Step>
+
+<Step title="Prześlij do S3">
+
+`FrameioUploader` odczytuje adresy URL przesyłania z odpowiedzi, dzieli plik na odpowiadające im fragmenty i wysyła każdy fragment żądaniem PUT pod jego adres URL równolegle, korzystając z puli wątków. Każde żądanie zawiera wymagane nagłówki `x-amz-acl: private` i `Content-Type`.
+
+</Step>
+
+</Steps>
+
+<Note>
+
+Plik jest przesyłany bezpośrednio z Twojej aplikacji do S3 — nie przechodzi przez serwery Frame.io API. To ten sam wzorzec, którego przy przesyłaniu dużych plików używają usługi takie jak YouTube, Vimeo i Dropbox.
+
+</Note>
+
+---
+
+## Korzystanie z `FrameioUploader` {#using-frameiouploader}
+
+`FrameioUploader` to zalecany sposób przesyłania plików. Opakowuje niskopoziomowy mechanizm przesyłania fragmentów i zajmuje się wszystkimi szczegółami — wyodrębnianiem adresów URL przesyłania z odpowiedzi API, ustawianiem wymaganych nagłówków, dzieleniem pliku na fragmenty i przesyłaniem równoległym.
+
+### Śledzenie postępu {#progress-tracking}
+
+Użyj wywołania zwrotnego `on_progress`, aby śledzić postęp przesyłania:
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+Wywołanie zwrotne jest uruchamiane raz po zakończeniu każdego fragmentu, z łączną liczbą bajtów przesłanych do tej pory oraz całkowitym rozmiarem pliku.
+
+#### Pasek postępu Rich {#rich-progress-bar}
+
+Aby uzyskać dopracowany wygląd w terminalu, użyj biblioteki [Rich](https://github.com/Textualize/rich):
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### Konfiguracja {#configuration}
+
+`FrameioUploader` przyjmuje kilka opcjonalnych parametrów:
+
+| Parametr | Wartość domyślna | Opis |
+| --- | --- | --- |
+| `max_workers` | `5` | Liczba współbieżnych wątków przesyłania |
+| `headers` | `{"x-amz-acl": "private"}` | Nagłówki wysyłane z każdym żądaniem PUT do S3. Niestandardowe nagłówki są scalane z domyślnymi. |
+| `max_retries` | `3` | Liczba ponownych prób na fragment (wykładnicze wycofywanie: 1 s, 2 s, 4 s, …) |
+| `on_progress` | `None` | Wywołanie zwrotne `(bytes_uploaded, total_bytes)` uruchamiane po każdym fragmencie |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### Pełny przykład {#full-example}
+
+Kompletny przykład z uwierzytelnianiem, przesyłaniem i śledzeniem postępu:
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+Jeśli potrzebujesz pełnej kontroli nad procesem przesyłania — na przykład aby ręcznie obsługiwać dzielenie na fragmenty, zintegrować się z asynchronicznym potokiem lub dostosować logikę ponawiania — zapoznaj się z artykułem [Jak działa przesyłanie lokalne i zdalne](/pl/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work), który opisuje surowy przepływ API i zawiera przykład samodzielnego skryptu w Pythonie.
+
+</Tip>
+
+---
+
+## Przesyłanie zdalne {#remote-upload}
+
+Jeśli plik jest już dostępny pod publicznym adresem URL, użyj zamiast tego przesyłania zdalnego. Dzielenie na fragmenty nie jest potrzebne — Frame.io pobiera plik bezpośrednio:
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+Przesyłanie zdalne ma obecnie **limit rozmiaru pliku wynoszący 50 GB**. W przypadku plików większych niż 50 GB użyj zamiast tego [przesyłania lokalnego](#quick-start).
+
+</Warning>
+
+---
+
+## Sprawdzanie statusu przesyłania {#checking-upload-status}
+
+Po przesłaniu możesz sprawdzić, czy plik został odebrany:
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

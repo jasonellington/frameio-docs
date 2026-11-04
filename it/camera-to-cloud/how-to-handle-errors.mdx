@@ -1,0 +1,499 @@
+---
+title: "Procedura: gestire gli errori"
+sidebarTitle: "Gestire gli errori"
+---
+
+## Introduzione {#introduction}
+
+Questa guida tratta la gestione degli errori durante l'interazione con l'API C2C. Gestire correttamente gli errori HTTP è un componente essenziale di un'integrazione robusta con qualsiasi servizio di terze parti.
+
+## Tipi di errori {#types-of-errors}
+
+Gli errori nella tua integrazione possono avere diverse origini, che possiamo classificare in quattro gruppi principali:
+
+- **Errori di I/O:** hanno origine dalle operazioni hardware del dispositivo, come operazioni di lettura/scrittura non riuscite
+- **Errori dell'applicazione:** derivano da problemi nel codice della tua applicazione
+- **Errori di rete:** si verificano nello stack di rete e vengono comunicati dalla tua libreria di rete
+- **Errori dell'API:** generati dai servizi backend di Frame.io
+
+Ogni categoria di errori richiede considerazioni specifiche per la gestione. Questa guida si concentra principalmente sugli errori dell'API, anche se affronteremo strategie generali anche per le altre categorie.
+
+## Come vengono restituiti gli errori dell'API {#how-api-errors-are-returned}
+
+L'API di Frame.io comunica gli errori tramite due meccanismi principali:
+
+- **Codici di stato:** codici di errore HTTP che indicano la natura del problema
+- **Messaggi di errore:** contenuto del payload che fornisce ulteriori dettagli sull'errore, in particolare quando più condizioni di errore condividono lo stesso codice di stato
+
+### Codici di stato di errore {#error-status-codes}
+
+I codici di stato HTTP sono risposte numeriche standardizzate che comunicano l'esito di una richiesta HTTP. Per ulteriori informazioni, consulta la [documentazione di Mozilla sui codici di stato HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status) oppure [HTTP Cats](https://http.cat/) per un approccio più visivo.
+
+Ogni endpoint dell'API di Frame.io specifica un codice di stato di successo previsto, in genere `200 (OK)`, `201 (Created)` o `204 (No Content)`. Puoi verificare il successo controllando questi codici specifici oppure confermando che il codice rientri nell'intervallo 200-299.
+
+I codici di stato superiori a 399 indicano errori. La maggior parte degli errori dell'API restituisce codici 4XX (400-499), che indicano problemi lato client. Gli errori al di fuori di questo intervallo provengono in genere dall'infrastruttura di rete tra il tuo dispositivo e il nostro servizio, con l'importante eccezione di `500 (Internal Server Error)`, che indica un problema imprevisto all'interno del nostro server.
+
+Allo stesso modo, una risposta `404 (Not Found)` potrebbe essere generata da servizi intermedi anziché dal nostro backend, pur essendo un codice 4XX.
+
+Se riscontri codici di stato imprevisti, informa il nostro team.
+
+### Schemi dei payload di errore {#error-payload-schemas}
+
+Frame.io restituisce i dettagli degli errori in due formati: *semplice* e *dettagliato*. La tua logica di gestione degli errori deve supportare entrambi i formati.
+
+### Schema di errore semplice {#simple-error-schema}
+
+Ecco un esempio di richiesta non riuscita con un `client_secret` errato:
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=Some-Client-ID' \
+    --form 'client_secret=bad_secret' \
+    --form 'scope=asset_create offline'
+```
+
+Risposta:
+
+```text
+HTTP/2 400
+...
+
+{"error":"invalid_client"}
+```
+
+Lo schema semplice contiene un solo campo per l'identificazione dell'errore.
+
+### Schema di errore dettagliato {#detailed-error-schema}
+
+Per confronto, ecco una richiesta senza un'autorizzazione corretta:
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/heartbeat \
+    --header 'Authorization: Bearer bad-token' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Risposta:
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+Gli errori dettagliati contengono un campo `message` che identifica il tipo di errore.
+
+### Determinare il tipo di errore {#determining-error-type}
+
+Quando gestisci gli errori di Frame.io, controlla prima la presenza di un payload di errore e, se non è presente, ricorri al codice di stato HTTP.
+
+Ecco un'implementazione di base della gestione degli errori:
+
+```python title="Python"
+# Dict of known error codes: native errors.
+ERROR_STATUS_MAP = {
+    429: SlowDownError,
+    ...
+}
+
+# Dict of known error messages: native errros.
+ERROR_MESSAGE_MAP = {
+   "Channel Paused": ChannelPausedError,
+   "invalid_client": InvalidClientError,
+   "slow_down": SlowDownError,
+   ...
+}
+
+def _c2c_extract_error_message(response):
+    """
+    Gets the error message from an error payload. Returns `None` 
+    if an error payload is not found.
+    """
+
+    # Try to decode the payload, if it is not JSON return `None`
+    try:
+        payload = response.json() 
+    except JSONDecodeError:
+       return None
+
+    # Try the simple error schema first.
+    message = payload.get("error", default=None)
+    if message is not None:
+        return message
+
+    # Now try the detailed schema. Return None if we do not find one.
+    return payload.get("message", default=None)
+
+def _c2c_error_type_from_response(response):
+    """
+    Converts a bad HTTP response into an error.
+    """
+    error_message = _c2c_extract_error_message(response)
+
+    # try to do a lookup of the error type by message.
+    error_type = ERROR_MESSAGE_MAP.get(error_message, default=None) 
+    if error_type is not None:
+        return error_type()
+
+    # If not, try to do a lookup by error code.
+    error_type = ERROR_STATUS_MAP.get(response.status_code, default=None)
+    if error_type is not None:
+        return error_type()
+
+    # Otherwise we are going to return an `UnknownAPIError` to signal that we
+    # encoutnered an error from Frame.io's backend servers, but do not know the
+    # message and/or status code.
+    return UnknownAPIError(message=error_message)
+
+def raise_on_frameio_error(response, expected_status):
+    """
+    Raises a native error from an HTTP response if the response indicates an error
+    occured. Expected status should be the status we expect to get (200, 201, 204, 
+    etc).
+    """
+
+    # If the status code is less than `400`, then it is not an error status code.
+    if response.status < 400:
+
+        # Check that the status code is the one we expected, otherwise raise an
+        # error.
+        if response.status != expected_status:
+            raise UnexpectedStatusError(
+                expected=expected_status, received=response.status
+            )
+
+        return None
+
+    # Otherwise convert and raise a native error.
+    raise _c2c_error_type_from_response(response)
+```
+
+Le tabelle di ricerca degli errori a cui fa riferimento questo esempio sono riportate alla fine di questa guida.
+
+### Errori AWS {#aws-errors}
+
+Quando carichi i chunk dei file, interagisci direttamente con AWS S3, che ha un proprio formato di errore. Per i dettagli, consulta la [documentazione di AWS sugli errori comuni](https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList). Come regola generale, gli errori AWS non irreversibili dovrebbero essere ritentati almeno una volta.
+
+Gli errori AWS vengono restituiti in formato XML:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>NoSuchKey</Code>
+  <Message>The resource you requested does not exist</Message>
+  <Resource>/mybucket/myfoto.jpg</Resource> 
+  <RequestId>4442587FB7D0A2F9</RequestId>
+</Error>
+```
+
+L'elemento `Code` identifica il tipo di errore.
+
+## Ritentare in caso di errore {#retrying-errors}
+
+### Quando ritentare {#when-to-retry}
+
+Le tabelle degli errori di questa guida indicano quali errori dell'API devono essere ritentati. Per gli errori non dell'API provenienti da operazioni di I/O, librerie di rete o AWS, valuta di ritentare quelli che potrebbero derivare da condizioni temporanee. Congestione di rete, interruzioni temporanee dei server o perdita di pacchetti giustificano in genere nuovi tentativi. La maggior parte delle librerie di rete genera un `TimeoutError` quando una richiesta richiede troppo tempo, il che lo rende un candidato ideale per un nuovo tentativo.
+
+### Nel dubbio, ritenta una volta {#when-in-doubt-retry-once}
+
+Gli ambienti informatici possono presentare problemi imprevedibili. Anche con errori che sembrano irreversibili, spesso vale la pena fare un nuovo tentativo. Stati temporanei del sistema, anomalie hardware (come i [bit flip causati dai raggi cosmici](https://www.youtube.com/watch?v=AaZ_RSt0KP8)) o rare condizioni di memoria possono causare errori apparentemente irreversibili che si risolvono al secondo tentativo.
+
+Alcuni errori, tuttavia, non devono essere ritentati. Ad esempio, una risposta `409: CHANNEL PAUSED` durante la creazione di un asset indica che il dispositivo è in pausa e non deve caricare. Questo stato è intenzionale ed è improbabile che cambi con un nuovo tentativo.
+
+### Backoff esponenziale {#exponential-backoff}
+
+Frame.io applica limiti di frequenza (rate limiting) e il superamento di questi limiti produce un errore `429: Slow Down` oppure uno stato `400` con questo payload:
+
+```text
+HTTP/2 400
+
+{"error":"slow_down"}
+```
+
+Quando ricevi queste risposte, implementa un backoff esponenziale per i nuovi tentativi. Una formula consigliata per calcolare il ritardo (in secondi) è:
+
+```python title="Python"
+delay = min(2 ** attempt / 2, 32.0)
+```
+
+Dove `attempt` parte da 0. Questo produce ritardi di 0,5 s, 1 s, 2 s, 4 s, 8 s, 16 s, 32 s, con un'attesa di 32 secondi per tutti i tentativi successivi.
+
+<Info>
+
+**Jitter del backoff**
+
+Consigliamo di aggiungere una componente casuale (jitter) ai tempi di backoff per evitare la sincronizzazione delle richieste tra più dispositivi che si stanno riprendendo dalla stessa condizione di errore. Questo aiuta a mitigare il [problema del thundering herd](https://medium.com/@venkteshsubramaniam/the-thundering-herd-distributed-systems-rate-limiting-9128d20e1f00), in cui molti dispositivi ritentano contemporaneamente dopo un'interruzione. Un buon approccio è aggiungere uno scostamento casuale compreso tra 0 e metà del ritardo calcolato: `math.rand(0, delay // 2)`.
+
+</Info>
+
+Sebbene il backoff esponenziale sia essenziale per gli errori dovuti ai limiti di frequenza, è utile anche per gestire in generale i guasti di rete e di I/O. Questo approccio consente ai vincoli temporanei sulle risorse di risolversi senza il carico aggiuntivo dei tuoi nuovi tentativi.
+
+### Rilevare lo stato di disconnessione {#detecting-disconnected-status}
+
+Quando si verificano errori di rete, potrebbero indicare che Frame.io non è raggiungibile perché:
+
+- La tua rete locale non funziona
+- I servizi di Frame.io stanno riscontrando problemi
+- Un componente di rete intermedio non funziona correttamente
+
+È importante rilevare queste condizioni. Quando un errore suggerisce problemi di connettività, implementa un'attività di monitoraggio che verifichi il ripristino del servizio e informi l'utente della disconnessione.
+
+### Attendere connessione e autorizzazione {#waiting-for-connection-and-authorization}
+
+Progetta la tua applicazione in modo da evitare richieste inutili quando il dispositivo sta rinnovando l'autorizzazione, è in attesa dell'autorizzazione dell'utente o non riesce a raggiungere Frame.io. Questo riduce l'overhead di rete e migliora l'esperienza utente.
+
+Blocca tutte le chiamate API (tranne quelle verso `https://api.frame.io/health`) quando rilevi uno stato di disconnessione. Quando si presentano problemi di connettività, avvia un'attività in background che interroghi l'endpoint di integrità e blocchi ulteriori chiamate API finché la connettività non viene ripristinata.
+
+Allo stesso modo, se il token scade, blocca le chiamate che dipendono dall'autorizzazione finché non viene emesso un nuovo token. Se il rinnovo del token non riesce, avvisa l'utente di autenticarsi di nuovo.
+
+Quando interroghi lo stato della connessione, applica lo stesso approccio di backoff esponenziale descritto in precedenza.
+
+### Timeout delle richieste {#request-timeouts}
+
+Configura valori di timeout appropriati per i diversi tipi di richieste:
+
+- **Predefinito**: 15 secondi per le richieste di base
+- **Rinnovo dell'autorizzazione**: 2 minuti per tenere conto di un'eventuale elaborazione nel backend
+- **Caricamento di chunk di file**: 5 minuti per adattarsi alle reti lente durante il trasferimento di dati di grandi dimensioni
+
+### Esempio di gestore dei nuovi tentativi {#example-retry-handler}
+
+Ecco un'implementazione in pseudocodice che mostra la gestione degli errori con backoff esponenziale:
+
+```python title="Python"
+# List of errors we know are fatal and should not be retried.
+FATAL_ERRORS = (
+    ChannelPausedError,
+    DevicesDisabledError,
+    ...
+)
+
+# List of errors we know should be retried more than once.
+RETRY_ERRORS = (
+    TimeoutError,
+    NotFoundError,
+    SlowDownError,
+    UnknownAPIError,
+    ...
+)
+
+# List of errors that could be the result of Frame.io being unreachable.
+DISCONNECTED_ERRORS = (
+    TimeoutError,
+    HttpClientError,
+    ...
+)
+
+def retry_with_backoff(next_handler):
+    """
+    Middleware for retrying errors with exponential backoff.
+    """
+
+    def retry_handler(call, retry_count):
+        """
+        Handler for retrying c2c API calls with exponential backoff.
+        """
+
+        error = None
+
+        # We will retry the call 8 times here, totalling 63.5 seconds +- ~32 seconds.
+        for attempt in range(start=1, stop=retry_count + 1):
+
+            # If we are attempting to reach an endpoint that requires authorization
+            # we should wait unil we have valid authorization before attempting
+            # a call. We need to do this each time in case our access_token
+            # expires between attempts.
+            C2C.wait_for_authorized(call)
+
+            # Likewise, we should wait until we are connected to Frame.io to attempt
+            # a call if we are not calling `https://api.frame.io/health`
+            C2C.wait_for_connected(call)
+
+            try:
+                # Return the result on a success.
+                return next_handler(call)
+            except FATAL_ERRORS as error:
+                # If we hit an error we know is fatal, raise the error without
+                # retrying it.
+                raise error
+
+            except RETRY_ERRORS as error:
+                # If we hit an error we know we should retry many times, continue,
+                # but notify our client if we think we may have been disconnected.
+                if type(error) in DISCONNECTED_ERRORS:
+                    C2C.notify_disconnected()
+
+            except BaseException as error:
+                # Otherwise, do not retry the call more than once.
+                if attempt > 1:
+                    raise error
+
+            # The delay for the next attempt should be no more than 32 seconds.
+            # This algorithm will go: 0.5s, 1s, 2s, 4s, 8s, 16s, 32s, 32s, ...
+            delay = min(2 ** attempt / 2, 32.0)
+
+            # Add some randomness (jitter) to the delay (up to half the value of
+            # the delay in either direction).
+            delay += math.random(-delay, delay) / 2
+
+            # Wait between retries
+            sleep(delay)
+
+        # If we have exhausted all retries,
+        raise error
+
+    return retry_handler
+```
+
+## Tabelle degli errori {#error-tables}
+
+Le tabelle seguenti classificano gli errori dell'API di Frame.io e forniscono indicazioni per la loro gestione. Ecco cosa rappresenta ciascuna colonna:
+
+`message`: l'identificatore del messaggio nel payload di errore
+`http code`: il codice di stato HTTP
+`error type`: una categoria concettuale di errore (descritta in dettaglio nella sezione [descrizioni](#descriptions))
+`schema`: il formato del payload di errore ([semplice](#simple-error-schema) o [dettagliato](#detailed-error-schema))
+`retry`: raccomandazione sui nuovi tentativi (`yes` per più tentativi, `once` per un solo nuovo tentativo, `no` per gli errori irreversibili)
+
+Gli asterischi (\*) indicano considerazioni particolari descritte in dettaglio nella sezione [descrizioni](#descriptions).
+
+### Messaggi di errore di Frame.io {#frame-io-error-messages}
+
+| Messaggio | Tipo di errore | Codice HTTP | Schema | Nuovo tentativo |
+| --- | --- | --- | --- | --- |
+| ”access_denied” | [AccessDenied](#accessdenied) | 401 | [simple](#simple-error-schema) | once |
+| ”authorization_pending” | [AuthorizationPending](#authorizationpending) | 400 | [simple](#simple-error-schema) | yes |
+| ”Channel Paused” | [ChannelPaused](#channelpaused) | 409 | [simple](#simple-error-schema) | no |
+| ”expired_token” | [ExpiredToken](#expiredtoken) | 400 | [simple](#simple-error-schema) | no |
+| ”Invalid Argument” | [InvalidArgument](#invalidargument) | 422 | [detailed](#detailed-error-schema) | no |
+| ”invalid_client” | [InvalidClient](#invalidclient) | 400 | [simple](#simple-error-schema) | no |
+| ”Invalid client version” | [InvalidClientVersion](#invalidclientversion) | 400 | [simple](#simple-error-schema) | no |
+| ”invalid_grant” | [InvalidGrant](#invalidgrant) | 400 | [simple](#simple-error-schema) | no |
+| ”invalid_request” | [InvalidRequest](#invalidrequest) | 400 | [simple](#simple-error-schema) | once |
+| ”Not Authorized” | [UnauthorizedClient](#unauthorizedclient) | 401 | [detailed](#detailed-error-schema) | no |
+| ”slow_down” | [SlowDown](#slowdown) | 400 | [simple](#simple-error-schema) | yes |
+| ”unauthorized_client” | [UnauthorizedClient](#unauthorizedclient) | 401 | [simple](#simple-error-schema) | yes\* |
+
+### Codici di stato di Frame.io {#frame-io-status-codes}
+
+| Codice HTTP | Tipo di errore | Nuovo tentativo |
+| --- | --- | --- |
+| 400 | [InvalidRequest](#invalidrequest) | once |
+| 401 | [UnauthorizedClient](#unauthorizedclient) | no |
+| 422 | [InvalidContentType](#invalidcontenttype) | no |
+| 429 | [SlowDown](#slowdown) | yes |
+| 500 | [InternalServerError](#internalservererror) | yes |
+
+### Errori AWS {#aws-errors-1}
+
+[Consulta la documentazione di AWS](https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList) per le descrizioni dettagliate.
+
+| Errore | Nuovo tentativo |
+| --- | --- |
+| InternalError | yes |
+| OperationAborted | yes |
+| RequestTimeout | yes |
+| ServiceUnavailable | yes |
+| SlowDown | yes |
+| \[Tutti gli altri errori\] | once |
+
+<Info>
+
+**Interpretare errori AWS simili**
+
+Sia `SlowDown` sia `ServiceUnavailable` di AWS indicano problemi di frequenza delle richieste e possono essere trattati in modo simile all'errore `SlowDown` di Frame.io, implementando un backoff esponenziale. Allo stesso modo, l'errore `InternalError` di AWS corrisponde concettualmente a `InternalServerError` nella nostra API.
+
+</Info>
+
+### Descrizioni {#descriptions}
+
+#### AccessDenied {#accessdenied}
+
+Restituito quando un utente rifiuta l'autorizzazione durante l'abbinamento del dispositivo.
+
+#### AuthorizationPending {#authorizationpending}
+
+Indica che l'utente non ha ancora inserito il codice di abbinamento del dispositivo. Continua il polling dopo il periodo `interval` specificato nella risposta del codice dispositivo.
+
+#### ChannelPaused {#channelpaused}
+
+Il canale del dispositivo era in pausa quando l'asset è stato creato. *Non tentare di caricare di nuovo questo asset.*
+
+#### ExpiredToken {#expiredtoken}
+
+Il codice di abbinamento del dispositivo è scaduto. Genera un nuovo codice e riavvia il processo di abbinamento.
+
+#### InternalServerError {#internalservererror}
+
+Indica un problema imprevisto nel backend. Ritenta una volta e segnala gli errori `500` al nostro team affinché possa indagare.
+
+Tieni presente che alcuni problemi noti restituiscono errori `500` quando dovrebbero restituire `InvalidRequest`:
+
+- Tentativo di caricare su un canale del dispositivo inesistente
+- Richiesta di un numero di chunk personalizzato non valido
+
+#### InvalidArgument {#invalidargument}
+
+Un parametro del payload conteneva un valore non valido. Verifica che i valori dei parametri corrispondano a quanto previsto dall'API.
+
+#### InvalidContentType {#invalidcontenttype}
+
+L'header `Content-Type` della richiesta non è supportato. In generale, l'API accetta:
+
+- `form/multipart` (solo endpoint di autorizzazione)
+- `application/x-www-form-urlencoded` (tutti gli endpoint)
+- `application/json` (endpoint non di autorizzazione)
+
+#### InvalidClient {#invalidclient}
+
+Le credenziali fornite (`client_id`, `client_secret`, ecc.) non sono state riconosciute. Verifica le credenziali della tua integrazione.
+
+### InvalidClientVersion {#invalidclientversion}
+
+L'header `x-client-version` è duplicato oppure contiene una [versione semantica](https://semver.org/) non valida.
+
+#### InvalidGrant {#invalidgrant}
+
+Il tipo di grant di autorizzazione non è valido. Consulta le guide sull'autorizzazione per i valori corretti.
+
+#### InvalidRequest {#invalidrequest}
+
+I parametri della richiesta o il formato del payload non sono corretti. Verifica i nomi dei campi e i formati dei valori.
+
+Se ricevuto durante il rinnovo del token, significa che il refresh token è scaduto e devi riavviare il processo di autorizzazione.
+
+#### SlowDown {#slowdown}
+
+Hai superato i limiti di frequenza delle richieste. Implementa un backoff esponenziale per le richieste successive. Tieni presente che effettuare più richieste di codice dispositivo sulla stessa connessione TCP può generare questo errore: crea nuove connessioni per ogni richiesta di abbinamento.
+
+#### UnauthorizedClient {#unauthorizedclient}
+
+In genere indica un `access_token` scaduto o mancante. Se ricevi questo errore, rinnova il token prima di ritentare.
+
+Se si verifica durante il rinnovo del token, devi riavviare il processo di autorizzazione e chiedere all'utente di riconnettersi.
+
+Questo errore può verificarsi anche quando si accede a risorse al di fuori dello scope di autorizzazione del dispositivo o quando un progetto ha disattivato i dispositivi C2C. Verifica di aver richiesto gli scope appropriati durante l'autorizzazione.
+
+*Se questo errore si verifica durante il rinnovo del token, l'intero processo di autorizzazione deve essere riavviato con l'intervento dell'utente.*
+
+## Passaggi successivi {#next-steps}
+
+Ti invitiamo a contattare il nostro team per qualsiasi domanda e a proseguire con la [guida ai caricamenti avanzati](/it/camera-to-cloud/how-to-advanced-uploads). Siamo felici di supportarti nei progressi della tua integrazione.
+
+Se non l'hai già fatto, consulta la guida [Implementing C2C: Setting Up](/it/camera-to-cloud/implementing-c2c-setting-up) prima di procedere.
+
+Ti servirà l'`access_token` ottenuto durante il [processo di autenticazione e autorizzazione](/it/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Questa guida si basa sulla [guida al caricamento di base](/it/camera-to-cloud/how-to-basic-upload) e sulla [guida ai caricamenti avanzati](/it/camera-to-cloud/how-to-advanced-uploads).

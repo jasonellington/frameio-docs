@@ -1,0 +1,91 @@
+---
+title: "MCP レシピ"
+sidebarTitle: "レシピ"
+---
+
+MCP レシピは、Frame.io で AI エージェントを活用するためのステップバイステップのワークフローです。レシピのプロンプトをアシスタントにコピーし、詳細の入力を手伝ってもらいましょう。
+
+## はじめに {#getting-started}
+
+レシピを試す前に、[Frame.io MCP ガイド](/ja/platform/docs/mcp/frame-io-mcp)を参照して、MCP 対応クライアントを Frame.io に接続してください。このガイドでは、認証、利用可能なツール、ツールの承認設定、プロンプトの例について説明しています。
+
+各レシピでは、連携先のサービスへのアクセスも必要です。アシスタントは、サポートされている接続の検出と設定を手伝うことができます。定期実行するレシピには、アシスタントプラットフォームのスケジュール機能が必要です。MCP 接続だけではスケジュール機能は提供されません。
+
+## Frame.io &lt;> AEM フォルダー同期（15 分ごと） {#frame-io-<>-aem-folder-sync-every-15-minutes}
+
+このプロンプトを使用して、Frame.io フォルダーと Adobe Experience Manager（AEM）Assets フォルダーの間でオリジナルファイルを同期します。
+
+```text
+Set up a two-way sync between:
+
+- Frame.io folder: [folder link or ID]
+- AEM Assets folder: [folder name or path]
+- AEM environment: [environment name or author URL]
+
+Use these remote MCP servers:
+
+- Frame.io Production: https://mcp.frame.io/v1/mcp
+- Adobe Experience Manager: https://mcp.adobeaemcloud.com/adobe/mcp/aem
+
+Discover and reuse existing connections first. If either is missing, configure it using the URL above and guide me through its supported sign-in flow using my own account. Never request passwords or tokens in chat. Verify both connections and my read/upload permissions before transferring files.
+
+Follow each server's workflow:
+- Frame.io: initialize the connection, resolve the correct account and project, and paginate folder listings.
+- AEM: discover supported operations before calling them. Resolve the destination in the specified environment; the AEM author URL is separate from the MCP server URL.
+- Transfer original files, preserve subfolder structure, and verify completed uploads/imports.
+
+Perform an initial reconciliation, then use the assistant platform's scheduling capability to create a recurring check every 15 minutes. The MCP servers provide content operations; scheduling must be configured separately.
+
+On each run:
+- Copy new files in either direction.
+- Propagate updates using supported version-preserving operations.
+- Keep a durable mapping of file IDs and successful sync baselines to avoid duplicates and transfer loops.
+- Preserve deletions and flag files changed on both sides for my review.
+- Reconcile incomplete transfers before retrying them.
+- Notify me only when files transfer, a transfer fails, or a conflict needs attention.
+
+Do not publish AEM assets or synchronize permissions or comments. Never persist temporary download URLs. If an update operation is unsupported, preserve existing files and explain the limitation.
+
+Confirm when the schedule is active, report the initial transfer results, and explain any requirements for unattended execution, including whether my computer and assistant app must stay running.
+```
+
+## Frame.io + Slack レビューダイジェスト（平日毎日） {#frame-io-+-slack-review-digest-every-weekday}
+
+このプロンプトを使用して、レビュー待ちのファイルと未対応のフィードバックをまとめた Slack ダイジェストを定期的に送信します。
+
+```text
+Set up a Frame.io review digest with:
+
+- Frame.io project or folders: [links or IDs]
+- Slack workspace: [workspace name]
+- Slack channel: [channel name or link]
+- Schedule: [weekdays at 9:00 AM]
+- Timezone: [timezone]
+- Review criteria: [metadata field/status or another explicit rule]
+
+Use the Frame.io Production MCP server:
+https://mcp.frame.io/v1/mcp
+
+Discover and reuse existing Frame.io and Slack MCP connections. If either is missing, help me connect it using the provider's supported integration and sign-in flow. Discover Slack connection details rather than guessing an MCP URL. Never request passwords or tokens in chat.
+
+Verify access to the selected Frame.io content and permission to post in the specified Slack channel. Initialize Frame.io, resolve the correct account and project, and paginate file listings and comments.
+
+Use the supplied review criteria to identify files awaiting review. If no reliable review status or selection rule is available, ask me to define one. Do not infer approval or completion from a lack of comments.
+
+Prepare a concise digest containing:
+- Project name and reporting time.
+- Files awaiting review, with existing Frame.io links.
+- Outstanding feedback grouped by file.
+- Explicitly recorded deadlines and assigned reviewers, when available.
+- New files or feedback since the last successful digest.
+
+Format the digest for Slack with short sections, bullets, and descriptive links. Summarize lengthy feedback and link to the relevant files for details. Split oversized digests into a summary message and thread replies when supported.
+
+Show me the first draft before enabling scheduled posting. After I approve it, create a recurring schedule using the assistant platform's scheduling capability. Post only to the specified channel; ask before changing the destination.
+
+On subsequent runs, post the digest only when there is new or changed review activity. Keep a durable reporting baseline and reconcile uncertain posting outcomes before retrying to avoid duplicate messages.
+
+Do not mention users, @here, or @channel unless I request it. Do not create public share links, change access permissions, or resolve comments. Flag files channel members may be unable to access.
+
+Confirm the active schedule, timezone, workspace, and channel. Report posting failures in this chat and explain any requirements for unattended execution, including whether my computer and assistant app must stay running.
+```

@@ -1,0 +1,378 @@
+---
+title: "V4 Webhook"
+sidebarTitle: "Webhook"
+---
+
+## Webhook とは {#what’s-a-webhook}
+
+**Webhook** は、アカウント内で**何か注目すべきことが起きるとすぐに**(新しいファイルのトランスコードが完了した、コメントが追加された、プロジェクトが作成されたなど)Frame.io が送信する、プッシュ型の HTTP コールバックです。
+API をポーリングする代わりに公開 HTTPS URL を指定すると、Frame.io がその URL に JSON ペイロードをリアルタイムで送信するため、次のようなことが可能になります。
+
+<CardGroup cols={2}>
+
+<Card title="外部の DAM/MAM にメタデータを同期する" icon="arrows-rotate" iconType="solid" />
+
+<Card title="Slack チャンネルやチケットシステムに情報を送る" icon="bell" iconType="solid" />
+
+</CardGroup>
+
+Webhook とは何か、何をするものかの詳細については、[https://docs.webhook.site/](https://docs.webhook.site/) を参照してください。
+
+## エンドポイントの概要 {#endpoint-overview}
+
+| **操作** | **エンドポイント** | **詳細** |
+| --- | --- | --- |
+| Webhook を**作成** | POST /v4/accounts/\{account_id\}/workspaces/\{workspace_id\}/webhooks | `name`、`url`、`events[]` を含む本文 |
+| Workspace のすべての Webhook を**一覧表示** | GET /v4/accounts/\{account_id\}/workspaces/\{workspace_id\}/webhooks | ページ分割をサポート |
+| 1 つの Webhook を**表示** | GET /v4/webhooks/\{webhook_id\} | 署名シークレットは作成時にのみ返されます |
+| Webhook を**更新** | PATCH /v4/webhooks/\{webhook_id\} | `url`、`events`、または `is_active` を変更 |
+| Webhook を**削除** | DELETE /v4/webhooks/\{webhook_id\} | 配信を即座に停止 |
+
+<Warning>
+
+**認証** — すべての V4 エンドポイントでは、Adobe Developer Console を通じて取得した OAuth 2.0 アクセストークンが必要です。従来の開発者トークンや JWT は受け付け**られません**。
+
+</Warning>
+
+## Frame V4 での変更点とアップデート {#changes-and-updates-in-frame-v4}
+
+<Info>
+
+Legacy で作成された Webhook は、次の変更を伴って V4 に移行されます。
+
+1. **ペイロード構造**: ペイロードに Account ID が追加されました
+2. **エンドポイントの変更**: `team_id` は JSON ペイロードでは提供されなくなり、代わりに URL のパスパラメーターに含まれます: `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/webhooks`
+3. **API 連携**: API の構造、エンドポイント、認証方法が変更されたため、受信した Webhook に対して、リソースの情報補完や検索のために Frame.io API を続けて呼び出す既存のコードは、更新が必要です
+4. **イベントタイプ**: アセットの Webhook は、File イベントと Folder イベントに分割されました。Legacy から移行された、アセットイベントを含む Webhook は、適切な File イベントと Folder イベントを持つように更新する必要があります
+
+</Info>
+
+<Warning>
+
+**移行後の Webhook のステータス** — アカウントが Frame.io V4 に移行されると、以前のバージョンの既存の Webhook は自動的に無効化されます。これにより、Webhook を再有効化する前に、V4 の変更に合わせて Webhook エンドポイントと連携ロジックを修正できます。V4 との互換性のために更新されていない Webhook を適切な修正なしで有効にすると、エラーが発生します。再度有効にする前に、API で `is_active` フィールドを確認するか、[Webhook の設定](https://next.frame.io/settings/webhooks)を確認することで、どの Webhook が無効になっているかを確かめることができます。
+
+</Warning>
+
+## Webhook のイベントサブスクリプション {#webhook-event-subscriptions}
+
+Webhook を作成および更新する際は、関心のあるイベントを指定します。選択するイベントの数はいくつでも構いませんが、サブスクライブするイベントを少なくしたほうが扱いやすくなります。異なる命名規則と異なるエンドポイントを使って Webhook を論理的に分割しておくと、受信側でビジネスロジックをモデル化でき、共有関数でのフィルタリングやルーティングを減らすことができます。
+
+<Note>
+
+イベントのスコープ — すべてのイベントは、Webhook の作成時に指定した Workspace にスコープされます。つまり、その Workspace 内のすべてのプロジェクトで行われた操作に対してイベントが送信されます。
+
+</Note>
+
+### Projects {#projects}
+
+| イベント | 説明 |
+| --- | --- |
+| `project.created` | 新しい Project が**作成**されました |
+| `project.updated` | Project の設定が**更新**されました |
+| `project.deleted` | Project が**削除**されました |
+
+### Files {#files}
+
+| イベント | 説明 |
+| --- | --- |
+| `file.created` | Frame.io で File が**作成**されました。*注:* これはファイルのアップロードが完了する前にトリガーされます。ハンドラーで完全なファイルが必要な場合は、代わりに `upload.completed` イベントをリッスンすることをお勧めします |
+| `file.ready` | ファイルがアップロードされて処理された後、すべてのトランスコードが**完了**しました |
+| `file.updated` | File の名前またはその他の情報が変更されました |
+| `file.deleted` | File が(手動またはその他の方法で)**削除**されました |
+| `file.upload.completed` | File が**アップロード**されました |
+| `file.versioned` | File のバージョンが**作成**されました |
+
+### Folders {#folders}
+
+| イベント | 説明 |
+| --- | --- |
+| `folder.created` | 新しい Folder が**作成**されました |
+| `folder.updated` | Folder の設定が**更新**されました |
+| `folder.deleted` | Folder が**削除**されました |
+
+### Comments {#comments}
+
+| イベント | 説明 |
+| --- | --- |
+| `comment.created` | 新しいコメントまたは返信が**作成**されました |
+| `comment.updated` | コメントが更新されました |
+| `comment.deleted` | コメントが**削除**されました |
+| `comment.completed` | コメントが**完了**としてマークされました |
+| `comment.uncompleted` | コメントが**未完了**としてマークされました |
+
+### Metadata {#metadata}
+
+| イベント | 説明 |
+| --- | --- |
+| `metadata.value.updated` | アセットのメタデータフィールドが更新されました |
+
+### Collections {#collections}
+
+| イベント | 説明 |
+| --- | --- |
+| `collection.created` | 新しい Collection が**作成**されました |
+| `collection.updated` | Collection が**更新**されました |
+| `collection.deleted` | Collection が**削除**されました |
+
+### カスタムフィールド {#custom-fields}
+
+| イベント | 説明 |
+| --- | --- |
+| `customfield.created` | 新しいカスタムフィールドが**作成**されました |
+| `customfield.updated` | カスタムフィールドが**更新**されました |
+| `customfield.deleted` | カスタムフィールドが**削除**されました |
+
+### Shares {#shares}
+
+| イベント | 説明 |
+| --- | --- |
+| `share.created` | 新しい Share が**作成**されました |
+| `share.updated` | Share が**更新**されました |
+| `share.deleted` | Share が**削除**されました |
+| `share.viewed` | Share が**閲覧**されました |
+
+## Webhook メッセージのペイロード {#webhook-message-payload}
+
+すべての Webhook ペイロードには、発生したイベントを示す `type` フィールドと、`resource` オブジェクトが含まれます。`resource` オブジェクトには、イベントに関連する Frame.io リソースの `type` と `ID` が含まれます。
+
+### ペイロードの例 {#example-payload}
+
+```json
+{
+  "account": {
+    "id": "6f70f1bd-7e89-4a7e-b4d3-7e576585a181"
+  },
+  "project": {
+    "id": "7e46e495-4444-4555-8649-bee4d391a997"
+  },
+  "resource": {
+    "id": "d3075547-4e64-45f0-ad12-d075660eddd2",
+    "type": "file"
+  },
+  "type": "file.ready",
+  "user": {
+    "id": "56556a3f-859f-4b38-b6c6-e8625b5da8a5"
+  },
+  "workspace": {
+    "id": "378fcbf7-6f88-4224-8139-6a743ed940b2"
+  }
+}
+```
+
+上記の `file.created` イベントの例では、`resource.id` は新しく作成された File の `ID` を示しています。さらに、`workspace`、`project`、`user` オブジェクトも含まれており、それぞれ関連する `workspace.id`、`project.id`、`user.id` が格納されています。これらの値を使用して受信イベントをフィルタリングしたり、ローカルにキャッシュされたデータを参照したりすることで、API 呼び出しを削減できます。
+
+<Warning>
+
+**サブスクライブしたリソースについて、リソース ID 以外の追加情報は含まれません**。
+
+アプリケーションで追加の情報やコンテキストが必要な場合は、API を呼び出して、参照されているリソースの詳細情報を取得することをお勧めします。
+
+</Warning>
+
+## セキュリティ {#security}
+
+デフォルトで、すべての Webhook には署名キーがあります。この設定変更できない署名シークレットを使用して、リクエストが Frame.io から送信されたものであることを検証できます。
+
+設定した Webhook のレスポンスペイロードには、その Webhook 固有の署名シークレットが含まれています。このシークレットは **Webhook 作成時の最初のレスポンスでのみ提供される**ため、シークレットストレージや環境変数など安全な場所に保存してください。後でこのシークレットを使用して、Webhook が当社のサーバーから直接送信され、途中で傍受や改ざんがされていないことを検証します。
+
+### Webhook 署名の検証 {#verifying-webhook-signatures}
+
+中間者攻撃やリプレイ攻撃から連携を保護するには、Webhook ペイロードの署名を検証することが不可欠です。検証により、Webhook ペイロードが実際に Frame.io から送信されたものであり、転送中にペイロードの内容が変更されていないことを確認できます。
+
+`POST` リクエストには、次の HTTP ヘッダーが含まれます。
+
+| ヘッダー名 | 説明 | 例 |
+| --- | --- | --- |
+| `X-Frameio-Request-Timestamp` | リクエストが送信されたタイムスタンプ | `1604004499` |
+| `X-Frameio-Signature` | 計算された Webhook 署名 | `v0=a77ce6856e609c884575c2fd211d07a9ad1c3f72e19c06ff710e8f086ffca883` |
+| `user-agent: "Frame.io V4 API"` | V4 のヘッダーに含まれるユーザーエージェント |  |
+| `user-agent: "Frame.io Legacy API"` | Legacy のヘッダーに含まれるユーザーエージェント |  |
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify Webhook signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the Frame.io API for the given request
+        body (str): Webhook body from the received POST
+        secret (str): The secret for this Webhook that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+**タイムスタンプ**は、送信 Webhook が送られた時点の Frame.io システムのシステム時刻です。これを使用して[リプレイ](https://en.wikipedia.org/wiki/Replay_attack)攻撃を防ぐことができます。この時刻がローカル時刻から 5 分以内であることを検証することをお勧めします。
+
+**署名**は、Webhook の初回作成時に提供された署名キーを使用した HMAC SHA256 ハッシュです。
+
+**署名を検証するには、次の手順に従います。**
+
+<Steps>
+
+<Step title="署名を抽出する">
+
+HTTP ヘッダーから署名を抽出します。
+
+</Step>
+
+<Step title="署名するメッセージを作成する">
+
+バージョン、配信時刻、リクエスト本文を組み合わせて、署名するメッセージを作成します: `v0:timestamp:body.`
+
+</Step>
+
+<Step title="HMAC SHA256 を計算する">
+
+署名シークレットを使用して HMAC SHA256 署名を計算します。
+
+</Step>
+
+<Step title="署名を比較する">
+
+計算した署名と提供された署名を比較します。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+提供される署名には `v0=` というプレフィックスが付いています。現在、Frame.io でリクエストの署名に使用されているバージョンはこの 1 つのみです。計算した署名の先頭にこのプレフィックスを必ず付けてください。
+
+</Note>
+
+## Webhook のレート制限 {#webhook-rate-limits}
+
+Webhook イベントと Custom Action イベントは、次のアカウントごとの制限を共有します。
+
+| 時間枠 | アカウントあたりの上限 |
+| --- | --- |
+| 1 分 | 1,000 イベント |
+| 1 時間 | 20,000 イベント |
+
+どちらの制限も、Webhook イベントと Custom Action イベントの合計量に適用されます。1 分あたりの制限内に収まっていても、1 時間あたりの制限が免除されるわけではありません。これらの制限はアカウントレベルで適用され、Webhook サブスクリプションや Custom Action ごとに個別に適用されるものではありません。
+
+これらはイベント量の制限であり、Webhook サブスクリプションや Custom Action の作成、一覧表示、更新、削除を行うための API リクエストの制限ではありません。
+
+<Warning>
+
+アカウントレベルのいずれかの制限に達すると、それ以降の Webhook イベントと Custom Action イベントは後で配信するためにキューに入れられるのではなく、**破棄**されます。破棄されたイベントは、容量に空きができても自動的に再試行または再送されることはありません。以下の配信再試行ポリシーは、レート制限によって破棄されたイベントには適用されません。
+
+</Warning>
+
+### 制限内で運用する {#working-within-the-limits}
+
+Webhook の制限内で運用するには、連携に必要な **[イベント](#webhook-event-subscriptions)** のみをサブスクライブすることをお勧めします。たとえば、ファイルのアップロード完了時にワークフローを開始する場合は、すべてのファイルイベントではなく `file.upload.completed` をサブスクライブします。アカウントのサブスクリプションを定期的に見直し、使用されなくなったものは削除してください。
+
+連携で多数のファイルをアップロードしたり、一連の更新を行ったりする場合は、可能な限りそれらの操作を分散させて、両方の制限内に収まるようにし、アカウントの他のアクティビティのための容量を残しておいてください。これにより、再試行されないイベントの破棄を回避しやすくなります。
+
+## 再試行とログ記録 {#retries-and-logging}
+
+<CardGroup cols={2}>
+
+<Card title="配信の再試行ポリシー" icon="arrows-rotate" iconType="solid">
+
+- 合計 3 回の試行(初回 + 再試行 2 回)
+- 15 秒から始まる指数バックオフ(+ ジッター)
+- HTTP `5xx` レスポンス、接続エラー、または 5 秒を超えるタイムアウトで再試行がトリガーされます
+- `429` を含む HTTP `4xx` レスポンスは再試行されません
+
+</Card>
+
+<Card title="失敗のログ記録" icon="list" iconType="solid">
+
+Frame.io は、`webhook_id`、`account_id`、`event_type`、`resource_id`、`user_id` を含む**失敗ログ**を保持します。
+
+</Card>
+
+</CardGroup>
+
+## Webhook チュートリアル {#webhook-tutorial}
+
+### ステップ 1: 受信側をセットアップする(URL を把握するために最初に行います) {#step-1-setup-receiving-end-done-first-so-that-you-know-what-your-url-will-be}
+
+ここでは [webhook.site](http://webhook.site/) を使用します。これを使うと、実際のビジネスロジックなしでペイロードの検査や基本的なレスポンスの送信に使える、使い捨ての Webhook レシーバーを簡単に立ち上げられます。[https://webhook.site](https://webhook.site/) に初めてアクセスすると、固有の Webhook エンドポイントが作成され、すぐにコピーして使用できます。
+
+この URL はセッションごとに固有です。
+
+<Frame>
+
+![ステップ 1 の例](/images/platform/docs/guides/webhooks/webhook_site_example.gif)
+
+</Frame>
+
+### ステップ 2: サブスクライブするイベントを選択する {#step-2-choose-the-events-you-want-to-subscribe-to}
+
+このチュートリアルではシンプルにするため、この Webhook は `file.created` イベントのみをサブスクライブするように設定します。Webhook の作成に使用する JSON ペイロードは次のとおりです。
+
+```json
+{
+    "data": {
+        "name": "asset.created sample webhook",
+        "events": ["file.created"],
+        "url": "https://webhook.site/c05f2216-9558-4816-bc09-f77ee7b9de40"
+    }
+}
+```
+
+### ステップ 3: Postman を使用して Webhook リソースを作成する {#step-3-create-a-webhook-resource-using-postman}
+
+Postman を使用して API を呼び出し、ペイロードに [webhook.site](http://webhook.site/) のエンドポイントを指定して Webhook リソースを作成します。
+
+### ステップ 4: テストする {#step-4-test}
+
+Webhook サブスクリプションを作成し、Webhook を受信するエンドポイントもセットアップできたので、Webhook が発火する操作を実行して最初の Webhook をトリガーし、テストしてみましょう。
+
+このサンプルは `file.created` トリガーで発火するように設定されているため、Webhook を設定した Account と Workspace 内の任意の Project に新しいアセットをアップロードします。
+
+<Frame>
+
+![ステップ 4 の例](/images/platform/docs/guides/webhooks/trigger_asset_created_webhook.gif)
+
+</Frame>
+
+## その他のリソース {#additional-resources}
+
+<CardGroup cols={2}>
+
+<Card title="Ngrok" icon="globe" iconType="solid" href="https://ngrok.com/">
+
+**Ngrok** は、公開アクセス可能な URL で Webhook を公開する必要がある開発者にとって、非常に便利なツールです。ローカル環境からインターネットへの安全なトンネルを作成し、ローカルサーバーを公開して Webhook ペイロードをリアルタイムで受信できるようにします。
+
+</Card>
+
+<Card title="Hookdeck" icon="webhook" iconType="solid" href="https://hookdeck.com/">
+
+**Hookdeck** は、堅牢なイベントゲートウェイを提供することで、チームが Webhook を確実に管理できるように設計されたプラットフォームです。Webhook の処理を一元化してイベントの取りこぼしを防ぎ、フィルタリング、キューイング、失敗した Webhook の再試行などの機能を提供します。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Webhook.site" icon="webhook" iconType="solid" href="https://webhook.site">
+
+**Webhook.site** は、Webhook のプロトタイピングとテストに最適なツールです。自動生成された固有の URL に送信された HTTP リクエストをキャプチャして検査できる、シンプルかつ強力なプラットフォームを提供します。
+
+</Card>
+
+<Card title="Val.town" icon="code" iconType="solid" href="https://www.val.town/">
+
+**Val.town** は、小さな JavaScript および Python 関数の作成、テスト、デプロイをブラウザーから直接行えるようにすることでプロセスを簡素化するため、Webhook ハンドラーのプロトタイプをすばやく作成するのに最適なツールです。
+
+</Card>
+
+</CardGroup>

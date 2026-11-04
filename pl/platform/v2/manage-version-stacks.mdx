@@ -1,0 +1,171 @@
+---
+title: "Zarządzanie stosami wersji"
+---
+
+## Przegląd {#overview}
+
+Stosy wersji (Version Stacks) to zasada organizacyjna w Frame.io, która pozwala „układać” zasoby (Assets) pionowo w stos bez umieszczania ich w folderach. Ułożone w stos wersje ułatwiają przechodzenie między zasobami w interfejsie Frame.io i umożliwiają recenzję w widoku obok siebie.
+
+Obecnie nie obsługujemy przesyłania bezpośrednio do stosu, dlatego sekwencja wywołań API do obsługi podstawowego przepływu pracy ze stosami wersji jest taka sama jak w interfejsie Frame.io:
+
+1. Prześlij zasób (opcjonalnie: oznacz go jako prywatny).
+2. Przypisz zasób do stosu.
+
+Kolejność w istniejących stosach wersji można zmieniać, a poszczególne wersje można usuwać ze stosu. Wreszcie stosy wersji można usuwać bez usuwania żadnego z zasobów, z których się składają.
+
+<Info>
+
+**Każdy stos wersji ma cover_asset**
+
+Stosy wersji zawsze mają na najwyższym poziomie atrybut o nazwie `cover_asset_id`. Jest to `id` zasobu, którego miniatura jest wyświetlana w interfejsie webowym Frame.io, i jest to wersja o najwyższym numerze w stosie.
+
+</Info>
+
+### Podstawowe pojęcia {#core-concepts}
+
+**Stosy wersji** — podobnie jak **foldery** — to specjalne `types` zasobów. Możesz je pobierać za pomocą tych samych endpointów, a następnie na podstawie wartości klucza `type` w odpowiedzi API odpowiednio je analizować i kierować. W praktyce jest to zazwyczaj proste, ale przy zarządzaniu stosami na dużą skalę może przysporzyć kilku komplikacji.
+
+Kluczem do pracy ze stosami wersji jest rozróżnienie **czterech najczęstszych scenariuszy**:
+
+1. Zasób można dodać do zasobu, co utworzy stos z nowym `id`.
+2. Zasób można dodać do istniejącego stosu.
+3. Można zmienić kolejność w stosie.
+4. Można usunąć poszczególne wersje.
+
+**Pierwsze dwa scenariusze** korzystają z tego samego [wywołania endpointu](/pl/platform/v2/api-reference/assets/add-version-to-asset), więc jedyna istotna różnica polega na tym, czy tworzysz nowy stos (z dwóch zasobów), czy dodajesz zasób do istniejącego stosu. Poza tym ograniczenia są przewidywalne:
+
+1. Elementy stosu muszą mieć zgodny `asset_type` (np. nie można umieścić *obrazu* na *strumieniu*).
+2. Użytkownik wykonujący operację musi mieć uprawnienia zarówno do zasobu źródłowego, jak i do docelowego zasobu lub stosu.
+3. Zasoby układają się w stos sekwencyjnie.
+4. Nie można umieścić stosu na stosie.
+5. Foldery w ogóle nie wchodzą w grę.
+
+**Dwa ostatnie scenariusze** są również dość proste, ale wymagają nieco większej wiedzy o samym stosie. Na przykład, aby zmienić pozycję zasobu w stosie, musisz znać `id` zasobów po obu stronach miejsca, w którym ma się znaleźć docelowy zasób; zazwyczaj oznacza to, że cały stos został już wcześniej pobrany.
+
+### Wymagane zakresy {#required-scopes}
+
+Przed rozpoczęciem pracy z tym przewodnikiem upewnij się, że masz token zawierający następujące zakresy:
+
+| Zakres | Powód |
+| --- | --- |
+| **Assets:** Read, Update | - Pobieranie zasobów źródłowych i docelowych.<br />- Dodawanie zasobu do stosu wersji.<br />- Zmiana kolejności w stosie.<br />- Usuwanie zasobu ze stosu.<br />- Usuwanie stosu. |
+
+## Dodawanie zasobów do stosów wersji {#adding-assets-to-version-stacks}
+
+### Krok 1: znajdź miejsce docelowe {#step-1-locate-your-destination}
+
+Pierwszym krokiem jest ustalenie, z którym z dwóch kluczowych scenariuszy masz do czynienia — dodawaniem zasobu do innego zasobu w celu utworzenia stosu czy dodawaniem zasobu do stosu w celu jego rozszerzenia.
+
+Jeśli wiesz, że pracujesz z zasobem bez wersji, lub masz już `id` stosu wersji, możesz przejść do kroku 2.
+
+Jeśli nie, najprostszy sposób na ustalenie, czy zasób docelowy jest już częścią stosu, to:
+
+1. Wykonaj `GET` docelowego zasobu, wywołując `/v2/assets/:id​`
+2. Sprawdź zwrócony `type`.
+
+- Jeśli jest to *version_stack*, sprawdzony właśnie uuid jest Twoim docelowym uuid. Przejdź do kroku 2.
+
+3. Jeśli `type` to *file*, pobierz `parent_id`
+4. Wykonaj GET elementu nadrzędnego za pomocą tego samego endpointu i sprawdź jego `type`.
+
+Jeśli `type` elementu nadrzędnego to *version_stack*, użyj jego `id` jako miejsca docelowego.
+
+Jeśli `type` ma dowolną inną wartość, masz do czynienia ze zwykłym zasobem i możesz użyć pierwotnego id jako miejsca docelowego.
+
+### Krok 2: przygotuj ładunek {#step-2-prepare-your-payload}
+
+Teraz, gdy masz docelowy uuid, musisz znać uuid zasobu, który dodajesz do stosu.
+
+1. Jeśli przesyłasz nowy zasób, po prostu użyj id zwróconego w odpowiedzi o powodzeniu podczas [tworzenia zasobu](/pl/platform/v2/api-reference/assets/create-asset).
+2. Jeśli układasz w stos istniejący zasób, powinieneś mieć jego `id` dzięki opisanemu powyżej procesowi.
+
+Jedynym wymaganym parametrem treści przy dodawaniu do stosu wersji jest `next_asset_id`:
+
+```json
+{
+    "next_asset_id": "<source-asset-id>"
+}
+```
+
+### Krok 3: dodaj zasób źródłowy do miejsca docelowego {#step-3-add-your-source-asset-to-the-destination}
+
+Teraz, gdy masz oba parametry `id` zasobów, możesz wykonać `POST` do `/assets/:id/version`, gdzie :id to docelowy zasób lub stos wersji, a Twój źródłowy (nowy) zasób znajduje się w ładunku treści żądania.
+
+## Zmiana kolejności w stosach wersji {#reordering-version-stacks}
+
+Stosy wersji opierają się na prostej koncepcji porządkowej, w której każdy zasób ma sąsiadów `next_asset_id` i `prev_asset_id`, przy czym kolejność nie odnosi się do numeracji wersji, lecz do atrybutu `index` każdego zasobu. `index` biegnie odwrotnie niż numery wersji, a zatem:
+
+- Pierwsza (o najniższym numerze) wersja w stosie ma zasób `prev`, ale nie ma zasobu `next`
+- Najnowsza (o najwyższym numerze) wersja w stosie ma zasób `next`, ale nie ma zasobu `prev`
+- Wszystkie „wewnętrzne” wersje mają zarówno zasób `prev`, jak i `next`, którymi są odpowiednio zasoby o wyższym i niższym identyfikatorze wersji.
+
+Daje to trzy odrębne scenariusze, z których wszystkie korzystają z tego samego wywołania endpointu:
+
+**Wywołanie:**
+
+```
+PUT https://api.frame.io/v2/asset/:id/tween
+```
+
+**Treść:**
+
+```json
+{
+  "prev_asset_id": "<asset_id>",
+  "next_asset_id": "<asset_id>"
+}
+```
+
+We wszystkich przypadkach `id` w ścieżce URL to zasób, który przenosisz.
+
+| Scenariusz | `prev_asset_id` | `next_asset_id` |
+| --- | --- | --- |
+| Przeniesienie na szczyt stosu | `null` | `id` dotychczasowego zasobu na szczycie (o najwyższym numerze wersji). |
+| Przeniesienie na spód stosu | `id` dotychczasowego zasobu na spodzie (v1). | `null` |
+| Przeniesienie wersji w obrębie stosu | `id` zasobu znajdującego się bezpośrednio *nad* miejscem, do którego chcesz przenieść zasób. | `id` zasobu znajdującego się bezpośrednio *pod* miejscem, do którego chcesz przenieść nowy zasób. |
+
+## Usuwanie zasobów ze stosów i usuwanie stosów wersji {#removing-assets-and-deleting-version-stacks}
+
+### Usuwanie zasobów {#removing-assets}
+
+Gdy zasób zostaje przeniesiony do stosu wersji, staje się elementem podrzędnym samego stosu. Aby przenieść zasób poza stos wersji, musisz w praktyce przypisać mu z powrotem jako element nadrzędny folder zawierający stos.
+
+1. Wykonaj `GET` samego stosu wersji, wywołując `/v2/assets/:id`
+2. Pobierz `parent_id` samego stosu (który stanie się `id` nowego folderu docelowego)
+3. Przenieś docelowy zasób do folderu w następujący sposób:
+
+**Wywołanie**:
+
+```
+POST https://api.frame.io/v2/assets/:parent_id/move
+```
+
+**Treść**:
+
+```json
+{
+    "id":"<asset_id>"
+}
+```
+
+### Usuwanie stosów wersji {#deleting-version-stacks}
+
+Usunięcie stosu wersji jest niezwykle proste:
+
+```
+DELETE https://api.frame.io/v2/assets/:version_stack_id/unversion
+```
+
+To wszystko. Usunięcie stosu przywróci wszystkie zasoby, z których się składał, do folderu zawierającego stos.
+
+<Info>
+
+**Stosy o rozmiarze 1 należy usuwać**
+
+Jeśli usuniesz wszystkie elementy ze stosu wersji, pozostanie stos wersji z jednym elementem. Łatwo to zauważyć — jeśli wykonasz `GET` stosu wersji według jego `id`, zobaczysz, że ma on atrybut `"version": 1`.
+
+</Info>
+
+Z technicznego punktu widzenia wszystko jest w porządku — pojedyncza wersja zostanie wczytana i odtworzona, można dodawać nowe wersje i wszystko będzie działać normalnie; jednak aby uniknąć mylących sytuacji dla użytkowników w aplikacji webowej i innych aplikacjach Frame.io, zalecamy usuwanie stosów zawierających jeden element.
+
+Więcej informacji o endpoincie układania wersji w stosy znajdziesz w dokumentacji [Assets](/pl/platform/v2/api-reference/assets/library-search-get).

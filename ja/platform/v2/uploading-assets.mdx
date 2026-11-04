@@ -1,0 +1,178 @@
+---
+title: "Asset をアップロードする"
+---
+
+# 概要 {#overview}
+
+このチュートリアルでは、Frame.io に Asset をアップロードする方法を説明します。Frame.io は動画だけでなく、脚本、画像、マップ、参考資料など、あらゆるファイル形式を扱えます。より技術的に言えば、Frame.io における Asset とは、S3 上のファイルと Frame.io におけるそのコンテキスト(トランスコード、ユーザー/チーム/プロジェクトのコンテキスト、メタデータなど)を包括的に表現したものです。Asset の詳細については、リソース定義を参照してください。​
+
+## 中核となる階層 {#core-hierarchies}
+
+Frame.io が中核モデルをどのように構成しているかを知っておくことも役立ちます。
+
+**Users** が所属する **Accounts** は多数の **Projects** を持ち、各 Project には **Assets** が含まれます。**Teams** は Enterprise アカウントでのみ利用でき、論理的な分離の階層をさらに 1 つ追加します。Asset は自分がどの Team に属しているかを「知って」いません(知っているのはどの Project と Account に属しているかだけです)。しかし、Project は Account ではなく Team によって厳密に所有されているため、Team は Asset のアップロードプロセスに欠かせない要素となっています。
+
+## 前提条件 {#prerequisites}
+
+このチュートリアルには次のものが必要です。
+
+- 開発者トークンを持つ Frame.io アカウント(トークンについては以下で説明します)
+- [Frame.io Python SDK](https://github.com/Frameio/python-frameio-client)
+
+## Asset をアップロードする {#upload-an-asset}
+
+このセクションでは、Asset をアップロードする手順を説明します。
+
+1. [developer.frame.io](/ja/platform/v2) で、次のスコープを持つ開発者トークンを作成します。
+
+| スコープ | 理由 |
+| --- | --- |
+| **Accounts:** Read | リクエストを行う User の Account 一覧を取得します。 |
+| **Teams:** Read | 対象の Account で利用可能な Team を取得します。 |
+| **Projects:** Read | 対象の Team で利用可能な Project を取得します。 |
+| **Assets:** Create、Read | 新しい Asset レコードを作成し、利用可能な Asset を取得して Project 内のフォルダー構造をたどります。 |
+
+<Info>
+
+**API トークンの作成についてサポートが必要ですか?**
+
+[**こちら**](/ja/platform/v2/authentication)の手順を確認してください。
+
+</Info>
+
+2. Asset のアップロード先を特定します。Asset は少なくとも **Project** 内に配置する必要があります。アップロード先となるファイル階層内の場所を指定するために、プロジェクトのルート Asset ID(`root_asset_id`)またはフォルダーの Asset ID を取得する必要があります。
+
+<Warning>
+
+**注:**
+
+プロジェクト ID だけではアップロードできません。プロジェクトのルートにアップロードするには、リクエストで `root_asset_id` を指定してください。
+
+</Warning>
+
+一般に、次のものを(この順番で)取得する必要があります。
+
+- アカウント ID を取得し、アカウントを選択する
+- チーム ID を取得し、チームを選択する
+- チームに関連付けられたプロジェクト
+- 作業対象のプロジェクトのプロジェクト ID
+- ルート Asset ID またはフォルダー ID
+
+`root_asset_id` を使えば、プロジェクトのルートに直接アップロードできます。
+
+### Asset を一覧表示する {#list-assets}
+
+新しい Asset のアップロード先を選ぶために、API を使ってプロジェクト内、またはプロジェクト内のフォルダー内のすべての Asset を一覧表示できます。Asset が*フォルダー*の場合、子 Asset を含んでおり、それらもファイルやフォルダーである可能性があります。Asset の情報を一覧表示する際は任意の Asset ID を使用できますが、プロジェクトに関連付けられたすべてを確認したい場合は `root_asset_id` を使用してください。
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+返された Asset の一覧から、フォルダーである任意の Asset の ID、またはルート Asset ID を使用できます。この ID を使って、新しい Asset のアップロード先を指定します。
+
+### Asset をアップロードする {#upload-asset}
+
+この例では、新しいファイルをアップロードします。次の情報を含めてリクエストを送信します。
+
+| パラメーター | 説明 |
+| --- | --- |
+| `filesize` | アップロードするファイルのサイズを入力します |
+| `filetype` | アップロードするファイルの種類を選択します。選択肢には動画や画像などがあります。例: `video/mp4`、`image/png`。 |
+| `name` | ファイル名を表す文字列を、スペースなしで入力します。 |
+| `type` | `file` と `folder` のどちらを使用するかを表します。バージョンスタックとは、複数のファイルを互いに積み重ねたものです。 |
+
+新しいフォルダーを作成する場合は、リクエストに `filesize` や `filetype` を含める必要はありません。
+
+`cURL` リクエストの場合は、`"source": {  "url":"URL_FOR_VIDEO" }` パラメーターを使ってファイルへのリンクを含めることで、Frame.io に Asset をすばやくアップロードできます。このリンクは公開アクセス可能である必要があります。そうでない場合は、各アップロードリンク用にファイルをチャンクに分割する処理を行ってくれる Python SDK を使用できます。
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Asset の URL には有効期限があります**
+
+Asset 作成の API 呼び出しから返される URL は、アップロードを承認するために事前署名されていますが、24 時間後に期限切れになります。
+
+</Info>
+
+# 独自のファイルアップローダーを構築する {#build-your-own-file-uploader}
+
+独自のアップローダーを構築する場合、最高のパフォーマンスを得るには、チャンクを並列でアップロードすることをお勧めします。各チャンクは、Frame.io API のレスポンスで提供される Amazon S3 の URL に直接 `PUT` する必要があります。
+
+ファイルのチャンクは、提供された `upload_urls` の順序と一致している必要があります。これらの URL が*最終的に結合・トランスコードされる Asset の順序を決定する*ためです。つまり、1 番目の URL には 1 番目のチャンク、2 番目の URL には 2 番目のチャンク、というように対応させます。
+
+#### 疑似コードの例 {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+S3 への各リクエストのヘッダーには、Frame.io API への最初の呼び出しで返されたとおりの新しい Asset の `filetype` と、追加のプライバシーヘッダーを含める必要があります。
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+これらすべてを Python SDK でどのように処理しているかの例は、[こちら](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py)で確認できます。
+
+<Info>
+
+**AWS のエラーは XML 形式です**
+
+この段階で発生するエラーはすべて AWS から直接返されるため、Frame.io の標準的な JSON のエラー処理ではなく、XML 形式になる点に注意してください。アップロードが不完全なファイル(つまりチャンクが欠けているファイル)はトランスコードに失敗し、Frame.io に表示されないため、本番環境で使用する場合は、これらのアップロードに再試行ロジックを組み込むことを一般にお勧めします
+
+</Info>
+
+以上です!`upload_url` への `PUT` 呼び出しが完了すると、Frame.io に新しい Asset が作成されます。

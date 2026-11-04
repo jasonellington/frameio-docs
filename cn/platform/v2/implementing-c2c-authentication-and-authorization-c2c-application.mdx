@@ -1,0 +1,455 @@
+---
+title: "操作指南：授权（应用）"
+sidebarTitle: "操作指南 - 授权（应用）"
+---
+
+## 简介 {#introduction}
+
+在本指南中，我们将学习如何在 [Frame.io](http://frame.io/) 项目上对 *C2C 应用* 进行身份验证和授权。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果你还没有阅读 [实施 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，请在继续之前快速浏览一下！
+
+此外，你应该已经从我们团队收到一个 `client_id`，用于标识你的集成。如果你还没有收到 `client_id`，请查看这篇 C2C 生态系统 [简介](/cn/camera-to-cloud/getting-started-with-cloud-device-integrations)，并联系我们的团队。
+
+如果你收到的是 `client_secret` 而不是 `client_id`，说明我们将你设置为硬件设备而非 C2C 应用。你可以按照 [硬件设备身份验证指南](/cn/platform/v2/implementing-c2c-authentication-and-authorization-hardware) 进行操作，或联系我们的团队为你签发 `client_id`。
+
+## 演练应用身份验证流程 {#walking-through-the-application-auth-flow}
+
+首先，让我们从宏观上了解一下要实现的授权流程所预期的用户体验。请查看以下资源，从用户的角度了解这一流程：试着下载 [Zoelog](https://zoelog.io/) 并登录 [Frame.io](http://frame.io/)，亲身体验 C2C 应用的授权过程！
+
+## OAuth 概述 {#oauth-overview}
+
+C2C 应用使用 OAuth 2.0 流程进行身份验证和授权。这是一组标准化的调用，可用于对第三方应用或用户进行服务的身份验证和授权。你可以 [在此处进一步了解 OAuth 流程](https://www.digitalocean.com/community/tutorials/an-introduction-to-oauth-2)。
+
+## 回调/重定向 URI {#the-callback-/-redirect-uris}
+
+作为 OAuth 流程的一部分，我们的服务器需要向一个由你控制的 URI/URL 发起 HTTP 调用。用户在浏览器中登录 [Frame.io](http://frame.io/) 后，我们会将浏览器重定向到此 URI，以向你的应用提供一些信息。你的重定向 URI 必须：
+
+- 归你所有
+- 是静态的
+
+只要满足这两个条件，你可以为设备注册多个有效的重定向 URI。
+
+在 OAuth 流程中，我们会检查你的应用所请求的回调 URI 是否为我们登记在案的 URI 之一。如果不是，授权流程将失败。如果我们不进行此项检查，恶意行为者就可能提供一个指向其所控制地址的重定向。
+
+出于开发目的，我们支持在 `http://localhost` 上使用非 HTTPS 回调。
+
+## 设备标识 {#device-identification}
+
+连接到 Camera to Cloud 时，每个单独的应用安装都需要唯一地标识自己，以便我们在用户的项目中列出设备连接。
+
+对于 C2C 应用，我们将其称为设备的 `device_id`。在设置你的实现时，你应该考虑好要如何生成它。有些平台提供了 API，专门用于生成设备+应用特定的标识符，正好适用于这种场景：
+
+| 平台 | 参考 |
+| --- | --- |
+| iOS | [identifierForVendor](https://developer.apple.com/documentation/uikit/uidevice/1620059-identifierforvendor) |
+| Android | [FID 或 GUID](https://developer.android.com/training/articles/user-data-ids) |
+
+<Warning>
+
+**注意不要泄露个人身份信息**
+
+例如，用户的电子邮件地址不能用作 `device_id`。同样，*请确保该唯一标识符归你所有*。例如，不要使用设备的 MAC 地址。MAC 地址并不归你的软件所有，而且也可能被视为个人身份信息。
+
+</Warning>
+
+如果你不确定要使用什么值，我们可以一起讨论这个选择，确保选定一个合适的值，让集成尽可能简单。
+
+## 第 1 步：对用户进行身份验证 {#step-1-authenticating-the-user}
+
+当我决定在 *YourApp™* 中连接 [Frame.io](http://frame.io/) 时，我会进入 [Frame.io](http://frame.io/) 配置部分并选择"Connect to Project"（或类似选项）。点击该按钮后，我会被重定向到 [Frame.io](http://frame.io/) 进行登录并授权你的应用。
+
+我们通过构建一个 URL 并在 Web 浏览器中打开它来实现这一点。来看一段类似 Python 的伪代码：
+
+```python title="Python"
+def redirect_to_auth(config):
+    credentials = {
+        "response_type": "code",
+        "redirect_uri": "http://MyApp.io/frameio-callback",
+        "client_id": f"{MYAPP.client_id}",
+        "scope": "offline device.connect asset.create",
+        "state": str(uuid.uuid4()),
+        "device_id": f"{HARDWARE.get_vendor_id('com.mycompany.myapp')}",
+    }
+
+    encoded = parse.urlencode(credentials)
+    url = "https://applications.frame.io/oauth2/auth?" + encoded
+
+    webbrowser.open(url)
+```
+
+我们的"payload"编码在 URL 本身中，完全编码后的 URL 大致如下：
+
+```text
+https://applications.frame.io/oauth2/auth?response_type=code&redirect_uri=http%3A%2F%2FMyApp.io%2Fframeio-callback&client_id=[client_id]&scope=offline+device.connect+asset.create&state=[state]&device_id=62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff
+```
+
+我们来逐一分析这些选项：
+
+`response_type`：OAuth 流程应返回的内容。此值应始终为"code"。它告诉我们的 OAuth 服务器将一个 code 发送回重定向 URI，随后该 code 将用于获取实际的授权令牌。
+
+`redirect_uri`：OAuth 服务器在响应身份验证请求时应发起 GET 请求的 URL/URI。
+
+`client_id`：标识你的应用。对于应用集成，此值将由 Frame.io 提供。
+
+`scope`：你的应用所请求的权限列表，以空格分隔。C2C 应用可使用以下权限
+
+- `offline`：当初始令牌过期时，应用可以自行刷新授权。
+- `device.connect`：设备可以获取用户可用于 C2C 连接的账户和项目列表。
+- `asset.create`：应用可以将 Asset 上传到其所连接的项目。
+
+虽然可以只请求并获得这些 scope 中的一部分，但你总是应该请求全部三个。
+
+`state`：与此请求关联的随机值。我们使用 `state` 来验证对重定向 URI 的调用是否对应有效的请求。
+
+当你在注册的 URI 上收到回调时，应验证 `state` 是否符合预期。
+
+<Warning>
+
+**\{'t': '#frag', 'p': \{\}, 'c': \{'t': 'p', 'p': \{\}, 'c': \[\{'t': 'code', 'p': \{\}, 'c': 'state'\}, ' must be random'\]\}\}**
+
+如果 state 参数不是随机的，你就会面临 CSRF 攻击的风险：恶意行为者可以伪造你的 state 参数，并向你的回调发起恶意请求。你可以在 [Auth0 的这篇博客](https://auth0.com/docs/secure/attack-protection/state-parameters) 中进一步了解 `state` 参数。
+
+</Warning>
+
+`device_id`：此特定设备/安装的唯一标识符。设备 ID 应为 *归你所有* 的值（因此不能是 MAC 地址/CPU 序列号等），并且 *不应包含个人身份信息*（因此不能是电子邮件地址、社会保障号码、指纹哈希等）。有关详细信息，请参阅 [上文关于 device_id 的部分](/cn/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application#device-identification)。
+
+## 第 2 步：接收 OAuth 响应 {#step-2-receiving-the-oauth-response}
+
+用户在浏览器中登录 [Frame.io](http://frame.io/) 并接受所请求的 scope 后，会向你的回调 URI 发起一个 GET 请求。该请求包含一个 URL 编码的 payload，其中带有以下查询参数：
+
+`code`：用于从 Frame.io 后端获取实际授权令牌的 code。
+
+`state`：第 1 步中原始身份验证请求所包含的 state 值。
+
+`scope`：已授予的 scope/权限。
+
+完整的 URI 大致如下：
+
+```text
+https://MyApp.io/frameio-callback?code=[authorization_code]&scope=offline+device.connect+asset.create&state=[state]
+```
+
+解析 URI 可能比较棘手，而你的 HTTP/服务器库很可能已经提供了不错的解析工具，因此在决定自行解析此值之前，请先查看一下！
+
+为了测试，我们可以使用 Python 快速搭建一个服务器来观察 GET 请求。你的回调 URI 需要配置为 `http://localhost:8888/callback`
+
+```shell
+$ python -m http.server 8888
+```
+
+现在，我们可以使用以下模板请求 [Frame.io](http://frame.io/) 访问权限。填入你的 `[client_id]` 和一个 `[state]` 值。你可以 [在此处生成一个随机 UUID](https://www.uuidgenerator.net/) 作为 `state`。
+
+```text
+https://applications.frame.io/oauth2/auth?response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8888%2Fcallback&client_id=[client_id]&scope=offline+device.connect+asset.create&state=[state]&device_id=62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff
+```
+
+完成身份验证流程后，我们会收到一个 404 错误。这是因为 Python 无法识别所请求的资源，也不知道如何响应。不过别担心，身份验证请求仍然是成功的！我们应该会看到服务器在终端中打印类似以下的内容：
+
+```text
+Serving HTTP on :: port 8888 (http://[::]:8888/) ...
+::1 - - [08/Mar/2022 14:04:34] code 404, message File not found
+::1 - - [08/Mar/2022 14:04:34] "GET /callback?code=[authentication_code]&scope=offline+device.connect+asset.create&state=[state] HTTP/1.1" 404 -
+```
+
+我们应该验证 state 与我们发送的是否相同，而 `authentication_code` 将在下一步获取访问令牌时发挥重要作用。
+
+在实际应用中，回调处理程序可能如下所示：
+
+```python title="Python"
+@handler("/frameio-callback")
+def do_get(request):
+    params = url.parse_query(request.url.parts.query)
+    if "error" in params:
+       raise AuthError(params["error"])
+
+    # Handles sending the authentication code and state to the proper user
+    MyApp.frameio_oauth_success(state=params["state"], code=params["code"])
+
+    # Render some sort of confirmation page for the user.
+    request.send_response(
+        code=200, 
+        headers={"Content-type": "text/html"}, 
+        data=OauthSuccessPage()
+    )
+```
+
+## 第 3 步：获取访问令牌 {#step-3-retrieving-our-access-tokens}
+
+现在我们已经有了 `authorization_code`，就可以获取访问令牌了！此时，访问令牌其实已经授予，我们只需要向后端请求它。
+
+我们发起以下请求：
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'state=[state]' \
+    --form 'code=[authorization_code]' \
+    --form 'redirect_uri=http://localhost:8888/callback' \
+    --form 'grant_type=authorization_code' \
+    --form 'scope=offline device.connect asset.create' \
+    | python -m json.tool
+```
+
+<Info>
+
+**OAuth 端点**
+
+请注意，此请求的主机是 `applications.frame.io`，而不是我们大多数请求所使用的 `api.frame.io`。另请注意，这里我们使用的是表单数据而不是 JSON 数据。*C2C OAuth 端点仅接受表单数据。*
+
+</Info>
+
+完成身份验证后，其他端点会接受 `application/json` payload，但如果你向身份验证端点发送 JSON 而不是 `application/x-www-form-urlencoded` 数据，它们将返回错误。
+
+我们来逐一了解这些参数：
+
+`client_id`：[Frame.io](http://frame.io/) 签发给我们的 OAuth 应用标识符
+
+`state`：我们在发送给浏览器的原始授权请求中包含、并在回调中收到的 state 值。
+
+`code`：我们在回调中收到的授权 code
+
+`redirect_uri`：与我们在 Frame.io 后端注册的重定向 URI 相同。如果此值不在 [Frame.io](http://frame.io/) 为你的集成登记的逗号分隔 URL 列表中，此请求将失败。
+
+`grant type`：对于软件设备授权流程，始终为 `authorization_code`。
+
+`scope`：必须与回调中返回的已批准 scope 一致。
+
+我们应该会收到类似以下的响应：
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+我们的设备现已成功通过 Frame.io 授权！请妥善保存这些值，因为后续所有请求都需要用到它们。我们来看看 payload 中包含什么：
+
+`access_token`：这是你访问 [Frame.io](http://frame.io/) 后端其余部分的密钥。在这些教程中，我们需要将其添加到后续所有请求的标头中。
+
+`expires_in`：距离 `access_token` 过期的秒数。令牌到期后需要刷新，我们将在后续教程中介绍。
+
+`refresh_token`：可用于管理 `access_token` 的令牌。它最常用于刷新授权，但也可用于撤销授权。
+
+`token_type`：对于 C2C API 始终为 `bearer`，无需处理。
+
+距离真正连接到项目还有几个步骤，既然已经完成了这一步，我们继续吧！
+
+## 第 4 步：列出账户 {#step-4-list-accounts}
+
+接下来，我们需要获取用户有资格连接的账户列表。这是第一个需要访问令牌的调用，我们会将令牌添加到标头中：
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/accounts \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/accounts` 的文档可 [在此处找到](/cn/camera-to-cloud/api-reference/applications-auth/device-list-accounts)
+
+</Info>
+
+<Info>
+
+**Authorization 标头**
+
+对于每个需要授权的端点，我们都需要将 `access_token` 添加到 `Authorization` 标头中。请注意，我们需要在访问令牌前加上 `Bearer `（带一个空格！）作为该标头的值。
+
+</Info>
+
+此调用应返回用户可以连接的账户列表：
+
+```json
+[
+    {
+        "_type": "account",
+        "display_name": "Hogwarts General",
+        "id": "46b7ea11-3041-4e2b-97f7-98fbf5c974c9"
+    },
+    {
+        "_type": "account",
+        "display_name": "Gryffindor",
+        "id": "e6007a3d-cad7-4666-9ee3-23c1af032060"
+    },
+    {
+        "_type": "account",
+        "display_name": "QUIDDITCH LEGENDS -- LETS GOOOOOOOOOO",
+        "id": "cc94119d-f957-4d6e-b8cf-0c095211b1b9"
+    }
+]
+```
+
+此时，你应将此列表显示给用户，让他们选择要连接的账户。然后，我们将在下一步中使用该账户的 `id`，列出用户可以连接 C2C 设备的项目。
+
+## 第 5 步：列出项目 {#step-5-list-projects}
+
+现在，我们需要获取目标账户的项目列表：
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/accounts/[account_id]/projects \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/accounts/[account_id]/projects` 的文档可 [在此处找到](/cn/camera-to-cloud/api-reference/applications-auth/device-list-projects)
+
+</Info>
+
+我们需要将要列出项目的 `account_id` 添加到 URL 中。另外请注意，整个资源路径以 `/devices/...` 开头。我们在这里并不只是列出项目，而是列出 *用户拥有 C2C 设备管理权限的* 项目。如果用户所属的某个项目没有被列出，说明他们没有该项目的 C2C 设备管理权限。
+
+我们会收到与账户列表类似的响应：
+
+```json
+[
+    {
+        "_type": "project",
+        "id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+        "name": "Match Recordings"
+    },
+    {
+        "_type": "project",
+        "id": "ed5dbf4a-f146-416b-add0-74de98201876",
+        "name": "Year Book Material"
+    }
+]
+```
+
+与账户一样，应将此列表显示给用户，让他们选择要连接的项目；同样，下一步我们需要用到项目的 `id`。
+
+## 第 6 步：连接到项目 {#step-6-connecting-to-a-project}
+
+现在用户已经选择了要连接的项目，我们准备就绪！只剩最后一步，即可将我们的软件设备与 [Frame.io](http://frame.io/) 项目完成配对：
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/connect?project_id={project_id} \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/connect` 的文档可 [在此处找到](/cn/camera-to-cloud/api-reference/applications-auth/device-project-connect)
+
+</Info>
+
+项目 ID 是一个 URL 查询参数，而且我们仍然需要传递授权标头！
+
+我们会收到如下响应（为简洁起见省略了部分数据）：
+
+```json
+{
+    "_type": "project_device",
+    "asset_type": "video",
+    "authorization": {
+        "_type": "project_device_authorization",
+        "creator": {
+            "_type": "user",
+            "account_id": "93f872fb-9924-4e31-a430-2574e0742260",
+            "deleted_at": null,
+            "email": "hpotter@hoggyhoggyhogwarts.edu",
+            "id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+            ...
+            "name": "Harry Potter",
+            ...
+        },
+        "creator_id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+        "expires_at": null,
+        "id": "ee9f5949-b7fa-4c71-8480-6d4c60877c51",
+        "inserted_at": "2022-03-09T18:14:21.893283Z",
+        "project_device_id": "6a55d7f6-dfb7-46a1-bff8-a3acb2d3d1aa",
+        "scopes": {
+            ...
+            "asset_create": true,
+            ...
+            "id": "1e174fe9-5b53-48db-b556-c310c0848898",
+            "offline": true,
+            ...
+        }
+    },
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "asset_type": "video",
+            ...
+        }
+    ],
+    "creator_id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+    "deleted_at": null,
+    "device_id": "a8a4f3bf-196c-4748-832b-28f1d0801515",
+    "id": "93af90e7-ee89-4b47-86e6-c2750f3790b6",
+    ...
+    "name": "MyApp-62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff",
+    "project": {
+        "_type": "project",
+        "id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+        "name": "Testbed"
+    },
+    "project_id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+    "status": "online",
+    ...
+}
+```
+
+<Info>
+
+**一次仅限一个项目**
+
+一台设备一次只能与一个项目配对。如果对另一个项目执行配对操作，将会移除它与先前所连接项目之间的连接。
+
+</Info>
+
+如果你的响应 payload 看起来像上面这样：太棒了！你成功了！你已经授权了你的第一台 Camera to Cloud 设备。花点时间庆祝一下吧！
+
+庆祝完毕后，你应将项目名称显示给用户，以便他们确认所连接的项目。
+
+## 使用第三方 OAuth 库 {#using-a-third-party-oauth-library}
+
+[Frame.io](http://frame.io/) 使用标准的 OAuth 2.0 流程。出于安全考虑，我们强制使用 PKCE。有许多现成的库可以为你处理集成中的这一部分。
+
+以下是几个常用的 OAuth 库：
+
+| 编程语言 | 名称 | URL |
+| --- | --- | --- |
+| Swift | `OAuthSwift` | [Github](https://github.com/OAuthSwift/OAuthSwift) |
+| Python | `requests-oauthlib` | [Github](https://github.com/requests/requests-oauthlib) |
+| Flutter | `oauth2_client` | [Github](https://pub.dev/packages/oauth2_client) |
+
+请记住，[Frame.io](http://frame.io/) 添加了一个 `device_id` 字段来标识特定设备。这是一个额外的自定义字段。你选择的库很可能支持自定义字段，但请务必不要忘记添加它！
+
+## 故障排除 {#troubleshooting}
+
+如果你来到了这里，说明出了点问题！与第三方集成怎么可能不遇到错误呢？本节列出了一些常见问题，并将引导你完成最有可能解决这些问题的步骤。请浏览以下列表，看看是否有与你的问题相符的情况。[错误指南](/cn/camera-to-cloud/how-to-handle-errors) 也是查找 API 错误的绝佳资源。
+
+如果你在这里没有找到解决方案，我们很希望了解你遇到的问题，以便将其补充到这里！
+
+**未返回我想连接的账户或项目：** 如果你在列出账户和/或项目时，想要连接的那个没有出现在列表中，可能有以下几种原因。在 Frame.io 中，导航到你想连接的项目，然后点击 `C2C Connections` 选项卡。这将帮助你找出问题所在。
+
+- **你的账户未启用 C2C：** 如果屏幕为空白，并显示一条有关你的账户无法使用 C2C 的消息，则需要账户管理员在账户设置中为你的项目启用该功能！
+- **你不是设备管理员**：如果屏幕为空白，并显示一条有关没有权限的消息，则需要账户管理员更改允许连接 C2C 设备的权限设置，或将你添加到具有这些权限的角色中。
+
+**Invalid Client 错误：** 当你向我们提供的设备信息与我们登记在案的任何信息都不匹配时，会返回 `invalid_client`。这很可能意味着你的 `client_secret`、`client_id` 或 `redirect_uri` 与 Frame.io 后端登记的信息不一致。
+
+**Bad Request 错误：** 当请求数据格式有误时，会返回 `bad_request`。请仔细检查是否拼错了字段名，或遗漏了必填字段。
+
+## 下一步 {#next-up}
+
+如果你还没有联系我们的团队，我们建议你先与我们联系，然后继续阅读下一篇指南。我们期待你的来信！

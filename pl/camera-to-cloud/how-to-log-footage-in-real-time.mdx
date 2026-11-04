@@ -1,0 +1,116 @@
+---
+title: "Instrukcja: logowanie materiału w czasie rzeczywistym"
+sidebarTitle: "Logowanie materiału w czasie rzeczywistym"
+---
+
+## Wprowadzenie {#introduction}
+
+Logowanie w czasie rzeczywistym pozwala urządzeniom rejestrować komentarze, status zasobów i inne dane w trakcie nagrywania materiału na planie, zanim zostanie on zarejestrowany w Frame.io — dla wszystkich zasobów C2C generowanych przez dowolne urządzenie w tym samym projekcie.
+
+Wyobraź sobie reżysera, który obserwuje podgląd w Video Village i może nacisnąć przycisk za każdym razem, gdy aktor zagra dobrze, albo inteligentny klaps (Smart Slate), który potrafi oznaczyć moment klapnięcia na wszystkich zasobach.
+
+## Czego będę potrzebować? {#what-will-i-need}
+
+Jeśli nie czytano jeszcze przewodnika [Implementing C2C: Setting Up](/pl/camera-to-cloud/implementing-c2c-setting-up), rzuć na niego okiem, zanim przejdziesz dalej!
+
+Będziesz potrzebować tokenu `access_token` otrzymanego podczas wykonywania kroków z przewodnika po uwierzytelnianiu i autoryzacji urządzenia sprzętowego lub aplikacji C2C.
+
+## Wymagania dotyczące kodu czasowego {#timecode-requirements}
+
+Aby dopasować zdarzenia logowania w czasie rzeczywistym do zasobów, oczekujemy, że zarówno rejestrowany zasób, jak i urządzenie używane do logowania będą [zsynchronizowane metodą jam-sync lub gen-lock](https://www.bhphotovideo.com/explora/video/tips-and-solutions/timecode-versus-sync-how-they-differ-and-why-it-matters). Zarówno urządzenie nagrywające, jak i urządzenie logujące będą wówczas odpowiedzialne za wysyłanie kodu czasowego do naszego backendu, gdzie przeprowadzimy synchronizację kodu czasowego, aby dopasować zdarzenie logowania do właściwej klatki.
+
+## Konfigurowanie wejść {#setting-up-your-input-configurations}
+
+Logowanie w czasie rzeczywistym opiera się na nowym pojęciu w modelu danych: wejściach (Inputs). Wejście reprezentuje fizyczny przycisk na urządzeniu, który można skonfigurować do wysyłania danych do Frame.io. Najpierw musisz zdecydować, ile przycisków będzie mogło wykonywać tego typu operacje, a następnie przypisać każdemu z nich indeks, zaczynając od 0. Indeks ten będzie służył do identyfikacji naciśniętego przycisku, gdy zdarzenie zostanie wysłane na nasze serwery. Wejścia należą bezpośrednio do kanałów, więc każda wiadomość o naciśnięciu przycisku musi być skierowana do endpointu konkretnego kanału. Więcej informacji o kanałach znajdziesz w \[przewodniku po zarządzaniu kanałami\].
+
+Konfiguracja działania poszczególnych przycisków odbywa się po stronie użytkownika w interfejsie Frame.io, dzięki czemu integracje mogą być jak najprostsze. Nie musisz zapewniać żadnych specjalnych elementów interfejsu po swojej stronie poza możliwością przypisania przyciskowi funkcji „akcji Frame.io”, jeśli Twoje przyciski, wyzwalacze itp. są konfigurowalne.
+
+Wspólnie z Tobą ustalimy następującą konfigurację dla każdego z wejść urządzenia:
+
+- Indeks: liczba całkowita indeksowana od 0, która będzie służyć do identyfikacji wejścia.
+
+- Nazwa wyświetlana: nazwa wejścia wyświetlana użytkownikowi na ekranie konfiguracji w Frame.io.
+
+- Obsługiwane akcje: obecnie jedynym typem akcji jest „pojedyncze naciśnięcie”, ale w przyszłości możemy dopuścić dodatkowe typy akcji, takie jak „długie naciśnięcie” czy „podwójne naciśnięcie”, aby każde wejście mogło obsługiwać wiele akcji o różnym znaczeniu.
+
+- Kolor przycisku: jeśli Twój przycisk ma przypisany kolor, możemy go wyświetlić, aby ułatwić użytkownikom orientację podczas konfigurowania ustawień wejść urządzenia.
+
+- Domyślny typ zdarzenia: typ zdarzenia generowanego domyślnie przez to wejście:
+
+  - Komentarz: to wejście generuje komentarz
+  - Status: to wejście aktualizuje status zasobu
+
+- Domyślny tekst komentarza: domyślny tekst używany w komentarzach generowanych przez to wejście
+
+- Domyślny status: domyślny status, który zostanie nadany zasobom, gdy to wejście jest używane do zmiany statusu. Możliwe wartości:
+
+  - `in_progress`
+  - `needs_review`
+  - `approved`
+
+Dostarczając te informacje z wyprzedzeniem, ograniczamy do minimum wymagania wobec samego urządzenia.
+
+## Wysyłanie zdarzenia logowania w czasie rzeczywistym {#sending-a-real-time-logging-event}
+
+Zdarzenia logowania w czasie rzeczywistym można wysyłać za pomocą następującego wywołania
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/channels/{channel_id}/inputs/{input_index}/trigger \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "action_type": "single_press",
+            "offset": 0,
+            "start": {
+                "smpte_timecode": "01:00:00:00",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            },
+            "duration": {
+                "smpte_timecode": "00:00:00:01",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            }
+       }
+__JSON__
+} | python -m json.tool
+```
+
+W przypadku powodzenia otrzymasz kod `204` z pustym ładunkiem.
+
+**Parametry URL**
+
+- `channel_id`: UUID kanału, w którym zarejestrowano to wejście. Ten identyfikator zostanie otrzymany w wywołaniu tworzenia kanału lub z [endpointu identity](/pl/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information).
+- `input_index`: indeks wejścia wykonującego wywołanie
+
+**Treść JSON**
+
+- `action_type`: typ akcji do wykonania. Obecnie jedyną obsługiwaną akcją jest `single_press`.
+
+- `offset`: przesunięcie od początku zasobu, przy którym ma zostać zalogowane zdarzenie.
+
+- `start`: czas rozpoczęcia, wyrażony jako [kod czasowy SMPTE](https://workflow.frame.io/guide/timecode) + liczba klatek na sekundę z momentu wyzwolenia wejścia.
+
+  - `smpte_timecode`: kod czasowy w postaci ciągu SMPTE.
+
+  - `rate`: liczba klatek na sekundę strumienia kodu czasowego.
+
+    - `playback`: szybkość odtwarzania dla danej liczby klatek na sekundę, wyrażona jako para `[numerator, denominator]` w tablicy. Opcjonalnie to pole akceptuje również ułamki w formacie tekstowym, `"numerator/denominator"`. Wartości klatek NTSC, takie jak 23,98, należy wysyłać jako w pełni określoną wartość wymierną: \[`24000, 1001]`.
+    - `ntsc`: standard NTSC kodu czasowego. Może mieć wartość “`non_drop"` lub `null`. Jeśli `null`, `playback` musi reprezentować wartość całkowitą, np. `[24, 1]`. Jeśli `"non_drop"`, `playback` musi reprezentować prawidłową liczbę klatek NTSC, np. `[24000, 1001]`.
+
+- `duration`: czas trwania zdarzenia, wyrażony jako [kod czasowy SMPTE](https://workflow.frame.io/guide/timecode) + liczba klatek na sekundę z momentu wyzwolenia wejścia. Ma taką samą definicję obiektu jak `start`. W przypadku zdarzeń `single_press` musi wynosić dokładnie 1 klatkę (`"01:00:00:00"`).
+
+## Wymagania dotyczące niezawodności {#reliability-requirements}
+
+Wyzwalacze przesyłania w czasie rzeczywistym muszą stosować te same [wytyczne dotyczące niezawodności](/pl/camera-to-cloud/how-to-advanced-uploads#uploading-reliably) co przesyłanie i respektować [stan wstrzymania urządzenia](/pl/camera-to-cloud/how-to-advanced-uploads#offset---handling-paused-devices).
+
+## Co dalej {#next-up}
+
+Jeśli jeszcze tego nie zrobiono, zachęcamy do kontaktu z naszym zespołem, a następnie do przejścia do kolejnego przewodnika. Czekamy na wiadomość od Ciebie!

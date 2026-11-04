@@ -1,0 +1,134 @@
+---
+title: "Mit Audit-Logs arbeiten"
+---
+
+## Überblick {#overview}
+
+Frame.io unterstützt und pflegt Audit-Logs für die überwiegende Mehrheit der Aktivitäten in seinen Anwendungen. Dazu gehören sowohl grundlegende CRUD-Vorgänge an Kernressourcen als auch einige spezielle Abstraktionen (z. B. `AssetVersioned`).
+
+<Warning>
+
+**Audit-Logs werden nach 30 Tagen gekürzt**
+
+Frame.io-Audit-Logs sind über die API für ein rollierendes Zeitfenster von 30 Tagen verfügbar und werden danach in einen Cold Storage verschoben. Wenn Sie also einen langen Verlauf von Frame.io-Ereignissen aufbewahren möchten, stellen Sie bitte sicher, dass Sie historische Logdaten unabhängig speichern.
+
+</Warning>
+
+### Geltungsbereich und Berechtigungen {#scope-and-permissions}
+
+Nur Account-Admins können auf die Audit-Logs eines Accounts zugreifen, und alle Aufrufe des Audit-Logs-Endpunkts müssen wie folgt auf eine `account_id` beschränkt sein:
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### Antworten {#responses}
+
+Alle Audit-Log-Antworten haben ein ähnliches Format:
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**Vergessen Sie die Paginierung nicht!**
+
+Audit-Log-Antwortdaten können recht umfangreich sein, machen Sie sich also unbedingt mit der [Paginierung](/de/platform/v2/key-concepts#pagination) vertraut!
+
+</Info>
+
+## Filter {#filters}
+
+Audit-Logs unterstützen eine Vielzahl von Filtern, einschließlich Datumsbereichen. Anders als bei den [Such](/de/platform/v2/search-for-assets)-Endpunkten von Frame.io können Filter nur als `GET`-Query-String-Parameter gesendet werden.
+
+Alle Filter folgen derselben Formatierung:
+
+### GET + Query-String {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**Ein Wert pro Filtertyp**
+
+Derzeit unterstützen Audit-Logs einen Wert pro Filtertyp. Wenn Sie zwei Filter desselben Typs angeben (z. B. `filter[action]=ActionOne&filter[action]=ActionTwo`), hat der zweite Filter Vorrang.
+
+</Info>
+
+### Wichtige Filtertypen {#key-filter-types}
+
+Die wichtigsten Filtertypen zum Eingrenzen und Durchsuchen von Audit-Logs sind:
+
+| Filtertyp | Beschreibung | Beispielwerte |
+| --- | --- | --- |
+| `item_type` | Filtert nach allen Ressourcen eines einzelnen Typs. | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Filtert nach einer einzelnen, bestimmten Ressource, z. B. einem Asset oder einer Presentation. | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | Filtert nach einer einzelnen Aktion, die in der Regel mit einem `item_type` verknüpft ist | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | Filtert nach der ID eines bestimmten Users (Akteurs). | *&lt;user-id>* |
+| `team_id` | Filtert nach Aktivitäten, die mit einem einzelnen Team verknüpft sind. Dieser Filter ist nur bei Accounts mit mehreren Teams sinnvoll. | *&lt;team-id>* |
+| `inserted_at` | Filtert nach Audit-Ereignissen vor oder nach einem bestimmten Zeitpunkt. Muss im ISO-8601-Format in UTC angegeben werden. | *2022-08-25T00:00:00Z* |
+
+### Elementtypen und Aktionen {#item-types-and-actions}
+
+| Ressource | Aktionen |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## Filterbeispiele {#filter-examples}
+
+Alle Filter folgen einem ähnlichen Format, wie oben beschrieben. Nachfolgend finden Sie einige Beispiele für bestimmte Anwendungsfälle, die Ihnen den Einstieg erleichtern.
+
+| Szenario | Query-String |
+| --- | --- |
+| Von einem einzelnen User ausgeführte Aktionen. | `?filter[actor_id]=<user-id>` |
+| Alle Aktivitäten zu einer bestimmten Presentation. | `?filter[item_id]=<presentation-id>` |
+| Von einem User hinterlassene Kommentare. | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| Alle Review-Link-Aktivitäten in einem Team. | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## Datumsbereiche {#date-ranges}
+
+Datumsbereiche sind ein etwas spezieller Fall, da sowohl der `value` des `inserted_at`-Zeitpunkts als auch die `op`eration angegeben werden müssen, die auf diesen Zeitpunkt angewendet werden soll.
+
+Dementsprechend haben Abfragen mit Datumsbereich immer zwei Filterelemente, die jeweils neben einem `[inserted_at]`-Parameter verschachtelt sind.
+
+Unterstützte Operationen sind:
+
+- **gt**: größer als
+- **gte**: größer als oder gleich
+- **lt**: kleiner als
+- **lte**: kleiner als oder gleich
+
+### Beispiele für Datumsbereiche {#date-range-examples}
+
+| Szenario | Query-String |
+| --- | --- |
+| Alle Audit-Log-Einträge ab einem Datum. | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| Alle Assets, die ein bestimmter User bis zu einem Datum hochgeladen hat. | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

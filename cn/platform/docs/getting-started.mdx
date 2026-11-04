@@ -1,0 +1,208 @@
+---
+title: "入门指南"
+sidebarTitle: "入门"
+---
+
+## Adobe Developer Console {#adobe-developer-console}
+
+使用 Adobe API 的第一步是在 Adobe Developer Console 中创建一个**项目**。Developer Console 中的项目对应于您为使用 Frame.io Developer API 而构建的应用程序。它与 Frame.io 中的项目是不同的概念。
+
+<CardGroup cols={2}>
+
+<Card title="Adobe Developer Console" icon="gear" iconType="solid" href="https://developer.adobe.com/developer-console/" />
+
+<Card title="项目指南" icon="folders" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/projects/" />
+
+</CardGroup>
+
+在 Developer Console 中创建项目后，将 Frame.io API 添加到该项目中。
+
+## Frame.io V4 Developer API 有哪些新功能？ {#what’s-new-in-the-frame-io-v4-developer-api}
+
+正如 Frame.io 应用程序在第 4 版中经历了彻底变革一样，V4 API 也从头开始进行了重新设计。尽管一些关键概念与旧版本相似，但许多概念已被替换或重新设计，以支持更强大的协作工作流和集成。推出全新的 API 也让我们有机会大幅简化运营，并优先支持重要的客户工作流。
+
+<Info>
+
+Frame.io V4 与旧版本的比较请参见[此处](https://help.frame.io/en/articles/9084073-frame-io-v4-legacy-feature-comparison)。
+
+</Info>
+
+在 V4 API 中，部分资源（例如工作区，在旧版 Frame.io 中称为团队）已被重命名，以与 Frame.io 第 4 版保持一致；而其他资源（例如旧版中的资产）则被重命名为具体的存储实体（文件、文件夹和版本堆栈），以减少开发者的困惑。还有一些资源（例如自定义字段和分享）则是全新的。在其他重大变更中，我们大幅精简了资源请求默认返回的数据量，重命名了响应中的部分属性名称，使其在整个 API 范围内更加准确和一致，并改用了一种新的基于游标的分页机制。因此，需要注意的是，除 Camera to Cloud (C2C) API 外，与旧版 API 集成的客户端均不兼容 V4 API。
+
+此外，部分功能仍在开发中，预计会根据真实的客户用例和反馈快速推出并不断演进，例如创建自定义操作和版本堆栈的功能。如果某个在旧版 API 中提供的功能似乎缺失了，很可能已有替代方案或即将推出，但我们也很希望听到您的反馈。
+
+在深入了解 V4 API 之前，最好先理解 Frame.io 第 4 版应用程序中的核心概念。[Frame.io V4 知识库](https://help.frame.io/en/)是一个很好的起点。账户、用户、工作区、项目、集合、分享和自定义字段（元数据）等概念在 V4 API 中被建模为不同的资源，了解它们在应用程序中的关系和功能，将有助于理解它们在 V4 API 中的工作方式。
+
+## API 概述 {#api-overview}
+
+Frame.io V4 API 遵循 RESTful 架构原则设计，结合使用标准 HTTP 方法和响应代码以及唯一的、特定于资源的 URL。Frame.io 为 V4 API 发布了 [OpenAPI 3.0 规范](https://api.frame.io/v4/openapi.json)，其中提供了有关端点、请求参数和响应的详细信息。各种第三方代码生成工具都可以使用该 OpenAPI 规范，以加速客户端应用程序的开发。
+
+### URL 和路径约定 {#url-and-path-conventions}
+
+OpenAPI 规范中发布的 URL 路径通常反映资源的所有权和包含关系。因此，部分请求参数（例如账户 ID、文件夹 ID 等）会嵌入在资源路径中。虽然这些路径旨在易于预测和理解，但 API 请求返回的某些 URL（例如预签名上传 URL 或显示链接）的结构可能会发生变化，客户端应用程序绝不应直接拼接这些 URL。
+
+### 请求查询参数 {#request-query-parameters}
+
+用于控制分页行为以及在响应对象中可选包含相关资源的请求参数，被定义为一组标准查询参数：`include`、`page_size`、`include_total_count`。部分请求可能还支持特定于该资源或操作的其他查询参数。
+
+```html
+GET https://api.frame.io/v4/accounts/{account_id}/folders/{folder_id}/children?&include=project&page_size=5&include_total_count=true
+```
+
+### 请求和响应负载 {#request-and-response-payloads}
+
+请求和响应负载均由 JSON 对象组成，因此 HTTP POST、PUT 或 PATCH 请求的 content-type 标头必须指定 `application/json` 媒体类型。创建或更新资源时，请求的 `data` 属性必须包含资源对象，所创建或更新资源的属性都包含在该对象中。同样，包含资源的成功响应也会在响应的 `data` 属性中提供这些资源。
+
+### 分页 {#pagination}
+
+可能返回大量资源对象的响应（例如文件夹或评论列表）会进行分页，以便在结果集变大时降低请求延迟。这意味着请求的响应可能只包含一"页"结果。如上所述，客户端在发出请求时可以通过 `page_size` 查询参数选择特定的页面大小，最多 100 个元素。如果未指定，页面大小默认为 50 个元素。V4 API 使用一种称为*基于游标的分页*的分页形式，并在响应对象的 `links` 属性中包含一个相对链接（参见下面的示例），该链接在 `after` 查询参数中包含一个不透明的游标字符串（客户端不应尝试自行构造此字符串），客户端可以通过发出后续请求来获取下一页结果（参见下面的示例响应）。目前，V4 API 仅支持单向分页。
+
+```json
+{
+    "data": [
+        {
+            "created_at": "2024-10-02T00:22:44.887775Z",
+            "creator_id": "8ea72912-d40d-4b88-8d31-3762e055a2aa",
+            "file_size": 102432,
+            "id": "df171f3e-c95f-4454-9071-825cd924b572",
+            "media_type": "application/pdf",
+            "name": "sample.pdf",
+            "parent_id": "e183c7ba-07d9-425a-9467-ebdf0223d9ce",
+            "project": {
+                "created_at": "2024-08-21T17:45:41.881596Z",
+                "description": "For demonstration purposes",
+                "id": "976dd413-a92b-4af6-b465-98aded0174a8",
+                "name": "Demo Project",
+                "owner_id": "8ea72912-d40d-4b88-8d31-3762e055a2aa",
+                "root_folder_id": "e183c7ba-07d9-425a-9467-ebdf0223d9ce",
+                "storage": 20881946,
+                "updated_at": "2024-10-02T00:22:47.168489Z",
+                "workspace_id": "378fcbf7-6f88-4224-8139-6a743ed940b2"
+            },
+            "project_id": "976dd413-a92b-4af6-b465-98aded0174a8",
+            "status": "created",
+            "type": "file",
+            "updated_at": "2024-10-02T00:22:44.927993Z"
+        }
+    ],
+    "links": {
+        "next": "/v4/accounts/6f70f1bd-7e89-4a7e-b4d3-7e576585a181/folders/e183c7ba-07d9-425a-9467-ebdf0223d9ce/children?after=g3QAAAACZAAGb2Zmc2V0YQVkAAR0eXBlZAANb2Zmc2V0X2N1cnNvcg%3D%3D"
+    },
+    "total_count": 21
+}
+```
+
+### 错误 {#errors}
+
+发生错误时，响应对象中的 `errors` 属性将包含一个由一个或多个错误对象组成的数组，提供有关所发生错误的详细信息。目前，V4 API 不支持批量操作，因此不存在客户端必须同时处理部分成功和错误的情况。
+
+```json
+{
+    "errors": [
+        {
+            "detail": "Unexpected field: foo",
+            "source": {
+                "pointer": "/data/foo"
+            },
+            "title": "Invalid value"
+        }
+    ]
+}
+```
+
+下表列出了 V4 API 使用的常见状态码。
+
+| 状态码 | **状态** | 描述 |
+| --- | --- | --- |
+| 200 | OK | 请求成功。 |
+| 201 | Created | 资源已创建。 |
+| 204 | No Content | 资源已删除。无响应负载。 |
+| 400 | Bad Request | 请求无效，通常是由于参数或负载格式错误或缺失。 |
+| 401 | Unauthorized | Authorization 令牌缺失或无效。 |
+| 403 | Forbidden | Authorization 令牌没有执行此请求的足够权限。 |
+| 404 | Not Found | 请求的资源不存在。 |
+| 422 | Unprocessable Entity | 请求负载和/或参数格式正确，但在其他方面无效，导致请求无法执行（基本上可与 400 Bad Request 互换）。 |
+| 429 | Too Many Requests | 请求已超出该账户的 API 速率限制。有关详细信息，请参阅入门指南中的"速率限制"部分。 |
+| 5xx | Server Errors | 我们的服务器报告了意外错误。客户端应至少等待 30 秒后再重试，任何自动重试都应有次数限制，并在连续请求中采用指数退避的同时加入随机间隔。 |
+
+### 身份验证和授权 {#authentication-and-authorization}
+
+V4 API 依赖 OAuth 2.0 和 [Adobe Identity Management Server (IMS)](https://experienceleague.adobe.com/en/docs/commerce-admin/start/admin/ims/adobe-ims-integration-overview) 来对用户进行身份验证（AuthN），并代表该用户生成访问令牌。每个 API 请求都必须通过 HTTP Authorization 标头提供访问令牌（即 Bearer 令牌身份验证）。
+
+<Note>
+
+IMS 生成的[令牌作用域](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#scopes)是静态的，而授权（AuthZ）——即决定用户被允许执行哪些操作（以及 API 可以代表该用户执行哪些操作）——由用户在 Frame.io 中被授予的角色和权限决定。有关生成和请求访问令牌的更多详细信息，请参阅"Developer Console 入门"和"身份验证设置"（位于"使用 Postman 开始开发"下）部分。
+
+</Note>
+
+### 版本和向后兼容性 {#versions-and-backward-compatibility}
+
+Frame.io V4 API *不*向后兼容早期版本的 Frame.io API，并且由于 V4 的概念和数据模型发生了重大变化，通常无法用于访问或更新旧版账户中的资源。因此，与 V4 API 关联的 URI 都包含 `/v4` 路径前缀。不过，V4 API 仍在快速演进，新功能偶尔可能需要引入破坏性变更。更常见的情况是，Frame.io 会发布一些在一段时间内被视为实验性的 API *新增内容*，以便我们接收并响应客户反馈和使用指标。我们认识到，对于管理具有高可用性要求的生产级集成的客户来说，向后兼容性是一个主要关注点，因此我们正在设计 V4 API，使其通过自定义 HTTP 标头支持额外的版本控制层级，从而允许客户端选择使用实验性端点、避免破坏性变更，并在 V4 命名空间内提供向后兼容性保证。更多详细信息即将公布，但目前可以放心地认为 V4 API 的初始版本是稳定的，并且在相当长的一段时间内我们都不会考虑引入破坏性变更。
+
+### 速率限制 {#rate-limiting}
+
+所有 V4 API 调用都有速率限制，每个 API 资源和操作都配置了各自的限制，范围从每分钟 10 个请求到每秒 100 个请求不等。目前，每项限制都是按*用户*执行的，但相关策略和限制本身可能会发生变化。
+
+V4 API 使用一种渐进式速率限制的"[漏桶](https://wikipedia.org/wiki/Leaky_bucket)"算法，限额会在其分配的时间窗口内逐步恢复。换句话说，不存在某个特定资源的限额在硬性截止点之后才恢复的概念（即"固定窗口"和"滑动窗口"执行策略）。相反，剩余限额会根据资源的限制和时间窗口以相应的速度持续恢复。超出特定端点速率限制的请求将失败，并返回 429 HTTP 错误。
+
+我们推荐的 429 错误应对策略通常称为"指数退避"。
+简而言之：
+
+- 收到 `429` 时，暂停一段时间（至少一秒）后再重试请求
+- 如果再次收到 `429`，则以指数方式增加（或至少加倍）之前的等待时间，直到恢复正常
+
+为了确定适用于特定请求的速率限制，客户端可以检查响应中返回的以下 HTTP 标头：
+
+| 标头 | 值描述 |
+| --- | --- |
+| `x-ratelimit-limit` | 此资源路径的速率限制，以请求数计。 |
+| `x-ratelimit-remaining` | 当前时间窗口内剩余的请求数。 |
+| `x-ratelimit-window` | 此资源路径限制的时间窗口，以毫秒（ms）计。 |
+
+## API 详情 {#api-details}
+
+V4 API 的权威文档是我们的 [API 参考指南](/cn/platform/api-reference/account-permissions/account-user-roles-update)，但在发出第一个请求之前，了解 V4 API 所建模的资源层级结构会很有帮助。
+
+### 资源层级结构 {#resource-hierarchy}
+
+[账户](https://help.frame.io/en/collections/8779087-account-settings)通常与一个组织相关联，是决定订阅计划、内容所有权、用户角色/权限以及工作区组织的基础资源。因此，V4 API 中几乎所有端点的 URL 路径都包含一个前缀，用于标识资源所在的账户。
+
+工作区（在旧版 Frame.io 中称为团队）和[项目](https://help.frame.io/en/articles/9101006-project-settings)用于组织内容和用户，包括谁有权访问哪些内容。
+
+Frame.io 中内容资源的基本层级结构如下：
+
+<CardGroup cols={2}>
+
+<Card title="资源层级结构" icon="sitemap" iconType="solid">
+
+**账户 → 工作区 → 项目 → 文件夹 → 文件夹 / 版本堆栈 / 文件**
+
+</Card>
+
+</CardGroup>
+
+上传到 Frame.io 的每个资产最终都表示为一个[文件](https://help.frame.io/en/articles/9436564-supported-file-types-on-frame-io)，而[文件夹](https://help.frame.io/en/articles/9101044-creating-folders)和[版本堆栈](https://help.frame.io/en/articles/9101068-version-stacking)则是充当容器的存储资源，为支持版本化资产的层级存储模型奠定了基础。大多数用户已经熟悉 Frame.io 中文件夹的基本概念：它只是其他存储资源（建模为其 `children`）的无序容器，代表文件夹树中的一个节点。每个项目都有一个唯一的根文件夹（由 `root_folder_id` 键标识），作为文件夹树的根，项目的所有资产都位于该树中。
+
+版本堆栈是文件的有序容器。其排序严格为线性，并决定每个子项的版本号，但客户端可以根据需要对版本堆栈中的文件重新排序。在任何给定时间，一个文件始终是恰好一个文件夹*或*版本堆栈的子项（包含在其中）。同样，文件夹或版本堆栈始终是恰好一个文件夹的子项（项目的根文件夹除外）。
+
+有关对存储在 Frame.io 中的文件和文件夹执行基本 CRUD 操作的更多详细信息，请参阅 [API 参考指南](https://developer.frame.io/platform/api/current)。目前，V4 API 仅在列出文件夹内容时支持版本堆栈，但用于创建和更新版本堆栈的端点即将推出。
+
+## SDK {#sdks}
+
+我们提供 TypeScript 和 Python SDK。您可以使用以下命令安装它们。文档的"SDK 参考"部分提供了 [Python](/cn/platform/docs/sdk-reference/python-sdk-reference) 和 [TypeScript](/cn/platform/docs/sdk-reference/type-script-sdk-reference) SDK 的完整参考。
+
+### TypeScript {#typescript}
+
+```bash
+npm i -s frameio
+```
+
+在 [npm](https://www.npmjs.com/package/frameio) 上查看
+
+### Python {#python}
+
+```bash
+pip install frameio
+```
+
+在 [PyPi](https://pypi.org/project/frameio/) 上查看

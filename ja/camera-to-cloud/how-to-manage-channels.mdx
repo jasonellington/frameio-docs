@@ -1,0 +1,182 @@
+---
+title: "ハウツー: チャンネルの管理"
+sidebarTitle: "チャンネルの管理"
+---
+
+エコシステム内に、インターネットに接続して Frame.io と直接通信することはできないものの、C2C 対応デバイスとは通信できるデバイスがある場合はどうなるでしょうか。統合によっては、そのようなデバイスに代わってアクションを実行したい場合があります。たとえば、マイクに代わってアップロードを行うサウンドレコーダーや、アタッチメントのボタンに代わってリアルタイムコメントを行うカメラなどです。
+
+こうした要件は、デバイスのチャンネルを理解することで実現できます。統合でサブデバイスを管理しない場合は、このガイドを読み飛ばしてかまいません。
+
+## 必要なもの {#what-will-i-need}
+
+[C2C の実装: セットアップ](/ja/camera-to-cloud/implementing-c2c-setting-up)ガイドをまだお読みでない場合は、先に進む前にざっと目を通してください。
+
+[デバイスの認証と認可のガイド](/ja/platform/v2/how-to-authorization-management-hardware)で受け取った `access_token` が必要です。
+
+また、プライマリデバイスを通じて Frame.io に接続できるようにするサブデバイスのデバイスモデル ID のリストも必要です。
+
+## チャンネルとは {#what-is-a-channel}
+
+チャンネルについては、[アーキテクチャの概要](/ja/camera-to-cloud/integration-architecture)で簡単に説明しています。すべてのプロジェクトデバイスには少なくとも 1 つのチャンネルがあり、これまでは両者をほぼ同一のものとして扱ってきましたが、ここではそれぞれの概念を区別する必要があります。詳しく見ていきましょう。
+
+プロジェクトデバイスは、frame.io と直接通信する機能を持っています。チャンネルは、プロジェクトデバイスが送信するためのデータを収集します。ほとんどの場合、ProjectDevice と最初のチャンネルは同一のものです。カメラを例に考えてみましょう。概念的には、プロジェクトデバイスは Frame.io にデータを直接送信するカメラのネットワークカードを表し、チャンネルはネットワークカード(プロジェクトデバイス)を通じて送信するビデオデータを収集するカメラの CMOS センサーを表します。
+
+最も重要な点は、プロジェクトデバイスは OauthApp を通じて Frame で認証されますが、チャンネルは認証されないということです。チャンネルは親のプロジェクトデバイスの認証を使用します。
+
+私たちのモデルでは、1 つのプロジェクトデバイスが複数のチャンネルを持つことができ、それらのチャンネルは物理デバイスの一部である場合もそうでない場合もあります。チャンネルは、TCP/IP、Bluetooth、SDI などを介してプライマリデバイスと通信するハードウェアである場合もあります。プロジェクトデバイスは、このデータを frame.io に送信するルーターとして機能します。チャンネルからプロジェクトデバイスへデータをどのように提供するかは、インテグレーターである皆様次第です。
+
+プロジェクトデバイスとして Frame.io に接続されたサウンドレコーダーがあり、多数のマイクがそれぞれ個別のチャンネルとして接続されている場合を想像してください。レコーダーはミックスファイルをプライマリチャンネルで送信し、個々のマイクのトラックをサブデバイスのチャンネルで送信できます。チャンネルをどのように使用し、それぞれが何を表すかは皆様次第です。チャンネルは認証されないため、デバイスはいつでもチャンネルを追加または削除できます。
+
+チャンネルは独立した物理的なサブデバイスに属する場合があるため、各チャンネルには、他のハードウェアやソフトウェアの統合と同様にデバイスモデルが関連付けられます。これにより、frame.io はホストデバイスとは異なる場合があるサブデバイスのモデルを表示でき、統合ではサブデバイスごとに個別に動作を定義できます。特定の統合にチャンネルとして追加できるデバイスモデルは、事前に定義しておく必要があります。
+
+C2C デバイスに新しいチャンネルを接続したい理由には、次のようなものがあります。
+
+- チャンネルとデバイスモデルの組み合わせに応じて、統合に複数の設定を持たせることができます。これには、アセットの固定フォルダー構造、トークン化されたフォルダーパス、ファイル拡張子によるルーティングなどが含まれます。たとえば、異なるチャンネルを使って編集用プロキシや Camera Raw をアップロードする DIT ステーションを想像してください。
+- frame.io のユーザーがサブデバイスを確認できるようになります。
+- チャンネルには人による入力、つまりボタンを設定でき、リアルタイムのロギング機能に使用できます。
+
+それでは、C2C API でチャンネルを管理する方法をもう少し詳しく見ていきましょう。
+
+## チャンネルの一覧表示 {#listing-channels}
+
+既存のチャンネルの一覧は、[identity エンドポイント](/ja/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information)の channels フィールドで取得できます。レスポンスペイロードの `"channels"` フィールドを見てみましょう。
+
+```json
+{
+    "_type": "project_device",
+    ...
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+            "external_index": 0,
+            "id": "5919e9bc-7fc2-4629-97e5-852ce27cfa1a",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Host Device",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "online",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        },
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+            "external_index": 0,
+            "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Client Device 01234",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "offline",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        }
+    ],
+    ...
+    "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+    ...
+    "id": "bf30fc66-f126-4336-bdfc-75d3e659b95am"
+}
+```
+
+最初のチャンネルの `device_id` が、プロジェクトデバイス全体の `device_id` と一致していることに注目してください。
+
+## チャンネルの接続 {#connecting-a-channel}
+
+次のリクエストで新しいチャンネルを接続できます。
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/connect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'{
+            "client_id": [client_id],
+            "device_model_id": [device_model_id]
+        }
+__JSON__
+    | python -m json.tool
+```
+
+次のレスポンスが返されます。
+
+```json
+{
+   "_type": "project_device_channel",
+   "actor_id": null,
+   "asset_type": "video",
+   "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+   "external_index": 0,
+   "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+   "inserted_at": "2023-07-14T19:11:43.217565Z",
+   "name": "Test Client Device 01234",
+   "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+   "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+   "real_time_logging_capable": true,
+   "status": "offline",
+   "updated_at": "2023-07-14T19:11:43.217565Z"
+}
+```
+
+このレスポンスは、[identity](/ja/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) エンドポイントの channels フィールドと同じ内容です。
+
+一意性を決定するのは client_id であるため、シリアル番号のような安定した値でなければなりません。
+device_model_id は、このチャンネルが表すハードウェアデバイスの基本的な種類(特定のモデルのマイクなど)を Frame.io に伝えるものです。これらはパートナーマネージャーによって設定されます。
+
+チャンネルがすでに宣言されている場合は、エラータイトル Already Exists を伴う 409 エラーが返されます。
+
+以前に接続されてから切断されたチャンネルと同じ識別子でチャンネルを作成すると、そのチャンネルに対する以前のユーザー設定がすべて復元されます。
+
+## チャンネルの切断 {#disconnecting-a-channel}
+
+チャンネルは、Frame.io が定義した id によって切断します。client_id や device_model_id では切断しません。
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/:channel_id/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+これにより、空のペイロードを伴う `204` レスポンスが返されます。
+
+存在しないチャンネルを削除しようとすると、404 が返されます。親デバイスの最初のプライマリチャンネルは切断できません。
+
+## すべてのサブデバイスチャンネルの切断 {#disconnecting-all-sub-device-channels}
+
+次の呼び出しで、プロジェクトデバイス上の現在のサブデバイスチャンネルをすべて切断できます。
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+これにより、空のペイロードを伴う `204` レスポンスが返されます。この呼び出しは、プロジェクトデバイスにクライアントデバイスのチャンネルがない場合でも、常に成功します。
+
+これで、[identity](/ja/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information) エンドポイントを使用してすべてのチャンネルを一覧表示できます。残っているのはホストデバイスのプライマリチャンネルだけです。
+
+## チャンネル管理のフロー {#channel-management-flow}
+
+望ましくないタイミングで電源の再投入が発生した結果、データの整合性に問題が生じるのを避けるため、ProjectDevice がチャンネルの状態を内部で管理することは推奨しません。たとえば、次のような場合です。
+
+- Channel Connect 呼び出しが処理された後、返された `id` をデータストアにコミットする前に電源が切れた場合
+- デバイスの電源が切れている間に、サブデバイスがホストデバイスに接続または取り外された場合
+
+代わりに、すべてのホストデバイスが最初の起動時に次の手順を実行することを推奨します。
+
+- Bulk Channel Disconnect エンドポイントを呼び出して、既存のサブデバイスチャンネルをすべてクリアする
+- 現在接続されている各サブデバイスについて Channel Connect エンドポイントを呼び出す
+  初期セットアップ後、ホストデバイスはサブデバイスが切断されるたびに Channel Disconnect エンドポイントを呼び出し、新しいサブデバイスが追加されるたびに Channel Connect エンドポイントを呼び出さなければなりません(MUST)。ホストデバイスは、新しいデバイスが接続されるたびにサブデバイスをクリアしてはなりません(MAY NOT)。
+
+ホストデバイスは、デバイスを管理する際に劣悪なネットワーク状況に正しく対処し、ネットワークへの接続が再確立された時点で、現在接続されているデバイスを適切に追加または削除しなければなりません(MUST)。
+
+## 次のステップ {#next-up}
+
+まだお済みでない場合は私たちのチームにご連絡のうえ、次のガイドへお進みください。ご連絡をお待ちしています!

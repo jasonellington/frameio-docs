@@ -1,0 +1,214 @@
+---
+title: "Pojęcia i podstawy"
+---
+
+## Zrozumienie kluczowych pojęć {#understanding-core-concepts}
+
+API C2C opiera się na kilku kluczowych technologiach, które warto zrozumieć przed rozpoczęciem projektu integracji. Przejrzyj nagłówki tego artykułu — jeśli któreś pojęcia są Ci nieznane, ten przewodnik pomoże uzupełnić te luki w wiedzy. Jeśli napotkasz trudności z konkretnymi zagadnieniami, nasz zespół chętnie udostępni dodatkowe materiały i wsparcie.
+
+## Co musisz wiedzieć {#what-you-need-to-know}
+
+Aby pomyślnie zintegrować się z API C2C, potrzebujesz podstawowej wiedzy z zakresu:
+
+<CardGroup cols={3}>
+
+<Card title="Sieci" icon="network-wired" iconType="solid">
+
+Protokoły TLS/SSL, TCP/IP oraz podstawy sieci komputerowych
+
+</Card>
+
+<Card title="HTTPS" icon="globe" iconType="solid">
+
+Implementacja bezpiecznych żądań HTTPS
+
+</Card>
+
+<Card title="Uwierzytelnianie" icon="shield" iconType="solid">
+
+Metody uwierzytelniania i autoryzacji
+
+</Card>
+
+</CardGroup>
+
+## Podstawy sieci i słowniczek {#networking-basics-and-glossary}
+
+U podstaw API Frame.io umożliwia komunikację między serwerami Frame.io a Twoim urządzeniem lub aplikacją, co oznacza, że każda operacja wymaga interakcji sieciowej.
+
+Jasna komunikacja jest niezbędna w każdej relacji, także między serwerami a klientami. Tak jak w codziennych rozmowach zdarzają się nieporozumienia, podobne wyzwania pojawiają się, gdy komputery wymieniają informacje.
+
+Oprócz rozwiązywania typowych problemów komunikacyjnych musimy zapewnić bezpieczną transmisję poufnych danych. Frame.io wymaga szyfrowania całej komunikacji z serwerem, co dodaje do tego procesu niezbędne warstwy zabezpieczeń.
+
+Podczas implementacji API C2C najprawdopodobniej będziesz korzystać z bibliotek zewnętrznych do obsługi szczegółów sieciowych. Ponieważ jednak to właśnie komponenty sieciowe często generują błędy w rzeczywistych warunkach, warto rozumieć procesy zachodzące podczas interakcji z serwerami Frame.io. Oto zwięzły słowniczek najważniejszych terminów:
+
+<CardGroup cols={2}>
+
+<Card title="TCP/IP" icon="network-wired" iconType="solid">
+
+Transmission Control Protocol / Internet Protocol — ustandaryzowane komponenty i warstwy umożliwiające globalny przesył danych. Więcej informacji znajdziesz w tym [przystępnym, ogólnym materiale](https://www.freecodecamp.org/news/what-is-tcp-ip-layers-and-protocols-explained/).
+
+</Card>
+
+<Card title="TLS/SSL" icon="shield-halved" iconType="solid">
+
+Transport Layer Security / Secure Socket Layer — choć technicznie się różnią, obecnie powszechnie używa się tych nazw zamiennie. TLS jest następcą SSL, choć pierwotny skrót wciąż jest szeroko stosowany. Więcej informacji o TLS znajdziesz w [tym omówieniu](https://www.internetsociety.org/deploy360/tls/basics/).
+
+</Card>
+
+</CardGroup>
+
+### Klucze publiczne i prywatne {#public-and-private-keys}
+
+Klucz publiczny działa jak kłódka, a klucz prywatny jak pasujący do niej klucz.
+
+Wyobraź sobie taką sytuację: chcesz wysłać poufną wiadomość współpracownikowi i zapewnić jej prywatność aż do momentu doręczenia.
+
+Najpierw prosisz współpracownika, aby przesłał Ci kłódkę, do której tylko on ma klucz.
+
+Po otrzymaniu kłódki zamykasz nią pojemnik z poufną wiadomością. Każdy, kto ma kontakt z pojemnikiem, widzi kłódkę, ale tylko Twój współpracownik ma klucz pozwalający dostać się do zawartości. Kłódka jest bezużyteczna dla osób nieuprawnionych, które próbują odczytać wiadomość. Nawet Ty nie możesz jej otworzyć bez klucza.
+
+Gdy współpracownik otrzyma zabezpieczony pojemnik, po prostu używa swojego klucza, aby uzyskać dostęp do zawartości.
+
+Klucze publiczne i prywatne działają w ten sam sposób. Klucz publiczny możesz udostępniać szeroko. Odbiorcy szyfrują nim wiadomości, ale tylko posiadacz klucza prywatnego może je odszyfrować. Dopóki klucz prywatny pozostaje poufny, klucza publicznego nie da się użyć do odszyfrowania wiadomości, które za jego pomocą zaszyfrowano.
+
+Mechanizm kluczy publicznych i prywatnych stanowi podstawę działania TLS, umożliwiając stronom jawną komunikację przy jednoczesnym ustanowieniu bezpiecznych, prywatnych kanałów.
+
+### Certyfikaty {#certificates}
+
+Certyfikaty zawierają klucze publiczne i prywatne uwierzytelnione przez zaufane urzędy certyfikacji.
+
+Gdy urząd certyfikacji (Certificate Authority) weryfikuje klucz, zasadniczo poręcza za jego autentyczność. Odbiorcy klucza publicznego — na przykład klucza od Google — mogą zweryfikować to poświadczenie wydane przez uznane urzędy certyfikacji. Klucze bez takiego poświadczenia są uznawane za potencjalnie fałszywe i wywołują ostrzeżenia bezpieczeństwa.
+
+Certyfikaty Frame.io są weryfikowane przez urząd certyfikacji Amazon Root CA 1. Certyfikaty te są dostępne w różnych źródłach, w tym w bibliotece Certifi (używanej przez Mozillę i bibliotekę Python Requests).
+
+Do implementacji zalecamy [repozytorium GitHub](https://github.com/certifi/python-certifi) Certifi oraz [pakiet certyfikatów PEM](https://github.com/certifi/python-certifi/blob/master/certifi/cacert.pem) do weryfikacji żądań HTTPS kierowanych do api.frame.io.
+
+<CardGroup cols={2}>
+
+<Card title="Serwer" icon="server" iconType="solid">
+
+Komputer, który dostarcza lub przechowuje informacje dla innych komputerów. Gdy korzystasz z Frame.io w przeglądarce, przeglądarka wysyła żądanie treści do serwera Frame.io, który na nie odpowiada. Każda czynność w Frame.io wywołuje komunikację między przeglądarką a naszym serwerem, który przetwarza żądanie i zwraca odpowiednie wyniki. Przesyłając multimedia do Frame.io, wysyłasz je na nasze serwery.
+
+</Card>
+
+<Card title="Klient" icon="laptop" iconType="solid">
+
+Aplikacja kliencka żąda informacji od serwera lub wysyła do niego dane. Implementując API C2C, będziesz tworzyć klienta C2C.
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="HTTP/S" icon="globe" iconType="solid">
+
+Hypertext Transfer Protocol / Secure — działa w warstwie aplikacji modelu TCP/IP. Różnica między HTTP a HTTPS dotyczy bezpieczeństwa — HTTPS uwzględnia weryfikację TLS/SSL w komunikacji sieciowej. Protokół HTTP ewoluował przez kolejne wersje, z czasem ustanawiając nowe standardy. Wersja 1.1 pozostaje globalnym standardem i należy jej używać w komunikacji z API Frame.io.
+
+</Card>
+
+<Card title="RESTful API" icon="code" iconType="solid">
+
+REST (Representational State Transfer) to metodologia projektowania API oparta na wzorcach żądanie-odpowiedź protokołu HTTP. Termin REST często służy jako skrótowe określenie ogólnego podejścia polegającego na wykorzystaniu HTTP do interakcji między programami — w odróżnieniu od komunikacji między przeglądarką a stroną internetową — nawet jeśli API nie przestrzega ściśle zasad REST.
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="JSON" icon="file-code" iconType="solid">
+
+JavaScript Object Notation — ustandaryzowany format wymiany danych. Choć pierwotnie opracowano go dla obiektów JavaScript, stał się uniwersalnym standardem komunikacji sieciowej. API C2C zwraca odpowiedzi w postaci danych JSON.
+
+</Card>
+
+<Card title="AWS S3" icon="cloud" iconType="solid">
+
+Simple Storage Service firmy Amazon zapewnia rozwiązania do przechowywania danych w chmurze. S3 przechowuje multimedia wideo i audio Frame.io i jest miejscem docelowym przesyłania danych z integracji.
+
+</Card>
+
+</CardGroup>
+
+## Żądania HTTP/S {#http/s-requests}
+
+HTTP jest wszechobecny w przeglądaniu internetu — pojawia się na początku niemal każdego adresu strony. HTTP (Hypertext Transfer Protocol) ustanawia ustandaryzowane protokoły komunikacji między komputerami.
+
+HTTP można porównać do ustandaryzowanego systemu formularzy dla interakcji klient-serwer — podobnie jak formularze urzędowe wymagane przy składaniu wniosków o informacje lub udział w programach. Bez poprawnie wypełnionych formularzy urzędy nie mogą przetworzyć wniosków ani na nie odpowiedzieć.
+
+Żądania HTTP obsługują wszystkie interakcje z aplikacją Frame.io. W ramach API C2C typy żądań HTTP odpowiadają dostępnym możliwościom funkcjonalnym.
+
+Wyczerpujące omówienie HTTP znajdziesz w [tym artykule](https://www.freecodecamp.org/news/http-and-everything-you-need-to-know-about-it/). Zrozumienie tych podstaw jest niezbędne, zanim przejdziesz dalej. Jeśli żądania HTTP są dla Ciebie nowością, zapoznaj się z materiałami wprowadzającymi. Aby jak najlepiej się przygotować, poznaj następujące pojęcia związane z HTTP:
+
+<CardGroup cols={2}>
+
+<Card title="Elementy adresu URL" icon="link" iconType="solid">
+
+- Protokół
+- Host
+- Port
+- Zasób
+
+</Card>
+
+<Card title="Elementy HTTP" icon="list" iconType="solid">
+
+- Nagłówki
+- Content-Type/Mimetype
+- Ładunki (payloady) żądań i odpowiedzi
+- Zastosowania metod HTTP: GET, POST, PUT, DELETE itp.
+- Dane formularza
+
+</Card>
+
+</CardGroup>
+
+Choć budową żądań zwykle zajmują się biblioteki sieciowe, w razie potrzeby źródłem referencyjnym jest [RFC HTTP/1.1](https://greenbytes.de/tech/webdav/rfc2616.html).
+
+## Uwierzytelnianie i autoryzacja {#authentication-and-authorization}
+
+Omówimy te pojęcia dokładniej w dalszej części, ale ważne jest zrozumienie następujących podstawowych zasad:
+
+<CardGroup cols={2}>
+
+<Card title="Uwierzytelnianie" icon="key" iconType="solid">
+
+Uwierzytelnianie potwierdza, że żądania pochodzą z deklarowanych źródeł. Gdy logujesz się na stronach internetowych za pomocą nazwy użytkownika i hasła, uwierzytelniasz się, wykazując znajomość hasła. Uwierzytelnianie wieloskładnikowe — na przykład otrzymywanie kodów weryfikacyjnych SMS-em — to dodatkowe mechanizmy uwierzytelniania.
+
+</Card>
+
+<Card title="Autoryzacja" icon="user-shield" iconType="solid">
+
+Autoryzacja potwierdza uprawnienia do wykonywania określonych czynności. Gdy dodajesz współpracowników do projektów Frame.io lub dokumentów Google, autoryzujesz ich dostęp. Frame.io lub Google wcześniej uwierzytelniły tożsamość tych użytkowników, dzięki czemu możesz z pełnym zaufaniem autoryzować ich udział.
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="OAuth" icon="lock" iconType="solid">
+
+OAuth (Open Authorization) zapewnia ustandaryzowane ramy zarządzania autoryzacją poprzez integrację z zewnętrznymi usługami uwierzytelniania.
+
+</Card>
+
+<Card title="Zakresy" icon="list-check" iconType="solid">
+
+Zakresy (scopes) określają autoryzowane czynności dostępne dla użytkowników. Podczas łączenia urządzeń z Frame.io będziesz żądać i otrzymywać określone zakresy, które autoryzują konkretne operacje. Na przykład zakres `asset_create` pozwala tworzyć i przesyłać zasoby. Koncepcyjnie zakresy pełnią funkcję zestawów uprawnień.
+
+</Card>
+
+</CardGroup>
+
+## Następne kroki {#next-steps}
+
+Zachęcamy do kontaktu z naszym zespołem w razie jakichkolwiek pytań, a następnie do przejścia do kolejnej części przewodnika. Chętnie wesprzemy Cię w pracach nad integracją.
+
+Omówienie techniczne znajdziesz w [przewodniku po architekturze integracji](/pl/camera-to-cloud/integration-architecture).
+
+Jeśli jeszcze tego nie zrobiono, przed kontynuowaniem zapoznaj się z przewodnikiem [Implementing C2C: Setting Up](/pl/camera-to-cloud/implementing-c2c-setting-up).
+
+Będziesz potrzebować tokenu `access_token` uzyskanego podczas [procesu uwierzytelniania i autoryzacji](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization).

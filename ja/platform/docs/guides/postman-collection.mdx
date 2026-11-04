@@ -1,0 +1,497 @@
+---
+title: "Postman コレクション"
+---
+
+このガイドでは、Frame.io V4 API を使い始めるために利用できる構築済みリクエストのセットである、公式 Frame.io Developer API Postman コレクションの基本について説明します。
+
+このコレクションは V4 API のエンドポイント全体をカバーしており、安定版と試験運用版のカテゴリに分かれています。安定版エンドポイントは本番環境で使用可能です。試験運用版エンドポイントは新しく追加されたもので、機能はしますが、安定版に昇格する前にフィードバックに基づいて変更される可能性があります。
+
+## Postman の使用を開始する {#getting-started-with-postman}
+
+<Tip>
+
+このガイドは、API の認証情報を生成済みであることを前提としています。まだの場合は、まず[こちら](/ja/platform/docs/quick-start)から始めてください
+
+</Tip>
+
+<Steps>
+
+<Step title="Postman アカウントを作成してセットアップを選択する">
+
+[postman.com](http://auth.postman.com/__redirect/login) で Postman アカウントを作成し、セットアップ方法を選択します。Postman アプリは[こちら](https://www.postman.com/downloads/)からダウンロードできます。または、Web 版の Postman を使用することもできます。
+
+</Step>
+
+<Step title="Frame.io Developer API Postman コレクションをインポートする">
+
+<CardGroup cols={2}>
+
+<Card title="Frame.io Developer API コレクション" icon="terminal" iconType="solid" href="https://www.postman.com/adobe/workspace/frame-io-v4-public-api/collection/33150877-924315f2-cc62-45f5-8153-77ff2aaa9067?action=share&creator=33150877&active-environment=33150877-cffd66a8-23bd-4c50-8891-29157ead1185">
+
+こちらからフォークまたはダウンロード
+
+</Card>
+
+</CardGroup>
+
+</Step>
+
+</Steps>
+
+### 環境のセットアップ {#setting-up-your-environment}
+
+Frame.io Developer API コレクションには、多数の環境変数が定義されたデフォルトの<Tooltip tip="リクエストの送信時に参照できる変数のセットです。環境の詳細については、Postman のドキュメント **[こちら](https://learning.postman.com/docs/sending-requests/variables/managing-environments)** を参照してください">環境</Tooltip>があります。`BASE_URL` と `IMS_BASE_URL` の値は固定です。その他の環境変数は、アカウント情報に応じて設定できます。
+
+<Frame>
+
+![alt image](/images/platform/docs/guides/postman-collection/0780e30f05ff2cee570d698b9adc209f24326281b60e23968e5d78e66c5c9b43.webp)
+![alt image](/images/platform/docs/guides/postman-collection/663c863cbbec947567616faf433d79e3900e70ace3d8d9d26299ee20e204c064.webp)
+
+</Frame>
+
+以下の表は、コレクションの Default 環境と Stage 環境にある各変数の説明です。
+
+| 変数 | 説明 | 取得方法 | 環境 |
+| --- | --- | --- | --- |
+| `BASE_URL` | すべての V4 API リクエストのベース URL | 設定済み。編集しないでください | Default |
+| `IMS_BASE_URL` | Adobe IMS 認証のベース URL | 設定済み。編集しないでください | Default, Stage |
+| `IMS_CLIENT_ID` | Frame.io アプリのクライアント ID | **[Adobe Developer Console](https://developer.adobe.com/developer-console/)** の認証情報ページ | Stage |
+| `IMS_CLIENT_SECRET` | Frame.io アプリのクライアントシークレット | **[Adobe Developer Console](https://developer.adobe.com/developer-console/)** の認証情報ページ | Stage |
+| `FOLDER_ID` | アップロード先フォルダーの一意の ID | フォルダーのレスポンスオブジェクトで返されます | Default |
+| `WEBHOOK_ID` | 設定済み Webhook の一意の ID | Webhook のレスポンスオブジェクトで返されます | Default |
+| `ASSET_ID` | ファイルまたはフォルダーアセットの一意の ID | ファイルまたはフォルダーのレスポンスオブジェクトで返されます | Default |
+| `SHARE_ID` | 共有リンクの一意の ID | 共有のレスポンスオブジェクトで返されます | Default |
+
+---
+
+### 認可のセットアップ {#setting-up-authorization}
+
+<Tip>
+
+このガイドでは、OAuth 2.0 を使用して Frame.io V4 API で認証します。Server-to-Server (S2S) などのその他の認証方法については、[認証ガイド](/ja/platform/docs/guides/authentication/overview)を参照してください。
+
+</Tip>
+
+`IMS_CLIENT_ID` と `IMS_CLIENT_SECRET` の環境変数には、[Adobe Developer Console](https://developer.adobe.com/console) のプロジェクトの **Credential details** から取得した値を設定してください。
+
+<Frame>
+
+![alt image](/images/platform/docs/guides/postman-collection/8f77af2f98d46f52b5d9da85adb48ee8f383f326edc8103f291f192deb4d9dba.webp)
+
+</Frame>
+
+プロジェクトの **Credential details** セクションで、**Redirect URI** と **Redirect URL Pattern** に Postman の公開コールバックエンドポイントを設定します。
+
+**Redirect URI**
+
+```
+https://oauth/pstmn.io/v1/callback
+```
+
+**Redirect URI Pattern**
+
+```
+https://oauth\\.pstmn\\.io
+```
+
+環境変数を設定して保存したら、次は認可の設定です。左サイドバー上部の **Collections** アイコンをクリックして、コレクションブラウザーを開きます。
+
+コレクションブラウザーで、Frame.io V4 Developer API コレクションのルート(通常は **'Frame.io Developer API Collection'** の後にフォーク名が付いたもの)を選択し、**Authorization** タブを選択します。
+![alt image](/images/platform/docs/guides/postman-collection/518e800fde27188c25a4f8438a552fca3cb37a27af7a810f9a93ab959b786615.webp)
+
+OAuth の<Tooltip tip="OAuth スコープの詳細については、IMS のドキュメント **[こちら](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#scopes)** を参照してください">スコープ</Tooltip>はコレクションで事前に設定されています。環境変数を設定した状態で、**Get New Access Token** ボタンを使用して OAuth 2.0 フローを開始します。ブラウザーウィンドウが開いて認証プロセスが完了し、トークンが Postman に返されます。
+
+認可の設定を確認するには、Users フォルダー内の **`GET user details`** リクエストを選択し、**Send** をクリックします。
+
+**`200 OK`** レスポンスが返されれば、コレクションが正しく設定されていること、そして正しいアカウントで認証されていることの両方が確認できます。エラーが発生した場合は、エラーと警告の詳細について、入門ガイドの **[このセクション](/ja/platform/docs/getting-started#errors)** を参照してください。
+
+**レスポンス例**
+
+```
+{
+  "data": {
+    "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+    "email": "user_email@example.com",
+    "id": "00000000-1111-2222-3333-444444444444",
+    "name": "Name"
+  }
+}
+```
+
+---
+
+## アカウント ID を取得する {#obtaining-your-account-id}
+
+`account_id` はほとんどの V4 API エンドポイントで必須のパスパラメーターであり、他のリクエストをテストする際に必要になります。`account_id` は、コレクションの **Accounts** フォルダーにある **`GET List accounts`** リクエストで取得できます。**[API リファレンス](/ja/platform/api-reference/accounts/index)**
+
+**レスポンス例**
+
+```
+{
+  "data": [
+    {
+      "created_at": "2023-09-25T19:18:29.614189Z",
+      "display_name": "Integration Account",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "roles": [
+        "admin"
+      ],
+      "storage_limit": 300,
+      "storage_usage": 300,
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "image": null
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts"
+  }
+}
+```
+
+<Tip>
+
+複数の Frame.io アカウントを持っている場合は、それぞれがレスポンス内の個別のオブジェクトとして表示されます
+
+</Tip>
+
+アカウント ID を取得したら、レスポンスから `id` の値をコピーし、環境変数として保存します。以降のリクエストでは、`{{ACCOUNT_ID}}` を使用して `account_id` <Tooltip tip="リクエストパラメーターの送信の詳細については、**[Postman のドキュメント](https://learning.postman.com/docs/sending-requests/create-requests/parameters#send-request-parameters)** を参照してください">パスパラメーター</Tooltip>として参照します。
+
+---
+
+## Workspace と Project の操作 {#workspace-and-project-operations}
+
+Frame.io のファイルはフォルダーに保存され、Workspace 内の Project に整理されています。V4 のリソース階層の全体像については、**[このガイド](/ja/platform/docs/getting-started#resource-hierarchy)** を参照してください。
+
+### Workspace の一覧を取得する {#listing-workspaces}
+
+**Workspaces** フォルダー内の **`GET list workspaces`** リクエストは **[`/v4/accounts/:account_id/workspaces`](/ja/platform/api-reference/workspaces/index)** を呼び出し、アカウントがアクセスできる Workspace の一覧を返します。
+
+一部の Project 操作ではパスパラメーターとして `workspace_id` が必要です。そのため、Project の一覧取得や取得を行う予定がある場合は、先に Workspace ID を保存しておいてください。
+
+リクエストが成功すると、**`200 OK`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+  "data": [
+    {
+      "account_id": "11111111-2222-3333-4444-555555555555",
+      "created_at": "2024-01-25T19:18:29.614189Z",
+      "id": "88888888-bbbb-4444-aaaa-ffffffffffff",
+      "name": "My Workspace",
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "creator": {
+        "active": true,
+        "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+        "email": "user_email@example.com",
+        "id": "196C1A5777BF4CV00A49411B@176719f5667d82g5594324.e",
+        "name": "Name"
+      }
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts/123/workspaces"
+  }
+}
+```
+
+---
+
+### Workspace を作成する {#creating-a-workspace}
+
+**`POST create workspace`** リクエストは **[`/v4/accounts/:account_id/workspaces`](/ja/platform/api-reference/workspaces/create)** を呼び出し、アカウントに新しい Workspace を作成します。
+
+リクエストエディターで **Body** タブを選択し、`data` オブジェクト内で Workspace の名前を設定します。
+
+リクエストが成功すると、**`201 Created`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+  "data": {
+    "account_id": "11111111-2222-3333-4444-555555555555",
+    "created_at": "2024-01-25T19:18:29.614189Z",
+    "id": "77777777-999-4444-8888-000000000000",
+    "name": "My New Workspace",
+    "updated_at": "2024-02-07T16:44:41.986478Z"
+  }
+}
+```
+
+---
+
+### Workspace を更新する {#updating-a-workspace}
+
+**`PATCH update workspace`** リクエストは **[`/v4/accounts/:account_id/workspaces/:workspace_id`](/ja/platform/api-reference/workspaces/update)** を呼び出し、Workspace の名前を更新します。
+
+リクエストエディターで **Body** タブを選択し、`data` オブジェクト内で Workspace の新しい名前を設定します。
+
+リクエストが成功すると、**`200 OK`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+    "data": {
+        "id": "77777777-9999-4444-8888-000000000000",
+        "name": "New Workspace Name",
+        "updated_at": "2026-05-01T02:42:00.462467Z",
+        "account_id": "11111111-2222-3333-4444-555555555555",
+        "created_at": "2025-09-22T19:17:02.565496Z"
+    }
+}
+```
+
+---
+
+### Project を作成する {#creating-a-project}
+
+**`POST create project`** リクエストは **[`/v4/accounts/:account_id/workspaces/:workspace_id/projects`](/ja/platform/api-reference/projects/create)** を呼び出し、指定した Workspace に新しい Project を作成します。
+
+リクエストエディターで **Body** タブを選択し、`data` オブジェクト内で Project の名前を設定します。オプションの `restricted` プロパティは、制限付き Project を作成するために使用するブール値です。
+
+リクエストが成功すると、**`201 Created`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+    "data": {
+        "id": "fd26defb-8bdf-5c39-9746-24d38f109cc3",
+        "name": "test",
+        "status": "active",
+        "restricted": true,
+        "updated_at": "2026-05-01T03:39:58.910884Z",
+        "storage": 0,
+        "workspace_id": "77777777-999-4444-8888-000000000000",
+        "created_at": "2026-05-01T03:39:58.853797Z",
+        "root_folder_id": "d4fca8b4-5fd8-4a94-90aa-de13de4b2021",
+        "view_url": "https://next.frame.io/project/fd26defb-8bdg-5c39-9746-24d38f109cc3"
+    }
+}
+```
+
+レスポンスから **`root_folder_id`** をコピーし、**`FOLDER_ID`** 環境変数の値として設定します。このガイドの残りのセクションで必要になります。
+
+<Tip>
+
+新しく作成した制限付き Project には、**Project Permissions** フォルダーにある **`PATCH Update user role in a Project`** リクエストを続けて実行することで、ユーザーを追加できます。(**[API リファレンス](/ja/platform/docs/guides/postman-collection)**)
+
+</Tip>
+
+---
+
+## フォルダーとファイルの操作 {#folder-and-file-operations}
+
+### フォルダーの子要素の一覧を取得する {#listing-folder-children}
+
+**`GET list folder children`** リクエストは **[`/v4/accounts/:account_id/folders/:folder_id/children`](/ja/platform/api-reference/folders/index)** を呼び出し、指定したフォルダー内の子要素の一覧を取得します。この例では、**`FOLDER_ID`** 環境変数に設定したプロジェクトのルートフォルダーが対象です。
+
+以下のオプションのクエリパラメーターを使用して、レスポンスを絞り込むことができます。
+
+| パラメーター | 型 | 説明 |
+| --- | --- | --- |
+| **`page_size`** | Integer | 返されるフォルダーの数を制限します <br />**1～100。デフォルトは 50** |
+| **`type`** | String | フォルダーの子要素をリソースタイプ(**`file`** または **`folder`**)でフィルタリングします |
+| **`after`** | String | ページ分割された結果を返すリクエスト用の不透明なカーソル。<br />**これは自動生成され、前のレスポンスの `links` オブジェクトで返されます。** 人間が読めることを意図したものではありません。 |
+| **`include_total_count`** | Boolean | すべてのエンティティの総数を返します <br />**デフォルトは False** |
+| **`include`** | Enum | `creator`、`project`、`media_links` などの追加データを、返される各オブジェクトに付加します。<br />サポートされるパラメーターの完全な一覧については、**[API リファレンス](/ja/platform/api-reference/folders/index#request.query.include)** を参照してください |
+
+リクエストが成功すると、**`200 OK`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+  "data": [
+    {
+      "type": "file",
+      "created_at": "2023-09-25T19:18:29.614189Z",
+      "file_size": 1137444,
+      "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+      "media_type": "image/png",
+      "name": "asset.png",
+      "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+      "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+      "status": "created",
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+      "creator": {
+        "active": true,
+        "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+        "email": "user_email@example.com",
+        "id": "196C1A5666BF4EB00A49411B@176719f5667c82b4494214.e",
+        "name": "Jon Doe"
+      },
+      "media_links": {
+        "high_quality": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN"
+        },
+        "original": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "inline_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=inline%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragSDFXDFh&1Key-Pair-Id=KKI497NESTHMN"
+        },
+        "thumbnail": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "url": "https://picture2.frame.io/image/s3://frameio-assets-development/image/cd58cb8e-24b3-4498-8d0f-9532fcd04d11/image_full.png?alg=HS256&sig=0_u7w_wz2MwQHOXp000ibbQSMRijujyaUu8V3YYPxu4&exp=1729857600"
+        }
+      },
+      "metadata": [
+        {
+          "field_type": "select",
+          "field_definition_id": "b859ccec-9536-4bf2-bc6f-5e9206e26606",
+          "field_definition_name": "Fields definition name",
+          "mutable": true,
+          "value": [
+            {
+              "display_name": "Display name",
+              "id": "212add59-6527-4fd2-ac30-55ea94a8b5f8"
+            }
+          ],
+          "field_options": [
+            {
+              "display_name": "Display name",
+              "id": "212add59-6527-4fd2-ac30-55ea94a8b5f8"
+            },
+            {
+              "display_name": "Display name 2",
+              "id": "c6eb873f-125b-4317-b857-1a22eb3dbf22"
+            }
+          ]
+        }
+      ],
+      "project": {
+        "created_at": "2024-01-25T19:18:29.614189Z",
+        "description": "Project Description",
+        "id": "e0e30b1d-c3aa-44ee-926e-c6c326fb10dc",
+        "name": "My Project",
+        "root_folder_id": "be733511-6f15-4d97-8ee7-bc23b2fb0bd7",
+        "status": "active",
+        "storage": 15000,
+        "updated_at": "2024-02-07T16:44:41.986478Z",
+        "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/",
+        "workspace_id": "91b10e83-5874-44de-9b57-41c937b87256",
+        "owner": {
+          "active": true,
+          "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "email": "user_email@example.com",
+          "id": "196C1A5666BF4EB00A49411B@176719f5667c82b4494214.e",
+          "name": "Jon Doe"
+        },
+        "restricted": false
+      }
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts/123/folders/123/folders"
+  },
+  "total_count": 10
+}
+```
+
+<Tip>
+
+**\{'t': '#frag', 'p': \{\}, 'c': \{'t': 'p', 'p': \{\}, 'c': \['', \{'t': 'strong', 'p': \{\}, 'c': \{'t': 'code', 'p': \{\}, 'c': 'after'\}\}, ' パラメーターのテスト'\]\}\}**
+
+ページ分割された結果をテストする場合は、レスポンス内の **`links`** オブジェクトを見つけてください。
+
+- **`next`** プロパティの URL から、**`after=`** に続く文字列の値のみをコピーします
+- これを次のリクエストの **`after`** クエリパラメーターの値として設定します。
+- **二重エンコードに注意してください!** URL にエンコードされた文字(例: %3D%3D)が含まれている場合は、元の文字(**==**)に置き換えてください。Postman は入力をそのまま解釈するため、これらを二重にエンコードしてしまい、**`422`** エラーが発生する可能性があります
+
+</Tip>
+
+---
+
+### ファイルを作成する - ローカルアップロード {#creating-a-file-local-upload}
+
+**`POST create file - local upload`** リクエストは **[`/v4/accounts/:account_id/folders/:folder_id/files/local_upload`](/ja/platform/api-reference/files/create-local-upload)** を呼び出し、指定したフォルダーにローカルファイルをアップロードします。
+
+ローカルアップロードには、ファイルサイズに応じて 2 つ以上のリクエストが必要です。最初のテストでは、アップロード URL が 1 つだけで済むように、小さなファイル(10 MB 未満)を使用してください。
+
+<Steps>
+
+<Step title="プレースホルダーのファイルリソースを作成する">
+
+リクエストエディターで **Body** タブを選択し、`data` オブジェクト内でファイル名とファイルサイズ(**バイト**単位で指定)を設定します。リクエストが成功すると、**`201 Created`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+  "data": {
+    "created_at": "2023-09-25T19:18:29.614189Z",
+    "file_size": 1137444,
+    "media_type": "image/png",
+    "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+    "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+    "status": "created",
+    "type": "file",
+    "updated_at": "2024-02-07T16:44:41.986478Z",
+    "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+    "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+    "name": "asset.png",
+    "upload_urls": [
+      {
+        "size": 20000000,
+        "url": "https://my.fileupload.url.dev"
+      }
+    ]
+  }
+}
+```
+
+この呼び出しにより、指定したフォルダーにプレースホルダーのファイルリソースが作成されました。次のステップでは、レスポンスの `upload_urls` 配列にある署名付きアップロード URL を使用してアップロードを完了します。
+
+</Step>
+
+<Step title="ファイルのコンテンツをアップロードする">
+
+レスポンスの `upload_urls` 配列内の URL をクリックすると、Postman で新しいリクエストタブが開きます。リクエストメソッドを **`PUT`** に変更します。リクエストエディターで **Headers** タブを選択し、リクエストに次のヘッダーを追加します。
+
+- **`x-amz-acl`:`private`**
+- **`Content-Type`**: ファイル名で指定された拡張子のタイプと完全に一致する必要があります(例: **`IMG.png`** という名前のファイルには **`image/png`** を使用する必要があります)
+
+![alt image](/images/platform/docs/guides/postman-collection/86ddb4aebecaffdee01cf07be3c2e7af0b616285721ec8ef412575114a916b21.webp)
+リクエストエディターで **Body** タブを選択し、**binary** オプションをクリックしてファイルを選択します。選択したら **Send** をクリックしてリクエストを完了します。リクエストが成功すると **`200 OK`** ステータスが返され、ファイルがアップロードされたことが確認できます。
+
+</Step>
+
+</Steps>
+
+ファイルがアップロードされると、Frame.io のメディアパイプラインがトランスコードとサムネイル生成を自動的に処理します。大きなファイルの場合、ファイルの状態が **`created`** から **`ready`** に移行するまでにしばらく時間がかかることがあります。
+
+---
+
+### ファイルを作成する - リモートアップロード {#creating-a-file-remote-upload}
+
+**`POST create file - remote upload`** リクエストは **[`/v4/accounts/:account_id/folders/:folder_id/files/remote_upload`](/ja/platform/api-reference/files/create-remote-upload)** を呼び出し、指定したソース URL を使用して外部ファイルを指定のフォルダーに取り込みます。
+
+リクエストエディターで **Body** タブを選択し、`data` オブジェクト内でファイル名とソース URL を設定します。
+
+リクエストが成功すると、**`202 Accepted`** ステータスと、以下の例のようなレスポンス本文が返されます。
+
+**レスポンス例**
+
+```
+{
+  "data": {
+    "created_at": "2023-09-25T19:18:29.614189Z",
+    "file_size": 1137444,
+    "media_type": "image/png",
+    "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+    "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+    "status": "created",
+    "type": "file",
+    "updated_at": "2024-02-07T16:44:41.986478Z",
+    "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+    "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+    "name": "asset.png"
+  },
+  "links": {
+    "status": "/v4/accounts/fb4dd62f-8a89-4e98-8fa1-ad4b29a0094f/files/eab70952-966c-4d99-949b-f0a947ca5754/status"
+  }
+}
+```

@@ -1,0 +1,73 @@
+---
+title: "ngrok verwenden"
+---
+
+Ngrok ist ein einfach zu bedienendes Tool, mit dem Sie auf Ihrem lokalen Rechner einen sicheren Tunnel samt öffentlicher URL erstellen können. Diese URL können Sie zum Testen Ihres lokalen Projekts verwenden oder um Ihre Arbeit einem Kunden oder Teammitglied zur Prüfung freizugeben. Sie können HTTP oder HTTPS einrichten, und da dieses Tool so beliebt ist, gibt es jede Menge Artikel, die verschiedene Lösungswege beschreiben, falls etwas nicht funktioniert. Dieser Artikel behandelt einige einfache Möglichkeiten zur Installation von ngrok und was Sie tun können, wenn Ihre Webanwendung nicht mit ngrok kommuniziert.
+
+<Info>
+
+**ngrok**
+
+Unsere Freunde bei ngrok haben einen großartigen Artikel geschrieben, der sich der Unterstützung von Frame.io-Webhooks über ngrok widmet. Sie finden ihn [hier](https://ngrok.com/docs/integrations/frameio/webhooks).
+
+</Info>
+
+## ngrok installieren {#install-ngrok}
+
+Sie können ngrok auf verschiedene Arten verwenden.
+
+### Installation über das ngrok-Installationsprogramm {#install-via-the-ngrok-installer}
+
+1. Rufen Sie die ngrok-Website auf und folgen Sie den dortigen Anweisungen: [https://ngrok.com/download](https://ngrok.com/download)
+2. Wenn Sie die Funktionen nutzen möchten, die durch das Verbinden eines Accounts verfügbar werden, folgen Sie diesen Anweisungen, um einen Account und ein Token zu erhalten.
+
+Sie müssen weder einen Account anlegen noch das Token hinzufügen, aber sehen Sie sich auf jeden Fall die Download-Seite an, um herauszufinden, ob Sie das möchten oder benötigen.
+
+<Info>
+
+**Hinweis:**
+
+Wenn Sie diese Methode verwenden, wird ngrok von dem Ort aus ausgeführt, an dem Sie es gespeichert haben, es sei denn, Sie machen es systemweit verfügbar.
+
+</Info>
+
+### Installation mit Homebrew {#install-with-homebrew}
+
+Dies ist meine bevorzugte Methode zur Installation von ngrok. Wenn Sie Homebrew installiert haben, müssen Sie nur `homebrew cask install ngrok` eingeben. ngrok wird für Sie installiert, und Sie können es von überall aus verwenden! Das Beste daran: Sie müssen im Terminal nicht zu Beginn jedes Befehls `./ngrok` eingeben, sondern können einfach `ngrok` eingeben. Weitere Informationen zu dieser Option finden Sie [hier](https://gist.github.com/wosephjeber/aa174fb851dfe87e644e).
+
+## ngrok verwenden {#use-ngrok}
+
+Nachdem Sie ngrok eingerichtet haben, wählen Sie einen Port wie `3000` und starten Sie ngrok in einer Terminal-Befehlszeile mit dem Befehl ngrok http `3000`. Sie müssen nicht Port `3000` verwenden, aber dies ist ein häufig gewählter Port bei der Einrichtung.
+
+Wenn Sie ngrok so eingerichtet haben, dass es aus einem bestimmten Ordner ausgeführt wird, müssen Sie sich in dem Ordner befinden, in dem Sie ngrok abgelegt haben, und den Befehl `./ngrok http 3000` verwenden.
+
+Starten Sie den Server für Ihr Projekt so, dass er auf demselben Port lauscht, und Sie können über die von ngrok bereitgestellte öffentliche Adresse auf Ihre Arbeit zugreifen.
+
+### Fehlerbehebung bei ngrok mit Ihrer Web-App – abschließender Schrägstrich {#troubleshooting-ngrok-with-your-web-app-trailing-slash}
+
+Ein Problem, auf das Sie bei ngrok stoßen können, ist, dass keine Verbindung zu Ihrem Server zustande kommt, wenn Sie eine ngrok-URL für Ihre Web-App einrichten. Das Frustrierende an diesem Problem ist, dass ngrok nicht registriert, dass Sie etwas an es gesendet haben. Sie können localhost:4040 öffnen, um zu sehen, was vor sich geht, und es wird Ihnen nichts anzeigen. (localhost:4040 wird von ngrok bereitgestellt, damit Sie alle eingehenden Anfragen an Ihren Server überwachen können.) Ngrok scheint Adressen mit /(.*) statt mit (/.*) abzugleichen. Wenn Sie also am Ende Ihrer Adresse keinen abschließenden Schrägstrich angeben und in den ngrok-Monitoring-Tools nichts sehen, liegt das daran, dass ngrok keine Übereinstimmung für die angegebene Adresse findet.
+
+Hier ein Beispiel für das Hinzufügen eines abschließenden Schrägstrichs: `http://something.ngrok.io/`
+
+Sie können Ihre Beispielanwendungen auch so schreiben, dass sie auf einen Endpoint aufgelöst werden, der einen Schrägstrich enthält. Denken Sie nur daran: Damit die Frame.io-App Ihren Server erreichen kann, müssen Sie, wenn Ihre Beispiel-App den Endpoint `/actions` verwendet, den Endpoint /actions an das Ende Ihrer ngrok-Adresse anhängen. Wenn die ngrok-Adresse beispielsweise `http://something.ngrok.io` lautet, müssen Sie sie bei der Einrichtung Ihrer Custom Action als `http://something.ngrok.io/actions` angeben. Bei anderen Webanwendungen kann dies anders sein. Probieren Sie also verschiedene Varianten am Ende der ngrok-Adresse aus, wenn es nicht sofort funktioniert.
+
+### Kann ich etwas anderes als ngrok verwenden? Probieren Sie Glitch! {#can-i-use-something-besides-ngrok-try-glitch}
+
+Glitch ist eine ziemlich coole Alternative zu ngrok und schneller eingerichtet. Bei Glitch können Sie einen Account erstellen und dann Ihre eigenen Apps auf deren Servern mit einer öffentlich zugänglichen URL erstellen. Sie können mit anderen zusammenarbeiten, Ihren Code öffentlich oder privat machen und aus einer Vielzahl von Sprachen und Plattformen wählen. Unter [https://glitch.com/create](https://glitch.com/create) sehen Sie, was verfügbar ist.
+
+Wenn Sie Ihr Projekt auf Glitch einrichten, tritt bei einigen Webanwendungen das Problem mit dem abschließenden Schrägstrich ebenfalls auf. Im Fall von Frame.io müssen Sie beim Einrichten einer Custom Action in [developer.frame.io](/de/platform/v2) den abschließenden Schrägstrich am Ende der von Glitch bereitgestellten URL angeben. Sie müssen sonst nichts hinzufügen, auch nicht für den Endpoint /actions.
+
+### Gibt es etwas bereits Eingerichtetes, das ich jetzt ausprobieren könnte? {#is-there-something-set-up-i-could-try-now}
+
+Ja. Wenn Sie weder ngrok verwenden noch ein eigenes Glitch-Projekt erstellen möchten, haben wir hier eine Beispielanwendung zum Ausprobieren für Sie eingerichtet: [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me). Denken Sie daran, einen abschließenden Schrägstrich anzugeben, wenn Sie diese Adresse im Bereich Custom Actions von \[/) hinzufügen.
+
+### Ressourcen {#resources}
+
+In diesem Abschnitt sind die im Artikel genannten Ressourcen aufgeführt:
+
+- **ngrok** [https://ngrok.com/](https://ngrok.com/)
+- **Glitch** [https://glitch.com/](https://glitch.com/)
+- **Verfügbare Plattformen in Glitch** [https://glitch.com/create](https://glitch.com/create)
+- **Glitch-Beispiel-App für Custom Actions in JavaScript** [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me)
+- **Registrierung und Einrichtung für Frame.io-Entwickler** [Frame.io-Entwicklerseite](/de/platform/v2)
+- **Frame.io-Web-App** [https://app.frame.io/](https://app.frame.io/)

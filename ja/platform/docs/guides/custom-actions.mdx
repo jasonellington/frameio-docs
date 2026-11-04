@@ -1,0 +1,529 @@
+---
+title: "Custom Actions"
+---
+
+Frame.io Actions は、アイテムのダウンロード、名前の変更、複製などの一般的なメディア操作にすばやくアクセスできるようにするだけでなく、サードパーティのツールやサービスとのインテグレーションを [Frame.io](https://next.frame.io/) のユーザーインターフェース内に直接表示することも可能にします。
+
+## Actions について {#about-actions}
+
+Custom Actions の導入により、開発者は Frame.io V4 で独自の Actions を設定および管理できるようになりました。[Webhooks](https://developer.adobe.com/frameio/guides/Webhooks/) と同じ基盤のイベントシステムを活用する Custom Actions は、開発者がアセットを Frame.io アカウントのユーザーにとって最も重要なツールに接続するための代替手段です。
+
+Actions は、その Action が有効になっている Frame.io ワークスペースのメンバーであれば、どのユーザーでも実行できます。Action を実行すると、Frame.io は指定された URL にペイロードを送信します。受信側のアプリケーションは、受信を確認する HTTP ステータスコード、または Frame.io の UI に追加のフォームフィールドを表示するカスタムコールバックで応答します。受信側のアプリケーションは、自身でホストしているプログラムやサービスのほか、Workfront Fusion や Zapier のようなローコード/ノーコードの IPaaS ツールでもかまいません。
+
+Custom Actions を使用すると、プログラム可能な UI コンポーネントとして [Frame.io](https://next.frame.io/) に直接インテグレーションを構築できます。これにより、Webhooks と同じ基盤のイベントルーティングを活用して、アプリ内のユーザーがトリガーできるワークフローを実現できます。ユーザーがトリガーする単一ステップまたは複数ステップのフォームを作成でき、その結果は別のフォームまたは基本的なレスポンスとして Frame.io に返されます。また、ユーザーがアセット上の Custom Action をクリックすると、Frame.io は指定された URL にペイロードを送信します。受信側のアプリケーションは、受信を確認する HTTP ステータスコード、または Frame.io に追加の UI を表示できるカスタムコールバックで応答します。
+
+## レート制限 {#rate-limits}
+
+Custom Action のイベントは、Webhook イベントと同じアカウントレベルの制限（**1 分あたり 1,000 イベント**、**1 時間あたり 20,000 イベント**）にカウントされます。どちらの制限も、個々の Custom Action や Webhook サブスクリプションごとではなく、アカウント全体の合計量に適用されます。
+
+いずれかの制限に達すると、それ以降の Custom Action イベントは**破棄**され、キューに入れられたり自動的に再試行されたりすることはありません。
+
+これらはイベント量の制限であり、Custom Actions を管理するための API リクエストの制限ではありません。詳細については、[Webhook のレート制限](/ja/platform/docs/guides/webhooks#webhook-rate-limits)を参照してください。
+
+## V4 における Actions の改善点 {#actions-improvements-in-v4}
+
+Legacy バージョンのユーザーから得た知見を活かし、Frame.io V4 では Actions の機能セットにいくつかの機能強化を加えました。
+
+<CardGroup cols={3}>
+
+<Card title="新しいフィールドタイプ" icon="input-numeric" iconType="solid">
+
+以前はテキストフィールドと単一選択フィールドに限られていましたが、現在は複数選択、テキストエリア（より大きなテキストボックス）、ブール値フィールド（ラジオボタン）もサポートしています。
+
+</Card>
+
+<Card title="クリック可能なリンク" icon="link" iconType="solid">
+
+テキストフィールドでは、ユーザーが URL をコピー＆ペーストするのは簡単ではありません。新しいリンクフィールドを使用すると、1 クリックで簡単にコピーできます。
+
+</Card>
+
+<Card title="動的なモーダル" icon="window" iconType="solid">
+
+返されるデータの量に応じて、Action のモーダルはフォーム内の情報に最適なサイズに動的に調整されます。必要に応じてスクロール可能なモーダルにもなります。
+
+</Card>
+
+<Card title="複数アセットの Actions" icon="files" iconType="solid">
+
+1 回のリクエストで最大 100 個のアセットを対象とするように Action を設定できます。
+
+<br /><Badge color="green">NEW</Badge>
+
+</Card>
+
+<Card title="混在するアセットタイプ" icon="rectangles-mixed" iconType="solid">
+
+1 つのアセットタイプに限定されず、ファイル、フォルダー、バージョンスタックを組み合わせて Actions をトリガーできます。
+
+</Card>
+
+<Card title="アプリ内フィードバックフォーム" icon="square-poll-horizontal" iconType="solid" href="https://next.frame.io/settings/actions">
+
+開発者とエンドユーザーの双方から Actions の使い方についてお聞きしたいと考え、Web 版の設定ページにフィードバックフォームを用意しました。
+
+</Card>
+
+</CardGroup>
+
+## 移行された Actions {#migrated-actions}
+
+Frame.io の Legacy バージョンで作成された Custom Actions を含む Frame.io V4 アカウントに移行する際には、留意すべき点がいくつかあります。
+
+### Action のステータス {#action-status}
+
+アカウントを Frame.io V4 に移行すると、以前のバージョンで作成されたすべてのカスタム Actions のステータスは「null」になり、自動的に無効化されます。これにより、ユーザーは有効化する前に Actions を V4 API を使用するように更新する機会を得られます。更新されていない Actions は失敗するためです。この状態の Actions を特定するには、Actions の設定ページで「Status」列を確認するか、API を使用している場合は is_active フィールドを確認してください。
+
+### 対象となるリソース：ファイル、フォルダー、バージョンスタック {#actionable-resources-files-folders-&-version-stacks}
+
+Frame.io V4 API ではアセットタイプが別々のリソースとして分離されているため、Action のペイロードで受け取るリソース ID を解釈する際に考慮すべき挙動がある場合があります。個々のファイルの場合、ID は Action が実行された特定のファイルを示すため、挙動は単純です。同様にフォルダーの場合も、Action が実行されたフォルダーの ID を受け取ります。ただし、ユースケースによっては、Action の挙動を定義する際に複数の選択肢があります。フォルダーリソース自体を操作したい場合は、フォルダー ID を使用して Frame.io API への後続の呼び出しを行います。あるいは、そのフォルダーの子を取得して、中のアセットに対してさらに処理を行いたい場合もあるでしょう。バージョンスタック上で Action が実行された場合、ペイロードには「ヘッドアセット」の ID が含まれます。これはスタック内の最上位のファイルであり、Frame.io の UI に表示されるものです。
+
+Frame.io Legacy API と V4 の違いについては、[移行ガイド](/ja/platform/docs/resources/migration)で詳しく説明しています。
+
+<Info>
+
+API を使用して [Custom Actions](/ja/platform/api-reference/custom-actions/actions-show) を設定します。
+
+</Info>
+
+Custom Action には次の項目が必要です。
+
+| フィールド名 | 説明 |
+| --- | --- |
+| Name | Custom Action に付ける名前。Frame.io で利用可能な Custom Actions のメニューに表示されます。 |
+| Description | 参照用に Action の内容を説明します（説明は Frame.io Web アプリには表示されません）。 |
+| Event | 標準の Webhook イベントと独自のイベントを区別するための内部イベントキー。 |
+| URL | イベントの配信先。 |
+| Workspace | Custom Action を使用するワークスペース。 |
+
+## Custom Action を設定する {#configure-your-custom-action}
+
+ユーザーが Custom Action をトリガーすると、Frame.io は指定された URL にペイロードを送信します。受信側のアプリケーションは、受信を確認する HTTP ステータスコード、または [Frame.io](https://next.frame.io/) に追加の UI を表示するカスタムコールバックで応答できます。
+
+<Warning>
+
+ワークスペースの Custom Actions を作成するには、アカウント管理者の権限が必要です。アクセス権がない場合は、管理者に権限の変更を依頼してください。
+
+</Warning>
+
+### 複数アセットの設定 {#multi-asset-configuration}
+
+複数アセットのサポートは設定によって制御され、[Web 版](https://next.frame.io/settings/actions)の Action の設定モーダルから明示的に有効にする必要があります。これは、新しい Action の作成時、または既存の Action の更新時に行えます。
+
+複数アセットのサポートを有効にすると、ペイロードの形式は即座に切り替わります。Legacy のペイロードと複数アセット対応のペイロードは相互に排他的です。
+
+## Frame.io からのペイロード {#payload-from-frame-io}
+
+ユーザーが Custom Action をクリックすると、URL フィールドに設定した URL にペイロードが送信されます。このペイロードを使用して、次の情報を特定します。
+
+<CardGroup cols={2}>
+
+<Card title="Action のコンテキスト" icon="computer-mouse" iconType="solid">
+
+- どの Custom Action がクリックされたか
+- どのリソースがクリックされたか
+- どのユーザーが操作を行ったか
+- どのイベントタイプがトリガーされたか
+
+</Card>
+
+<Card title="組織のコンテキスト" icon="building" iconType="solid">
+
+- Custom Action に関連付けられているアカウント
+- Custom Action に関連付けられているワークスペース
+- リソースを含むプロジェクト
+
+</Card>
+
+</CardGroup>
+
+<AccordionGroup>
+
+<Accordion title="ペイロード - 単一または複数アセットのサポート">
+
+Custom Actions は当初、1 つのアセットを含む `resource` オブジェクトを使用して、リクエストごとに 1 つのアセットのみを受け付けていました。複数アセットのサポートを有効にすると、ペイロードは 1 つ以上のアセットを含む `resources` リストを使用します（1 回のリクエストで最大 100 個のアセット）。
+
+```json
+POST /your/url
+{
+  "account_id": "1a94720e-f7f5-4c41-ab62-d11eebe3d504",
+  "action_id": "0aeb9feb-f8eb-4100-a8c2-b39b66d354ab",
+  "data": {
+      "description": "Pretty cool video.",
+      "title": "Hey there!"
+  },
+  "interaction_id": "985559de-865a-40e5-a687-2bbed4497eaa",
+  "project": {
+      "id": "3e34e7cb-5c21-49f5-8ca9-a1419584c2ea"
+  },
+  "resources": [
+      {
+          "id": "fe41c5a8-1b8d-417d-a7df-0b88bc19b476",
+          "type": "file"
+      },
+      {
+          "id": "fe81fb2b-1316-4a76-9cf6-0630f474fc39",
+          "type": "file"
+      }
+  ],
+  "type": "some.event",
+  "user": {
+      "id": "68093c1c-4b05-41ce-a3c9-e64d195b1935"
+  },
+  "workspace": {
+      "id": "629086c0-f6aa-4d63-a284-f39bcd415b9f"
+  }
+}
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+<AccordionGroup>
+
+<Accordion title="Legacy ペイロード - 単一アセットのみサポート">
+
+```json
+POST /your/url
+{
+    "account_id": "1a94720e-f7f5-4c41-ab62-d11eebe3d504",
+    "action_id": "0e38b93a-9f10-4bc7-90bc-bd07a16e510a",
+    "data": {
+        "description": "Wow look at this.",
+        "title": "Hey there!!"
+    },
+    "interaction_id": "dff6d369-7150-41f9-8e6f-4f0895f6b416",
+    "project": {
+        "id": "3e34e7cb-5c21-49f5-8ca9-a1419584c2ea"
+    },
+    "resource": {
+        "id": "fe81fb2b-1316-4a76-9cf6-0630f474fc39",
+        "type": "file"
+    },
+    "type": "some.event",
+    "user": {
+        "id": "68093c1c-4b05-41ce-a3c9-e64d195b1935"
+    },
+    "workspace": {
+        "id": "629086c0-f6aa-4d63-a284-f39bcd415b9f"
+    }
+}                                  
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+### Legacy ペイロードからの移行 {#migrating-from-the-legacy-payload}
+
+<Warning>
+
+**Legacy ペイロードは非推奨となる予定です**
+
+Legacy ペイロードは非推奨となる予定であり、新しいペイロードを処理するようにサービスを移行することを強くお勧めします。
+
+設定フラグを有効にしてペイロードの処理を更新することで、Action は複数アセットのペイロードのサポートにシームレスに移行できます。
+
+1. 単数形の `resource` オブジェクトの使用を `resources` リストに置き換えます
+2. `resources` リストを反復処理するようにコードを更新します
+3. Actions の設定で複数アセットのフラグを有効にします
+
+</Warning>
+
+| フィールド名 | 説明 |
+| --- | --- |
+| `account_id` | Action の一意のアカウント ID。 |
+| `action_id` | Action の一意の ID。 |
+| `interaction_id` | Frame.io によって生成される一意の識別子で、連鎖した Message Callback や Form Callback など、複数のリクエストにまたがるトランザクションを追跡するために使用されます。Action の一連のシーケンス全体を通じて同じ値のままです。 |
+| `project_id` | Action の一意のプロジェクト ID。 |
+| `resource.id` | Action をトリガーしたリソースの ID。 |
+| `resource.type` | Action をトリガーしたリソースのタイプ。 |
+| `type` | Action の設定時に `event` フィールドに指定した名前。 |
+| `user.id` | Action をトリガーしたユーザーの ID。 |
+| `workspace.id` | Action を使用しているワークスペースの ID。 |
+| `data` | ユーザーが選択したフォームフィールドの名前と値を含むキーと値のペア。アプリはこれを受け取って、どのような選択が行われたかを把握します。 |
+
+## インタラクション、再試行、タイムアウト {#interactions-retries-and-timeouts}
+
+`interaction_id` は、時間の経過とともに進行するインタラクションを追跡するための一意の識別子です。ユーザーに応答する必要がない場合は、200 ステータスコードを返せば完了です。任意ではありますが、成功メッセージやエラーアラートなど、Action の結果に関する情報を含めることをお勧めします。Custom Actions はメッセージコールバックをサポートしています。
+
+<Note>
+
+Frame.io は 10 秒以内のレスポンスを想定しており、成功のレスポンスを待つ間に最大 5 回まで再試行を行います。理想的には、レスポンスは即座に返し、非同期の処理は Custom Action によるトリガーの後に実行するようにします。
+
+</Note>
+
+## Message Callback を作成する {#create-a-message-callback}
+
+Webhook イベントに対する HTTP レスポンスで、Frame.io の UI で操作を開始したユーザーに返されるメッセージを記述した JSON オブジェクトを返すことができます。
+
+```json
+{
+  "title": "Success!",
+  "description": "The thing worked! Nice."
+}
+```
+
+メッセージを使用すると、Frame.io の UI で直接ユーザーにフィードバックを提供できます。ユーザーから追加の情報を収集する必要がある場合は、代わりに **Form Callbacks** を使用してください。
+
+## Form Callback を作成する {#create-a-form-callback}
+
+処理を開始する前に、さらに情報が必要な場合を考えてみましょう。たとえば、追加の詳細情報を必要とするシステムにコンテンツをアップロードする場合などです。レスポンスでフォームを記述すると、ユーザーがそれに入力して送信し返します。次に例を示します。
+
+```json
+{
+  "title": "Need some more info!",
+  "description": "Getting ready to submit this file!",
+  "fields": [
+    {
+      "type": "text",
+      "label": "Title",
+      "name": "title",
+      "value": "MyVideo.mp4"
+    },
+    {
+      "type": "select",
+      "label": "Captions",
+      "name": "captions",
+      "options": [
+        {
+          "name": "Off",
+          "value": "off"
+        },
+        {
+          "name": "On",
+          "value": "on"
+        }
+      ]
+    }
+  ]
+}
+```
+
+ユーザーがフォームを送信すると、最初の POST と同じ URL でイベントを受け取ります。
+
+```json
+POST /your/url
+{
+  "type": "your-specified-event-name",
+  "interaction_id": "the-same-id-as-before",
+  "action_id": "unique-id-for-this-custom-action",
+  "data":{
+    "title": "MyVideo.mp4",
+    "captions": "off"
+  }
+}
+```
+
+フォームに追加されたすべてのカスタムフィールドは、Frame.io から送信される JSON ペイロードの `data` セクションに表示されます。`interaction_id` を使用して、最初のリクエストとこの新しいフォームデータを対応付けます。メッセージで応答することも、別のフォームを連鎖させることもできます。Actions、Forms、Messages を連鎖させることで、外部システムのビジネスロジックを使用した複数ステップのワークフローを Frame.io 内に効果的にプログラムできます。
+
+## フォームの詳細 {#form-details}
+
+メッセージと同様に、フォームはフォームの上部に表示される `title` および `description` 属性をサポートしています。それに加えて、各フォームフィールドは次の基本属性を受け付けます。
+
+<CardGroup cols={2}>
+
+<Card title="フィールドのプロパティ" icon="tarp" iconType="solid">
+
+- **type** — どのタイプのデータを想定し、どのコンポーネントを表示するかを Frame.io の UI に伝えます。
+- **label** — フィールドの上に見出しとして UI に表示されます。
+
+</Card>
+
+<Card title="フィールドのデータ" icon="database" iconType="solid">
+
+- **name** — 後続のペイロードでフィールドを識別するためのキー。
+- **value** — フィールドにあらかじめ入力しておく値。
+
+</Card>
+
+</CardGroup>
+
+## サポートされているフィールドタイプ {#supported-field-types}
+
+### テキストフィールド {#text-field}
+
+追加のパラメーターがないシンプルなテキストフィールドです。
+
+```json
+{  
+  "type": "text",
+  "label": "Title",
+  "name": "title",
+  "value": "MyVideo.mp4"
+}
+```
+
+### テキストエリア {#text-area}
+
+追加のパラメーターがないシンプルなテキストエリアです。
+
+```json
+{  
+  "type": "textarea",
+  "label": "Description",
+  "name": "description",
+  "value": "This video is really, really popular."
+}
+```
+
+### 選択リスト {#select-list}
+
+ユーザーが選択できる選択肢のリストを定義します。`options` リストを含める必要があり、その各メンバーには人間が読める `name` と、機械で解析可能な `value` を含める必要があります。
+
+```json
+{
+  "type": "select",
+  "label": "Captions",
+  "name": "captions",
+  "value": "off",
+  "options": [
+       {
+         "name": "Off",
+         "value": "off"
+       },
+       {
+         "name": "On",
+         "value": "on"
+      }
+   ]
+}
+```
+
+### チェックボックス {#checkbox}
+
+追加のパラメーターがないシンプルなチェックボックスです。
+
+```json
+{ 
+   "type": "boolean", 
+   "name": "enabled", 
+   "label": "Enabled", 
+   "value": "false"
+}
+```
+
+### リンク {#link}
+
+追加のパラメーターがないシンプルなリンクです。
+
+```json
+{
+  "type": "link",
+  "name": "videoLink",
+  "label": "Video Link",
+  "value": "https://www.youtube.com/watch?v=XtX1zv9CEVc"
+}
+```
+
+## Frame.io の権限モデル {#the-frame-io-permissions-model}
+
+Custom Actions には特別な権限モデルがあります。Custom Actions はワークスペースに属し、アカウント上に存在する特定のユーザーには属しません。つまり、次のようになります。
+
+<CardGroup cols={2}>
+
+<Card title="作成と管理" icon="users-gear" iconType="solid">
+
+- どの管理者でもワークスペース上に Custom Action を作成できます。
+- どの管理者でもチーム上に存在する Custom Action を変更または削除できます。
+
+</Card>
+
+<Card title="ライブ更新" icon="arrows-rotate" iconType="solid">
+
+- 変更されると、すべてのユーザーにその変更結果が即座に反映されます。
+
+</Card>
+
+</CardGroup>
+
+## セキュリティと検証 {#security-and-verification}
+
+デフォルトでは、すべての Custom Actions には作成時に署名キーが生成されます。これは設定できません。このキーを使用して、リクエストが Frame.io から送信されたものであることを検証できます。`POST` リクエストには次のものが含まれます。
+
+| 名前 | 説明 |
+| --- | --- |
+| `X-Frameio-Request-Timestamp` | Custom Action がトリガーされた時刻。 |
+| `X-Frameio-Signature` | 計算された署名。 |
+
+<CardGroup cols={2}>
+
+<Card title="タイムスタンプの検証" icon="clock" iconType="solid">
+
+**タイムスタンプ**は、リクエストが Frame.io のネットワークから送出される際に署名された時刻です。これはリプレイ攻撃の防止に使用できます。この時刻がローカル時刻から 5 分以内であることを確認することをお勧めします。
+
+</Card>
+
+<Card title="署名の検証" icon="shield" iconType="solid">
+
+**署名**は、Custom Action の最初の作成時に提供された署名キーを使用した HMAC SHA-256 ハッシュです。
+
+</Card>
+
+</CardGroup>
+
+### 署名を検証する {#verifying-the-signature}
+
+<Steps>
+
+<Step title="署名を取り出す">
+
+HTTP ヘッダーから署名を取り出します。
+
+</Step>
+
+<Step title="署名するメッセージを作成する">
+
+バージョン、配信時刻、リクエスト本文を組み合わせて、署名するメッセージ `v0:timestamp:body` を作成します。
+
+</Step>
+
+<Step title="HMAC SHA256 を計算する">
+
+署名シークレットを使用して HMAC SHA256 署名を計算します。
+
+</Step>
+
+<Step title="署名を比較する">
+
+計算した署名と提供された署名を比較します。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+提供される署名には `v0=` というプレフィックスが付いています。現在、Frame.io のリクエスト署名にはこの 1 つのバージョンのみが存在します。計算した署名にこのプレフィックスを追加する必要があります。
+
+</Note>
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify webhook/custom action signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the frame.io API for the given request
+        body (str): Custom Action body from the received POST
+        secret (str): The secret for this Custom Action that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+## フィードバック {#feedback}
+
+Frame.io V4 で Actions をどのように使用したいか、開発者とエンドユーザーの皆様からのご意見をお待ちしています。優先順位の決定に役立てるため、ご質問、アイデア、ユースケースをぜひ[お寄せください](https://forum.frame.io/)。

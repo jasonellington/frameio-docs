@@ -1,0 +1,118 @@
+---
+title: "Arquitetura da integração"
+---
+
+## Introdução {#introduction}
+
+Antes de começarmos a fazer solicitações à API, você precisa entender a arquitetura básica das integrações C2C. (Não se preocupe — no próximo artigo, você vai trabalhar no terminal. Por enquanto, vamos abordar estes conceitos essenciais.)
+
+O modelo de dados simplificado da sua integração será algo assim:
+
+```text
+                                   ┌───────────────────┐    ┌─────────┐
+                                   │ Project Device 01 │ -> │ Project │
+┌───────────┐    ┌──────────────┐  └───────────────────┘    └─────────┘
+│ Oauth App │ -> │ Device Model │ ──────────⭥
+└───────────┘    └──────────────┘  ┌───────────────────┐    ┌─────────┐
+                                   │ Project Device 02 │ -> │ Project │
+                                   └───────────────────┘    └─────────┘
+```
+
+## Apps OAuth {#oauth-apps}
+
+Sua integração é definida por um OAuth App, uma entidade registrada no nosso back-end que permite que seus dispositivos se autorizem no Frame.io usando [OAuth 2](https://oauth.net/2/). Seu OAuth App define a estratégia de autorização de toda a sua integração. Todos os dispositivos que seus usuários conectarem ao Frame.io serão autorizados por meio do mesmo OAuth App (embora integradores com várias linhas de dispositivos possam querer um OAuth App para cada uma).
+
+Para integrações C2C, usamos um fluxo OAuth especializado, projetado especificamente para dispositivos com recursos de interface limitados.
+
+### Autenticação de dispositivos C2C {#c2c-device-authentication}
+
+A API C2C foi projetada para dispositivos com recursos de interface limitados. Esses dispositivos permitem que o usuário os conecte ao Frame.io exibindo um código de 6 dígitos, que o usuário então insere no site do Frame.io usando o próprio navegador.
+
+Os dispositivos recebem um `client_secret` que deve ser fornecido ao nosso back-end para receber um código de autorização de 6 dígitos. Essa abordagem simplificada garante uma experiência de autenticação consistente e segura em todas as integrações C2C.
+
+## Modelos de dispositivo {#device-models}
+
+O modelo de dispositivo configura como seu dispositivo se comporta ao interagir com o back-end do C2C, incluindo quais recursos ele oferece. As seguintes configurações são definidas pelo seu modelo de dispositivo:
+
+<CardGroup cols={2}>
+
+<Card title="Tipo de asset" icon="file-video" iconType="solid">
+
+A categoria de asset que seu dispositivo produz. Pode ser “video”, “audio” ou “data”. Observe que “video” inclui arquivos de vídeo multiplexados com áudio.
+
+</Card>
+
+<Card title="Nome do caminho" icon="folder" iconType="solid">
+
+O nome da sua integração como ele deve aparecer no caminho de qualquer asset enviado.
+
+</Card>
+
+<Card title="Caminho de arquivo com tokens" icon="code" iconType="solid">
+
+O C2C só permite o upload de assets para caminhos raiz específicos, mas, abaixo desse requisito, seu dispositivo pode ser configurado para enviar assets para um caminho calculado dinamicamente com base nos metadados fornecidos para o asset.
+
+</Card>
+
+<Card title="Metadados obrigatórios" icon="list" iconType="solid">
+
+Quais metadados serão obrigatórios ao enviar um asset para o Frame.io, principalmente para oferecer suporte ao caminho de arquivo com tokens.
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Status via socket" icon="plug" iconType="solid">
+
+Se a integração usará sockets de baixa latência para comunicar seu status atual ou chamadas REST de latência mais alta.
+
+</Card>
+
+</CardGroup>
+
+Os recursos oferecidos pelo seu dispositivo podem mudar entre versões de firmware. Para permitir a compatibilidade com versões anteriores e uma experiência de usuário limpa, a configuração do seu dispositivo é selecionada dinamicamente com base na versão de firmware detectada. Em breve, uma integração poderá ter mais de um DeviceModel. O modelo de dispositivo usado será determinado comparando a versão de firmware do dispositivo com a versão mínima de firmware exigida por um modelo de dispositivo específico.
+
+## Dispositivos de projeto e identificação {#project-devices-and-identification}
+
+O `ProjectDevice` representa cada instância física de um dispositivo conectado ao Frame.io.
+
+Um `ProjectDevice` se identifica usando um valor de identificação exclusivo chamado `client_id`. Esse valor deve ser algo que, com garantia, não seja compartilhado entre dois dispositivos. Pode ser o número de série de um dispositivo ou uma string aleatória que o dispositivo gerou uma vez e salvou. O `client_id` NÃO deve ser um valor que não pertença ao seu dispositivo, como o endereço MAC de um computador.
+
+Nosso back-end acompanha cada dispositivo de projeto e salva informações sobre ele, como sua versão de firmware atual.
+
+Cada `ProjectDevice` terá um `Project` específico do Frame.io associado a ele e uma `OauthAuthorization` que concede ao dispositivo acesso ao projeto, além de um conjunto de escopos que detalham o que o dispositivo tem permissão para fazer. Para saber mais sobre os escopos disponíveis, consulte os guias detalhados sobre a implementação de autenticação e autorização.
+
+O `ProjectDevice` é o que é retornado pelo endpoint `/me`. Um `Device` só pode estar vinculado ativamente a um único `ProjectDevice` por vez e, portanto, a um único `Project` por vez.
+
+## Versões de firmware {#firmware-versions}
+
+Seu dispositivo deve informar sua versão de firmware atual no cabeçalho HTTP `x-client-version` sempre que você chamar um endpoint em `https://api.frame.io`. Os próximos guias da API incluirão esse cabeçalho em cada exemplo.
+
+Em alguns casos, nosso back-end precisa ordenar várias versões de firmware e, para isso, exigimos que os valores SEJAM uma [versão semântica](https://semver.org/) válida. Isso inclui valores como `0.1.2`, `2.1.3-preview.01` e `2.1.3-preview.01+build_19770504.01`, entre outros.
+
+Um erro será retornado se os valores de versão de firmware não forem versões semânticas válidas. Entendemos que nem todas as integrações controlam seu firmware usando versionamento semântico e, nesses casos, pedimos que você mantenha uma versão semântica para informar ao nosso back-end para cada versão interna que criar.
+
+Ao fornecer o cabeçalho, diferentes versões do seu firmware podem oferecer recursos diferentes (e às vezes conflitantes) no Frame.io.
+
+<Info>
+
+**Host do cabeçalho**
+
+A versão de firmware só é tratada em chamadas para [https://api.frame.io](https://api.frame.io); ao fazer chamadas para [https://applications.frame.io](https://applications.frame.io), o cabeçalho não tem efeito.
+
+</Info>
+
+<Info>
+
+**Requisito atual**
+
+O `x-client-version` agora é um cabeçalho HTTP obrigatório, e isso será exigido pelos servidores do Frame.
+
+</Info>
+
+## Próximas etapas {#next-steps}
+
+É hora de fazer algumas chamadas à API! Vamos aprender a autenticar e autorizar com o C2C. Siga o [guia de configuração](/pt-BR/camera-to-cloud/implementing-c2c-setting-up) para começar.
+

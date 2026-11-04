@@ -1,0 +1,499 @@
+---
+title: "ハウツー: エラーの処理"
+sidebarTitle: "エラーの処理"
+---
+
+## はじめに {#introduction}
+
+このガイドでは、C2C API とやり取りする際のエラー処理について説明します。HTTP エラーを適切に処理することは、あらゆるサードパーティサービスとの堅牢なインテグレーションに欠かせない要素です。
+
+## エラーの種類 {#types-of-errors}
+
+インテグレーションにおけるエラーはさまざまな原因から発生する可能性があり、主に 4 つのグループに分類できます。
+
+- **I/O エラー:** 読み取り/書き込み操作の失敗など、デバイス上のハードウェア操作に起因するエラー
+- **アプリケーションエラー:** アプリケーションコード内の問題から発生するエラー
+- **ネットワークエラー:** ネットワークスタック内で発生し、ネットワークライブラリによって通知されるエラー
+- **API エラー:** Frame.io のバックエンドサービスによって生成されるエラー
+
+エラーのカテゴリごとに、特有の処理上の考慮事項があります。このガイドでは主に API エラーに焦点を当てますが、その他のカテゴリに対する一般的な戦略についても取り上げます。
+
+## API エラーの返され方 {#how-api-errors-are-returned}
+
+Frame.io の API は、主に 2 つの仕組みでエラーを伝えます。
+
+- **ステータスコード:** 問題の性質を示す HTTP エラーコード
+- **エラーメッセージ:** 追加のエラー詳細を提供するペイロードの内容。特に、複数のエラー条件が同じステータスコードを共有する場合に役立ちます
+
+### エラーステータスコード {#error-status-codes}
+
+HTTP ステータスコードは、HTTP リクエストの結果を伝える標準化された数値のレスポンスです。詳しくは、[Mozilla の HTTP ステータスコードのドキュメント](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)、またはより視覚的に理解したい場合は [HTTP Cats](https://http.cat/) を参照してください。
+
+Frame.io API の各エンドポイントでは、想定される成功時のステータスコードが規定されています。通常は `200 (OK)`、`201 (Created)`、または `204 (No Content)` です。成功したかどうかは、これらの特定のコードを確認するか、コードが 200〜299 の範囲内にあることを確認することで検証できます。
+
+399 を超えるステータスコードはエラーを示します。ほとんどの API エラーは、クライアント側の問題を意味する 4XX コード (400〜499) を返します。この範囲外のエラーは通常、デバイスと当社サービスの間にあるネットワークインフラストラクチャから発生しますが、注目すべき例外として `500 (Internal Server Error)` は当社サーバー内の予期しない問題を示します。
+
+同様に、`404 (Not Found)` レスポンスは 4XX コードではあるものの、当社のバックエンドではなく中間のサービスによって生成される場合があります。
+
+予期しないステータスコードが返された場合は、私たちのチームにお知らせください。
+
+### エラーペイロードのスキーマ {#error-payload-schemas}
+
+Frame.io は、*シンプル* と *詳細* の 2 つの形式でエラーの詳細を返します。エラー処理のロジックは、両方の形式に対応する必要があります。
+
+### シンプルなエラースキーマ {#simple-error-schema}
+
+以下は、誤った `client_secret` によって失敗したリクエストの例です。
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=Some-Client-ID' \
+    --form 'client_secret=bad_secret' \
+    --form 'scope=asset_create offline'
+```
+
+レスポンス:
+
+```text
+HTTP/2 400
+...
+
+{"error":"invalid_client"}
+```
+
+シンプルなスキーマには、エラーを識別するための単一のフィールドのみが含まれます。
+
+### 詳細なエラースキーマ {#detailed-error-schema}
+
+比較のため、適切な認可のないリクエストを示します。
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/heartbeat \
+    --header 'Authorization: Bearer bad-token' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+レスポンス:
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+詳細なエラーには、エラーの種類を識別する `message` フィールドが含まれます。
+
+### エラーの種類の判定 {#determining-error-type}
+
+Frame.io のエラーを処理する際は、まずエラーペイロードを確認し、ペイロードが存在しない場合は HTTP ステータスコードにフォールバックします。
+
+以下は、基本的なエラー処理の実装です。
+
+```python title="Python"
+# Dict of known error codes: native errors.
+ERROR_STATUS_MAP = {
+    429: SlowDownError,
+    ...
+}
+
+# Dict of known error messages: native errros.
+ERROR_MESSAGE_MAP = {
+   "Channel Paused": ChannelPausedError,
+   "invalid_client": InvalidClientError,
+   "slow_down": SlowDownError,
+   ...
+}
+
+def _c2c_extract_error_message(response):
+    """
+    Gets the error message from an error payload. Returns `None` 
+    if an error payload is not found.
+    """
+
+    # Try to decode the payload, if it is not JSON return `None`
+    try:
+        payload = response.json() 
+    except JSONDecodeError:
+       return None
+
+    # Try the simple error schema first.
+    message = payload.get("error", default=None)
+    if message is not None:
+        return message
+
+    # Now try the detailed schema. Return None if we do not find one.
+    return payload.get("message", default=None)
+
+def _c2c_error_type_from_response(response):
+    """
+    Converts a bad HTTP response into an error.
+    """
+    error_message = _c2c_extract_error_message(response)
+
+    # try to do a lookup of the error type by message.
+    error_type = ERROR_MESSAGE_MAP.get(error_message, default=None) 
+    if error_type is not None:
+        return error_type()
+
+    # If not, try to do a lookup by error code.
+    error_type = ERROR_STATUS_MAP.get(response.status_code, default=None)
+    if error_type is not None:
+        return error_type()
+
+    # Otherwise we are going to return an `UnknownAPIError` to signal that we
+    # encoutnered an error from Frame.io's backend servers, but do not know the
+    # message and/or status code.
+    return UnknownAPIError(message=error_message)
+
+def raise_on_frameio_error(response, expected_status):
+    """
+    Raises a native error from an HTTP response if the response indicates an error
+    occured. Expected status should be the status we expect to get (200, 201, 204, 
+    etc).
+    """
+
+    # If the status code is less than `400`, then it is not an error status code.
+    if response.status < 400:
+
+        # Check that the status code is the one we expected, otherwise raise an
+        # error.
+        if response.status != expected_status:
+            raise UnexpectedStatusError(
+                expected=expected_status, received=response.status
+            )
+
+        return None
+
+    # Otherwise convert and raise a native error.
+    raise _c2c_error_type_from_response(response)
+```
+
+この例で参照しているエラーの対応表は、このガイドの最後に掲載しています。
+
+### AWS エラー {#aws-errors}
+
+ファイルのチャンクをアップロードする際は、独自のエラー形式を持つ AWS S3 と直接やり取りします。詳しくは [AWS の共通エラーに関するドキュメント](https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList)を参照してください。一般的なルールとして、致命的でない AWS エラーは少なくとも 1 回は再試行する必要があります。
+
+AWS エラーは XML として返されます。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>NoSuchKey</Code>
+  <Message>The resource you requested does not exist</Message>
+  <Resource>/mybucket/myfoto.jpg</Resource> 
+  <RequestId>4442587FB7D0A2F9</RequestId>
+</Error>
+```
+
+`Code` 要素がエラーの種類を示します。
+
+## エラーの再試行 {#retrying-errors}
+
+### 再試行すべき場合 {#when-to-retry}
+
+このガイドのエラー表には、どの API エラーを再試行すべきかが示されています。I/O 操作、ネットワークライブラリ、または AWS からの API 以外のエラーについては、一時的な状況が原因である可能性のあるものを再試行することを検討してください。ネットワークの輻輳、一時的なサーバー停止、パケットロスなどは、通常再試行に値します。ほとんどのネットワークライブラリは、リクエストに時間がかかりすぎると `TimeoutError` を発生させます。これは再試行の有力な候補です。
+
+### 迷ったら 1 回再試行する {#when-in-doubt-retry-once}
+
+コンピューティング環境では、予測できない問題が発生することがあります。致命的に見えるエラーでも、1 回は再試行してみる価値があることがよくあります。一時的なシステムの状態、ハードウェアの異常 ([宇宙線によるビット反転](https://www.youtube.com/watch?v=AaZ_RSt0KP8)など)、まれなメモリの状態によって、2 回目の試行で解決する一見致命的なエラーが発生することがあります。
+
+ただし、再試行すべきでないエラーもあります。たとえば、アセットの作成時に `409: CHANNEL PAUSED` レスポンスが返された場合は、デバイスが一時停止中でアップロードすべきでないことを示しています。この状態は意図的なものであり、再試行しても変わる可能性は低いでしょう。
+
+### 指数バックオフ {#exponential-backoff}
+
+Frame.io はレート制限を実装しており、制限を超えると `429: Slow Down` エラー、または次のペイロードを伴う `400` ステータスが返されます。
+
+```text
+HTTP/2 400
+
+{"error":"slow_down"}
+```
+
+これらのレスポンスを受け取った場合は、再試行に指数バックオフを実装してください。遅延 (秒単位) を計算するための推奨式は次のとおりです。
+
+```python title="Python"
+delay = min(2 ** attempt / 2, 32.0)
+```
+
+ここで `attempt` は 0 から始まります。これにより、0.5 秒、1 秒、2 秒、4 秒、8 秒、16 秒、32 秒の遅延が生じ、以降の試行はすべて 32 秒待機します。
+
+<Info>
+
+**バックオフのジッター**
+
+同じエラー状況から回復しようとする複数のデバイス間でリクエストが同期するのを防ぐため、バックオフのタイミングにランダム性 (ジッター) を加えることをおすすめします。これにより、障害後に多数のデバイスが同時に再試行する[サンダリングハード問題](https://medium.com/@venkteshsubramaniam/the-thundering-herd-distributed-systems-rate-limiting-9128d20e1f00)を軽減できます。計算した遅延の 0 から半分までのランダムなオフセットを加えるのがよい方法です: `math.rand(0, delay // 2)`。
+
+</Info>
+
+指数バックオフはレート制限エラーに不可欠ですが、ネットワークや I/O の障害全般を処理する際にも有益です。このアプローチにより、再試行による追加の負荷をかけることなく、一時的なリソースの制約が解消されるのを待つことができます。
+
+### 切断状態の検出 {#detecting-disconnected-status}
+
+ネットワークエラーが発生した場合、次の理由で Frame.io に到達できないことを示している可能性があります。
+
+- ローカルネットワークがダウンしている
+- Frame.io のサービスで問題が発生している
+- 中間のネットワークコンポーネントに障害が発生している
+
+これらの状況を検出することが重要です。エラーが接続の問題を示唆している場合は、サービスの復旧を確認する監視タスクを実装し、切断されていることをユーザーに通知してください。
+
+### 接続と認可を待機する {#waiting-for-connection-and-authorization}
+
+デバイスが認可を更新している間、ユーザーの認可を待っている間、または Frame.io に到達できない間は、不要なリクエストを行わないようにアプリケーションを設計してください。これにより、ネットワークのオーバーヘッドが削減され、ユーザーエクスペリエンスが向上します。
+
+切断状態を検出した場合は、すべての API 呼び出し (`https://api.frame.io/health` への呼び出しを除く) をブロックしてください。接続の問題が発生したら、ヘルスエンドポイントをポーリングするバックグラウンドタスクを開始し、接続が回復するまで以降の API 呼び出しをブロックします。
+
+同様に、トークンの有効期限が切れた場合は、新しいトークンが発行されるまで認可に依存する呼び出しをブロックしてください。トークンの更新に失敗した場合は、再認証するようユーザーに通知します。
+
+接続状態をポーリングする際は、前述と同じ指数バックオフのアプローチを適用してください。
+
+### リクエストのタイムアウト {#request-timeouts}
+
+リクエストの種類ごとに適切なタイムアウト値を設定してください。
+
+- **デフォルト**: 基本的なリクエストには 15 秒
+- **認可の更新**: バックエンドでの処理の可能性を考慮して 2 分
+- **ファイルチャンクのアップロード**: 大きなデータを転送する際の低速なネットワークに対応するため 5 分
+
+### 再試行ハンドラーの例 {#example-retry-handler}
+
+以下は、指数バックオフを使ったエラー処理を示す疑似コードの実装です。
+
+```python title="Python"
+# List of errors we know are fatal and should not be retried.
+FATAL_ERRORS = (
+    ChannelPausedError,
+    DevicesDisabledError,
+    ...
+)
+
+# List of errors we know should be retried more than once.
+RETRY_ERRORS = (
+    TimeoutError,
+    NotFoundError,
+    SlowDownError,
+    UnknownAPIError,
+    ...
+)
+
+# List of errors that could be the result of Frame.io being unreachable.
+DISCONNECTED_ERRORS = (
+    TimeoutError,
+    HttpClientError,
+    ...
+)
+
+def retry_with_backoff(next_handler):
+    """
+    Middleware for retrying errors with exponential backoff.
+    """
+
+    def retry_handler(call, retry_count):
+        """
+        Handler for retrying c2c API calls with exponential backoff.
+        """
+
+        error = None
+
+        # We will retry the call 8 times here, totalling 63.5 seconds +- ~32 seconds.
+        for attempt in range(start=1, stop=retry_count + 1):
+
+            # If we are attempting to reach an endpoint that requires authorization
+            # we should wait unil we have valid authorization before attempting
+            # a call. We need to do this each time in case our access_token
+            # expires between attempts.
+            C2C.wait_for_authorized(call)
+
+            # Likewise, we should wait until we are connected to Frame.io to attempt
+            # a call if we are not calling `https://api.frame.io/health`
+            C2C.wait_for_connected(call)
+
+            try:
+                # Return the result on a success.
+                return next_handler(call)
+            except FATAL_ERRORS as error:
+                # If we hit an error we know is fatal, raise the error without
+                # retrying it.
+                raise error
+
+            except RETRY_ERRORS as error:
+                # If we hit an error we know we should retry many times, continue,
+                # but notify our client if we think we may have been disconnected.
+                if type(error) in DISCONNECTED_ERRORS:
+                    C2C.notify_disconnected()
+
+            except BaseException as error:
+                # Otherwise, do not retry the call more than once.
+                if attempt > 1:
+                    raise error
+
+            # The delay for the next attempt should be no more than 32 seconds.
+            # This algorithm will go: 0.5s, 1s, 2s, 4s, 8s, 16s, 32s, 32s, ...
+            delay = min(2 ** attempt / 2, 32.0)
+
+            # Add some randomness (jitter) to the delay (up to half the value of
+            # the delay in either direction).
+            delay += math.random(-delay, delay) / 2
+
+            # Wait between retries
+            sleep(delay)
+
+        # If we have exhausted all retries,
+        raise error
+
+    return retry_handler
+```
+
+## エラー表 {#error-tables}
+
+以下の表は、Frame.io API のエラーを分類し、処理のガイダンスを示したものです。各列の意味は次のとおりです。
+
+`message`: エラーペイロードのメッセージ識別子
+`http code`: HTTP ステータスコード
+`error type`: 概念的なエラーカテゴリ ([説明](#descriptions)セクションで詳述)
+`schema`: エラーペイロードの形式 ([シンプル](#simple-error-schema)または[詳細](#detailed-error-schema))
+`retry`: 再試行の推奨 (`yes` は複数回試行、`once` は 1 回のみ再試行、`no` は致命的なエラー)
+
+アスタリスク (\*) は、[説明](#descriptions)セクションで詳述されている特別な考慮事項があることを示します。
+
+### Frame.io のエラーメッセージ {#frame-io-error-messages}
+
+| メッセージ | エラーの種類 | HTTP コード | スキーマ | 再試行 |
+| --- | --- | --- | --- | --- |
+| ”access_denied” | [AccessDenied](#accessdenied) | 401 | [simple](#simple-error-schema) | once |
+| ”authorization_pending” | [AuthorizationPending](#authorizationpending) | 400 | [simple](#simple-error-schema) | yes |
+| ”Channel Paused” | [ChannelPaused](#channelpaused) | 409 | [simple](#simple-error-schema) | no |
+| ”expired_token” | [ExpiredToken](#expiredtoken) | 400 | [simple](#simple-error-schema) | no |
+| ”Invalid Argument” | [InvalidArgument](#invalidargument) | 422 | [detailed](#detailed-error-schema) | no |
+| ”invalid_client” | [InvalidClient](#invalidclient) | 400 | [simple](#simple-error-schema) | no |
+| ”Invalid client version” | [InvalidClientVersion](#invalidclientversion) | 400 | [simple](#simple-error-schema) | no |
+| ”invalid_grant” | [InvalidGrant](#invalidgrant) | 400 | [simple](#simple-error-schema) | no |
+| ”invalid_request” | [InvalidRequest](#invalidrequest) | 400 | [simple](#simple-error-schema) | once |
+| ”Not Authorized” | [UnauthorizedClient](#unauthorizedclient) | 401 | [detailed](#detailed-error-schema) | no |
+| ”slow_down” | [SlowDown](#slowdown) | 400 | [simple](#simple-error-schema) | yes |
+| ”unauthorized_client” | [UnauthorizedClient](#unauthorizedclient) | 401 | [simple](#simple-error-schema) | yes\* |
+
+### Frame.io のステータスコード {#frame-io-status-codes}
+
+| HTTP コード | エラーの種類 | 再試行 |
+| --- | --- | --- |
+| 400 | [InvalidRequest](#invalidrequest) | once |
+| 401 | [UnauthorizedClient](#unauthorizedclient) | no |
+| 422 | [InvalidContentType](#invalidcontenttype) | no |
+| 429 | [SlowDown](#slowdown) | yes |
+| 500 | [InternalServerError](#internalservererror) | yes |
+
+### AWS エラー {#aws-errors-1}
+
+詳細な説明については、[AWS のドキュメントを参照してください](https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList)。
+
+| エラー | 再試行 |
+| --- | --- |
+| InternalError | yes |
+| OperationAborted | yes |
+| RequestTimeout | yes |
+| ServiceUnavailable | yes |
+| SlowDown | yes |
+| \[その他すべてのエラー\] | once |
+
+<Info>
+
+**類似した AWS エラーの解釈**
+
+AWS の `SlowDown` と `ServiceUnavailable` はどちらもリクエストレートの問題を示しており、Frame.io の `SlowDown` エラーと同様に扱い、指数バックオフを実装できます。同様に、AWS の `InternalError` は概念的に当社 API の `InternalServerError` に相当します。
+
+</Info>
+
+### 説明 {#descriptions}
+
+#### AccessDenied {#accessdenied}
+
+デバイスのペアリング中にユーザーが認可を拒否した場合に返されます。
+
+#### AuthorizationPending {#authorizationpending}
+
+ユーザーがまだデバイスのペアリングコードを入力していないことを示します。デバイスコードのレスポンスで指定された `interval` の期間が経過した後、ポーリングを続行してください。
+
+#### ChannelPaused {#channelpaused}
+
+アセットの作成時にデバイスのチャンネルが一時停止されていました。*このアセットを再度アップロードしようとしないでください。*
+
+#### ExpiredToken {#expiredtoken}
+
+デバイスのペアリングコードの有効期限が切れています。新しいコードを生成し、ペアリングプロセスをやり直してください。
+
+#### InternalServerError {#internalservererror}
+
+予期しないバックエンドの問題を示します。1 回再試行し、調査のために `500` エラーを私たちのチームに報告してください。
+
+既知の問題として、本来 `InvalidRequest` を返すべき場合に `500` エラーが返されるケースがあることに注意してください。
+
+- 存在しないデバイスチャンネルにアップロードしようとした場合
+- 無効なカスタムチャンク数をリクエストした場合
+
+#### InvalidArgument {#invalidargument}
+
+ペイロードのパラメーターに無効な値が含まれていました。パラメーターの値が API の想定と一致していることを確認してください。
+
+#### InvalidContentType {#invalidcontenttype}
+
+リクエストの `Content-Type` ヘッダーがサポートされていません。API は一般的に次の形式を受け付けます。
+
+- `form/multipart` (認可エンドポイントのみ)
+- `application/x-www-form-urlencoded` (すべてのエンドポイント)
+- `application/json` (認可以外のエンドポイント)
+
+#### InvalidClient {#invalidclient}
+
+指定された資格情報 (`client_id`、`client_secret` など) が認識されませんでした。インテグレーションの資格情報を確認してください。
+
+### InvalidClientVersion {#invalidclientversion}
+
+`x-client-version` ヘッダーが重複しているか、無効な[セマンティックバージョン](https://semver.org/)が含まれています。
+
+#### InvalidGrant {#invalidgrant}
+
+認可のグラントタイプが無効です。正しい値については認可のガイドを確認してください。
+
+#### InvalidRequest {#invalidrequest}
+
+リクエストのパラメーターまたはペイロードの形式が正しくありません。フィールド名と値の形式を確認してください。
+
+トークンの更新中にこのエラーを受け取った場合は、リフレッシュトークンの有効期限が切れているため、認可プロセスをやり直す必要があります。
+
+#### SlowDown {#slowdown}
+
+リクエストのレート制限を超えました。以降のリクエストには指数バックオフを実装してください。同じ TCP 接続で複数のデバイスコードリクエストを行うとこのエラーが発生する場合があることに注意してください。ペアリングリクエストごとに新しい接続を作成してください。
+
+#### UnauthorizedClient {#unauthorizedclient}
+
+通常、`access_token` の有効期限が切れているか、存在しないことを示します。このエラーを受け取った場合は、再試行する前にトークンを更新してください。
+
+トークンの更新中にこのエラーが発生した場合は、認可プロセスをやり直し、再接続するようユーザーに促す必要があります。
+
+このエラーは、デバイスの認可スコープ外のリソースにアクセスした場合や、プロジェクトで C2C デバイスが無効化されている場合にも発生することがあります。認可時に適切なスコープをリクエストしたことを確認してください。
+
+*トークンの更新中にこのエラーが発生した場合は、ユーザーの操作を伴って認可プロセス全体をやり直す必要があります。*
+
+## 次のステップ {#next-steps}
+
+ご不明な点があればお気軽に私たちのチームにお問い合わせのうえ、[応用アップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)に進んでください。皆さまのインテグレーションの進捗をサポートできることを楽しみにしています。
+
+まだご覧になっていない場合は、先に進む前に [Implementing C2C: Setting Up](/ja/camera-to-cloud/implementing-c2c-setting-up) ガイドを確認してください。
+
+[認証と認可のプロセス](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で取得した `access_token` が必要になります。
+
+このガイドは、[基本的なアップロードガイド](/ja/camera-to-cloud/how-to-basic-upload)と[応用アップロードガイド](/ja/camera-to-cloud/how-to-advanced-uploads)の内容に基づいています。

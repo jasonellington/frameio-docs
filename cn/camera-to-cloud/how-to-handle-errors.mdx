@@ -1,0 +1,499 @@
+---
+title: "操作指南：处理错误"
+sidebarTitle: "处理错误"
+---
+
+## 简介 {#introduction}
+
+本指南介绍与 C2C API 交互时的错误处理。妥善处理 HTTP 错误是与任何第三方服务进行稳健集成的重要组成部分。
+
+## 错误类型 {#types-of-errors}
+
+集成中的错误可能来自多种来源，我们可以将其分为四大类：
+
+- **I/O 错误：** 源于设备上的硬件操作，例如读/写操作失败
+- **应用程序错误：** 源于应用程序代码中的问题
+- **网络错误：** 发生在网络栈中，由您的网络库报告
+- **API 错误：** 由 Frame.io 的后端服务生成
+
+每类错误都需要特定的处理考量。本指南主要关注 API 错误，但我们也会介绍处理其他类别错误的一般策略。
+
+## API 错误的返回方式 {#how-api-errors-are-returned}
+
+Frame.io 的 API 通过两种主要机制传达错误：
+
+- **状态码：** 指示问题性质的 HTTP 错误代码
+- **错误消息：** 提供额外错误详情的负载内容，尤其是在多种错误情况共用同一状态码时
+
+### 错误状态码 {#error-status-codes}
+
+HTTP 状态码是标准化的数字响应，用于传达 HTTP 请求的结果。如需了解更多信息，请参阅 [Mozilla 的 HTTP 状态码文档](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)，或通过 [HTTP Cats](https://http.cat/) 以更直观的方式了解。
+
+每个 Frame.io API 端点都会指定一个预期的成功状态码——通常为 `200 (OK)`、`201 (Created)` 或 `204 (No Content)`。您可以通过检查这些特定代码，或确认代码处于 200-299 范围内来验证是否成功。
+
+大于 399 的状态码表示错误。大多数 API 错误返回 4XX 代码（400-499），表示客户端问题。此范围之外的错误通常源自您的设备与我们服务之间的网络基础设施，但 `500 (Internal Server Error)` 是一个明显的例外，它表示我们的服务器内部出现了意外问题。
+
+同样，`404 (Not Found)` 响应虽然属于 4XX 代码，但可能是由中间服务而非我们的后端生成的。
+
+如果您遇到意外的状态码，请通知我们的团队。
+
+### 错误负载结构 {#error-payload-schemas}
+
+Frame.io 以两种格式返回错误详情：*简单*格式和*详细*格式。您的错误处理逻辑应兼容这两种格式。
+
+### 简单错误结构 {#simple-error-schema}
+
+以下是一个因 `client_secret` 不正确而失败的请求示例：
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=Some-Client-ID' \
+    --form 'client_secret=bad_secret' \
+    --form 'scope=asset_create offline'
+```
+
+响应：
+
+```text
+HTTP/2 400
+...
+
+{"error":"invalid_client"}
+```
+
+简单结构仅包含一个用于标识错误的字段。
+
+### 详细错误结构 {#detailed-error-schema}
+
+作为对比，以下是一个未经正确授权的请求：
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/heartbeat \
+    --header 'Authorization: Bearer bad-token' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+响应：
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+详细错误包含一个用于标识错误类型的 `message` 字段。
+
+### 确定错误类型 {#determining-error-type}
+
+处理 Frame.io 错误时，首先检查是否存在错误负载；如果没有负载，则回退到使用 HTTP 状态码。
+
+以下是一个基本的错误处理实现：
+
+```python title="Python"
+# Dict of known error codes: native errors.
+ERROR_STATUS_MAP = {
+    429: SlowDownError,
+    ...
+}
+
+# Dict of known error messages: native errros.
+ERROR_MESSAGE_MAP = {
+   "Channel Paused": ChannelPausedError,
+   "invalid_client": InvalidClientError,
+   "slow_down": SlowDownError,
+   ...
+}
+
+def _c2c_extract_error_message(response):
+    """
+    Gets the error message from an error payload. Returns `None` 
+    if an error payload is not found.
+    """
+
+    # Try to decode the payload, if it is not JSON return `None`
+    try:
+        payload = response.json() 
+    except JSONDecodeError:
+       return None
+
+    # Try the simple error schema first.
+    message = payload.get("error", default=None)
+    if message is not None:
+        return message
+
+    # Now try the detailed schema. Return None if we do not find one.
+    return payload.get("message", default=None)
+
+def _c2c_error_type_from_response(response):
+    """
+    Converts a bad HTTP response into an error.
+    """
+    error_message = _c2c_extract_error_message(response)
+
+    # try to do a lookup of the error type by message.
+    error_type = ERROR_MESSAGE_MAP.get(error_message, default=None) 
+    if error_type is not None:
+        return error_type()
+
+    # If not, try to do a lookup by error code.
+    error_type = ERROR_STATUS_MAP.get(response.status_code, default=None)
+    if error_type is not None:
+        return error_type()
+
+    # Otherwise we are going to return an `UnknownAPIError` to signal that we
+    # encoutnered an error from Frame.io's backend servers, but do not know the
+    # message and/or status code.
+    return UnknownAPIError(message=error_message)
+
+def raise_on_frameio_error(response, expected_status):
+    """
+    Raises a native error from an HTTP response if the response indicates an error
+    occured. Expected status should be the status we expect to get (200, 201, 204, 
+    etc).
+    """
+
+    # If the status code is less than `400`, then it is not an error status code.
+    if response.status < 400:
+
+        # Check that the status code is the one we expected, otherwise raise an
+        # error.
+        if response.status != expected_status:
+            raise UnexpectedStatusError(
+                expected=expected_status, received=response.status
+            )
+
+        return None
+
+    # Otherwise convert and raise a native error.
+    raise _c2c_error_type_from_response(response)
+```
+
+本示例中引用的错误查找表在本指南末尾提供。
+
+### AWS 错误 {#aws-errors}
+
+上传文件分块时，您直接与 AWS S3 交互，而 AWS S3 有自己的错误格式。有关详细信息，请参阅 [AWS 常见错误文档](https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList)。一般而言，非致命的 AWS 错误应至少重试一次。
+
+AWS 错误以 XML 格式返回：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>NoSuchKey</Code>
+  <Message>The resource you requested does not exist</Message>
+  <Resource>/mybucket/myfoto.jpg</Resource> 
+  <RequestId>4442587FB7D0A2F9</RequestId>
+</Error>
+```
+
+`Code` 元素用于标识错误类型。
+
+## 重试错误 {#retrying-errors}
+
+### 何时重试 {#when-to-retry}
+
+本指南中的错误表指明了哪些 API 错误应当重试。对于来自 I/O 操作、网络库或 AWS 的非 API 错误，请考虑重试那些可能由暂时性状况导致的错误。网络拥塞、服务器临时中断或数据包丢失通常都值得重试。当请求耗时过长时，大多数网络库会引发 `TimeoutError`，这是最适合重试的情况。
+
+### 如有疑问，重试一次 {#when-in-doubt-retry-once}
+
+计算环境可能会出现不可预测的问题。即使是看似致命的错误，通常也值得重试一次。临时的系统状态、硬件异常（例如[宇宙射线导致的比特翻转](https://www.youtube.com/watch?v=AaZ_RSt0KP8)）或罕见的内存状况都可能导致看似致命的错误，而这些错误在第二次尝试时就会消失。
+
+不过，有些错误不应重试。例如，创建资产时收到 `409: CHANNEL PAUSED` 响应，表示设备已暂停，不应上传。这种状态是有意设置的，重试不太可能改变它。
+
+### 指数退避 {#exponential-backoff}
+
+Frame.io 实施了速率限制，超出这些限制会产生 `429: Slow Down` 错误，或带有以下负载的 `400` 状态：
+
+```text
+HTTP/2 400
+
+{"error":"slow_down"}
+```
+
+收到这些响应时，请为重试实施指数退避。推荐的延迟（以秒为单位）计算公式为：
+
+```python title="Python"
+delay = min(2 ** attempt / 2, 32.0)
+```
+
+其中 `attempt` 从 0 开始。这会产生 0.5 秒、1 秒、2 秒、4 秒、8 秒、16 秒、32 秒的延迟，之后的所有尝试都等待 32 秒。
+
+<Info>
+
+**退避抖动**
+
+我们建议在退避时间中加入随机性（抖动），以防止从同一错误状况中恢复的多台设备的请求同步。这有助于缓解[惊群问题](https://medium.com/@venkteshsubramaniam/the-thundering-herd-distributed-systems-rate-limiting-9128d20e1f00)，即在服务中断后大量设备同时重试。一个不错的方法是添加一个介于 0 和计算出的延迟一半之间的随机偏移量：`math.rand(0, delay // 2)`。
+
+</Info>
+
+虽然指数退避对于速率限制错误至关重要，但它通常也有助于处理网络和 I/O 故障。这种方法可以让临时的资源限制得到缓解，而不会因您的重试尝试而增加额外负载。
+
+### 检测断开连接状态 {#detecting-disconnected-status}
+
+发生网络错误时，可能表示 Frame.io 无法访问，原因包括：
+
+- 您的本地网络已断开
+- Frame.io 的服务出现问题
+- 某个中间网络组件发生故障
+
+检测这些状况非常重要。当错误表明存在连接问题时，请实施一个监控任务，检查服务是否已恢复，并告知用户连接已断开。
+
+### 等待连接和授权 {#waiting-for-connection-and-authorization}
+
+在设计应用程序时，应避免在设备刷新授权、等待用户授权或无法访问 Frame.io 时发出不必要的请求。这可以减少网络开销并改善用户体验。
+
+当检测到断开连接状态时，请阻止所有 API 调用（`https://api.frame.io/health` 除外）。出现连接问题时，启动一个后台任务来轮询健康检查端点，并在连接恢复之前阻止进一步的 API 调用。
+
+同样，如果令牌过期，请在颁发新令牌之前阻止依赖授权的调用。如果令牌刷新失败，请提醒用户重新进行认证。
+
+轮询连接状态时，请采用前面介绍的相同指数退避方法。
+
+### 请求超时 {#request-timeouts}
+
+为不同类型的请求配置适当的超时值：
+
+- **默认**：基本请求为 15 秒
+- **授权刷新**：2 分钟，以应对可能的后端处理时间
+- **文件分块上传**：5 分钟，以适应在慢速网络中传输较大数据的情况
+
+### 重试处理程序示例 {#example-retry-handler}
+
+以下是一个演示使用指数退避进行错误处理的伪代码实现：
+
+```python title="Python"
+# List of errors we know are fatal and should not be retried.
+FATAL_ERRORS = (
+    ChannelPausedError,
+    DevicesDisabledError,
+    ...
+)
+
+# List of errors we know should be retried more than once.
+RETRY_ERRORS = (
+    TimeoutError,
+    NotFoundError,
+    SlowDownError,
+    UnknownAPIError,
+    ...
+)
+
+# List of errors that could be the result of Frame.io being unreachable.
+DISCONNECTED_ERRORS = (
+    TimeoutError,
+    HttpClientError,
+    ...
+)
+
+def retry_with_backoff(next_handler):
+    """
+    Middleware for retrying errors with exponential backoff.
+    """
+
+    def retry_handler(call, retry_count):
+        """
+        Handler for retrying c2c API calls with exponential backoff.
+        """
+
+        error = None
+
+        # We will retry the call 8 times here, totalling 63.5 seconds +- ~32 seconds.
+        for attempt in range(start=1, stop=retry_count + 1):
+
+            # If we are attempting to reach an endpoint that requires authorization
+            # we should wait unil we have valid authorization before attempting
+            # a call. We need to do this each time in case our access_token
+            # expires between attempts.
+            C2C.wait_for_authorized(call)
+
+            # Likewise, we should wait until we are connected to Frame.io to attempt
+            # a call if we are not calling `https://api.frame.io/health`
+            C2C.wait_for_connected(call)
+
+            try:
+                # Return the result on a success.
+                return next_handler(call)
+            except FATAL_ERRORS as error:
+                # If we hit an error we know is fatal, raise the error without
+                # retrying it.
+                raise error
+
+            except RETRY_ERRORS as error:
+                # If we hit an error we know we should retry many times, continue,
+                # but notify our client if we think we may have been disconnected.
+                if type(error) in DISCONNECTED_ERRORS:
+                    C2C.notify_disconnected()
+
+            except BaseException as error:
+                # Otherwise, do not retry the call more than once.
+                if attempt > 1:
+                    raise error
+
+            # The delay for the next attempt should be no more than 32 seconds.
+            # This algorithm will go: 0.5s, 1s, 2s, 4s, 8s, 16s, 32s, 32s, ...
+            delay = min(2 ** attempt / 2, 32.0)
+
+            # Add some randomness (jitter) to the delay (up to half the value of
+            # the delay in either direction).
+            delay += math.random(-delay, delay) / 2
+
+            # Wait between retries
+            sleep(delay)
+
+        # If we have exhausted all retries,
+        raise error
+
+    return retry_handler
+```
+
+## 错误表 {#error-tables}
+
+下表对 Frame.io API 错误进行了分类，并提供了处理建议。各列的含义如下：
+
+`message`：错误负载中的消息标识符
+`http code`：HTTP 状态码
+`error type`：概念性的错误类别（详见[说明](#descriptions)部分）
+`schema`：错误负载格式（[简单](#simple-error-schema)或[详细](#detailed-error-schema)）
+`retry`：重试建议（`yes` 表示多次尝试，`once` 表示仅重试一次，`no` 表示致命错误）
+
+星号（\*）表示需要特别注意的事项，详见[说明](#descriptions)部分。
+
+### Frame.io 错误消息 {#frame-io-error-messages}
+
+| 消息 | 错误类型 | HTTP 代码 | 结构 | 重试 |
+| --- | --- | --- | --- | --- |
+| ”access_denied” | [AccessDenied](#accessdenied) | 401 | [简单](#simple-error-schema) | once |
+| ”authorization_pending” | [AuthorizationPending](#authorizationpending) | 400 | [简单](#simple-error-schema) | yes |
+| ”Channel Paused” | [ChannelPaused](#channelpaused) | 409 | [简单](#simple-error-schema) | no |
+| ”expired_token” | [ExpiredToken](#expiredtoken) | 400 | [简单](#simple-error-schema) | no |
+| ”Invalid Argument” | [InvalidArgument](#invalidargument) | 422 | [详细](#detailed-error-schema) | no |
+| ”invalid_client” | [InvalidClient](#invalidclient) | 400 | [简单](#simple-error-schema) | no |
+| ”Invalid client version” | [InvalidClientVersion](#invalidclientversion) | 400 | [简单](#simple-error-schema) | no |
+| ”invalid_grant” | [InvalidGrant](#invalidgrant) | 400 | [简单](#simple-error-schema) | no |
+| ”invalid_request” | [InvalidRequest](#invalidrequest) | 400 | [简单](#simple-error-schema) | once |
+| ”Not Authorized” | [UnauthorizedClient](#unauthorizedclient) | 401 | [详细](#detailed-error-schema) | no |
+| ”slow_down” | [SlowDown](#slowdown) | 400 | [简单](#simple-error-schema) | yes |
+| ”unauthorized_client” | [UnauthorizedClient](#unauthorizedclient) | 401 | [简单](#simple-error-schema) | yes\* |
+
+### Frame.io 状态码 {#frame-io-status-codes}
+
+| HTTP 代码 | 错误类型 | 重试 |
+| --- | --- | --- |
+| 400 | [InvalidRequest](#invalidrequest) | once |
+| 401 | [UnauthorizedClient](#unauthorizedclient) | no |
+| 422 | [InvalidContentType](#invalidcontenttype) | no |
+| 429 | [SlowDown](#slowdown) | yes |
+| 500 | [InternalServerError](#internalservererror) | yes |
+
+### AWS 错误 {#aws-errors-1}
+
+有关详细说明，[请参阅 AWS 文档](https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList)。
+
+| 错误 | 重试 |
+| --- | --- |
+| InternalError | yes |
+| OperationAborted | yes |
+| RequestTimeout | yes |
+| ServiceUnavailable | yes |
+| SlowDown | yes |
+| \[所有其他错误\] | once |
+
+<Info>
+
+**解析类似的 AWS 错误**
+
+AWS 的 `SlowDown` 和 `ServiceUnavailable` 都表示请求速率问题，可以像处理 Frame.io 的 `SlowDown` 错误一样，实施指数退避。同样，AWS 的 `InternalError` 在概念上对应于我们 API 中的 `InternalServerError`。
+
+</Info>
+
+### 说明 {#descriptions}
+
+#### AccessDenied {#accessdenied}
+
+当用户在设备配对过程中拒绝授权时返回。
+
+#### AuthorizationPending {#authorizationpending}
+
+表示用户尚未输入设备配对代码。请在设备代码响应中指定的 `interval` 时间间隔后继续轮询。
+
+#### ChannelPaused {#channelpaused}
+
+创建资产时设备通道处于暂停状态。*请勿再次尝试上传此资产。*
+
+#### ExpiredToken {#expiredtoken}
+
+设备配对代码已过期。请生成新代码并重新开始配对流程。
+
+#### InternalServerError {#internalservererror}
+
+表示后端出现了意外问题。请重试一次，并将 `500` 错误报告给我们的团队以供调查。
+
+请注意，某些已知问题会返回 `500` 错误，而实际上应返回 `InvalidRequest`：
+
+- 尝试上传到不存在的设备通道
+- 请求无效的自定义分块数量
+
+#### InvalidArgument {#invalidargument}
+
+某个负载参数包含无效值。请检查参数值是否符合 API 的要求。
+
+#### InvalidContentType {#invalidcontenttype}
+
+请求的 `Content-Type` 标头不受支持。API 通常接受：
+
+- `form/multipart`（仅限授权端点）
+- `application/x-www-form-urlencoded`（所有端点）
+- `application/json`（非授权端点）
+
+#### InvalidClient {#invalidclient}
+
+无法识别所提供的凭据（`client_id`、`client_secret` 等）。请检查您的集成凭据。
+
+### InvalidClientVersion {#invalidclientversion}
+
+`x-client-version` 标头重复出现，或包含无效的[语义化版本](https://semver.org/)。
+
+#### InvalidGrant {#invalidgrant}
+
+授权许可类型无效。请查看授权指南以获取正确的值。
+
+#### InvalidRequest {#invalidrequest}
+
+请求参数或负载格式不正确。请检查字段名称和值的格式。
+
+如果在令牌刷新期间收到此错误，则表示您的刷新令牌已过期，您必须重新开始授权流程。
+
+#### SlowDown {#slowdown}
+
+您已超出请求速率限制。请为后续请求实施指数退避。请注意，在同一 TCP 连接上发出多个设备代码请求可能会触发此错误——请为每个配对请求创建新的连接。
+
+#### UnauthorizedClient {#unauthorizedclient}
+
+通常表示 `access_token` 已过期或缺失。如果收到此错误，请先刷新令牌再重试。
+
+如果在令牌刷新期间遇到此错误，您必须重新开始授权流程，并提示用户重新连接。
+
+当访问超出设备授权范围的资源，或项目已禁用 C2C 设备时，也可能出现此错误。请确认您在授权期间请求了适当的 scope。
+
+*如果在令牌刷新期间出现此错误，则必须在用户参与下重新开始整个授权流程。*
+
+## 后续步骤 {#next-steps}
+
+如有任何问题，欢迎联系我们的团队，并继续阅读[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)。我们期待为您的集成进展提供支持。
+
+如果您尚未阅读，请在继续之前先查看 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要使用在[认证与授权流程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)中获得的 `access_token`。
+
+本指南以[基础上传指南](/cn/camera-to-cloud/how-to-basic-upload)和[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)为基础。

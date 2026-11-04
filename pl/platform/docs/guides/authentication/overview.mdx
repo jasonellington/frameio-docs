@@ -1,0 +1,196 @@
+---
+title: "Uwierzytelnianie"
+sidebarTitle: "Przegląd"
+---
+
+API Frame.io V4 korzysta z [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/) — platformy tożsamości Adobe opartej na OAuth 2.0. Istnieją dwie kategorie uwierzytelniania:
+
+<CardGroup cols={2}>
+
+<Card title="Uwierzytelnianie Server-to-Server" icon="server" iconType="solid">
+
+Umożliwia użytkownikom technicznym lub kontom usługowym wykonywanie działań bez interakcji z użytkownikiem. Dostępne tylko dla kont Frame.io V4 administrowanych za pośrednictwem [Adobe Admin Console](https://adminconsole.adobe.com).
+
+</Card>
+
+<Card title="Uwierzytelnianie użytkownika" icon="user" iconType="solid">
+
+Działa w imieniu użytkownika, do którego należy token. Dostępne dla wszystkich kont Frame.io V4 administrowanych za pośrednictwem Adobe Admin Console, a także dla kont zarządzanych przez Frame, które [przeszły na uwierzytelnianie Adobe](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication).
+
+</Card>
+
+</CardGroup>
+
+---
+
+## Przewodniki po uwierzytelnianiu w SDK {#sdk-authentication-guides}
+
+Zestawy SDK Frame.io obsługują za Ciebie pełny cykl życia OAuth — adresy URL autoryzacji, wymianę tokenów, automatyczne odświeżanie i unieważnianie. Wybierz język, aby rozpocząć:
+
+<CardGroup cols={2}>
+
+<Card title="SDK dla Pythona" icon="python" iconType="brands" href="/pl/platform/docs/guides/authentication/python-sdk">
+
+`ServerToServerAuth`, `WebAppAuth` i `SPAAuth` z obsługą trybu synchronicznego i asynchronicznego.
+
+</Card>
+
+<Card title="SDK dla TypeScriptu" icon="js" iconType="brands" href="/pl/platform/docs/guides/authentication/typescript-sdk">
+
+Uwierzytelnianie `ServerToServerAuth`, `WebAppAuth`, `SPAAuth` i `NativeApp` dla środowisk Node.js i przeglądarek.
+
+</Card>
+
+</CardGroup>
+
+<Tip>
+
+Jeśli tworzysz usługę backendową lub automatyzację, zacznij od **Server-to-Server**. Jeśli Twoja aplikacja ma użytkowników, którzy się logują, wybierz **Web App** (jeśli możesz przechowywać sekret klienta) lub **SPA** (jeśli nie możesz).
+
+</Tip>
+
+---
+
+## Uwierzytelnianie użytkownika {#user-authentication}
+
+Dane uwierzytelniające użytkownika tworzy się w [Adobe Developer Console](https://developer.adobe.com/console). Adobe obsługuje trzy typy danych uwierzytelniających — wybierz ten, który odpowiada architekturze Twojej aplikacji:
+
+<CardGroup cols={3}>
+
+<Card title="OAuth Web App" icon="globe" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-web-app-credential">
+
+Dla aplikacji po stronie serwera, które mogą bezpiecznie przechowywać sekret klienta (Flask, Django, FastAPI, Express itp.).
+
+</Card>
+
+<Card title="OAuth Single Page App" icon="window" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-single-page-app-credential">
+
+Dla aplikacji działających w przeglądarce, narzędzi CLI lub aplikacji desktopowych, które nie mogą przechowywać sekretu klienta. Wykorzystuje PKCE.
+
+</Card>
+
+<Card title="OAuth Native App" icon="mobile" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-native-app-credential">
+
+Dla natywnych aplikacji mobilnych lub desktopowych, które korzystają z przekierowań z niestandardowym schematem URI.
+
+</Card>
+
+</CardGroup>
+
+<Note>
+
+SDK Frame.io dla Pythona nie zawiera klasy danych uwierzytelniających Native App, ponieważ Python nie ma standardowego sposobu rejestrowania procedur obsługi niestandardowych schematów URI. Zamiast tego użyj **Web App** z lokalnym serwerem wywołań zwrotnych. SDK dla TypeScriptu obsługuje wszystkie trzy typy danych uwierzytelniających.
+
+</Note>
+
+---
+
+## Uwierzytelnianie Server-to-Server {#server-to-server-authentication}
+
+Uwierzytelnianie server-to-server pozwala aplikacji działać jako **użytkownik konta usługowego** — bez udziału człowieka. Aplikacja uwierzytelnia się za pomocą danych uwierzytelniających klienta i bezpośrednio otrzymuje token dostępu. Działania konta usługowego są widoczne we Frame.io pod nazwą tego konta.
+
+Dostępem kont usługowych zarządza się za pośrednictwem [Adobe Admin Console](https://adminconsole.adobe.com/) i [Developer Console](https://developer.adobe.com/console). Obecnie nie można zmienić nazwy konta usługowego. Szczegóły implementacji znajdziesz w przewodnikach dotyczących poszczególnych SDK powyżej.
+
+<Info>
+
+Więcej informacji o konfiguracji konta usługowego znajdziesz w artykule [Automate your setup using Frame.io server to server support](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html).
+
+</Info>
+
+---
+
+## Jak działa uwierzytelnianie Adobe IMS {#how-adobe-ims-authentication-works}
+
+Adobe Identity Management Service (IMS) to oparta na OAuth 2.0 funkcja zarządzania tożsamością Adobe, która obsługuje uwierzytelnianie. Wygenerowanie tokenu dostępu wymaga dwóch kroków:
+
+<Steps>
+
+<Step title="Autoryzacja użytkownika">
+
+Najpierw użytkownik autoryzuje aplikację, zanim zostanie wygenerowany token. Szczegóły znajdziesz [tutaj](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims/#authorize-request).
+
+</Step>
+
+<Step title="Wymiana tokenu">
+
+Następnie pobierz token dostępu. Powyższy krok zwraca w treści odpowiedzi kod potrzebny w tym kroku. Dokładne endpointy, z których należy skorzystać, oraz parametry, których należy użyć, znajdziesz [tutaj](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims/#fetching-access-tokens).
+
+</Step>
+
+</Steps>
+
+<Note>
+
+Powyższe kroki są wymagane dla wszystkich trzech typów danych uwierzytelniających aplikacji. Różnią się sposobem korzystania z endpointów IMS `/authorize/v2` i `/token/v3` w celu uzyskania tokenu. Gdy masz już token dostępu, możesz go używać do komunikacji z API Frame.io V4.
+
+</Note>
+
+W przypadku uwierzytelniania **Server-to-Server** nie ma kroku autoryzacji użytkownika — aplikacja używa bezpośrednio danych uwierzytelniających klienta, aby uzyskać token dostępu za pomocą typu przyznania `client_credentials`.
+
+### Korzystanie z tokenu dostępu {#using-the-access-token}
+
+Gdy masz już token dostępu, dołączaj go w nagłówku `Authorization` każdego żądania API:
+
+```
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+Zestawy SDK Frame.io robią to za Ciebie — wystarczy przekazać token (lub obiekt wywoływalny dostarczający token) podczas tworzenia klienta.
+
+### Czas życia tokenu {#token-ttl}
+
+Tokeny dostępu są **krótkotrwałe** — zazwyczaj wygasają po 1 godzinie. W przepływach uwierzytelniania użytkownika (Web App, SPA, Native App) Adobe IMS zwraca również **token odświeżania**, którego można użyć do uzyskania nowego tokenu dostępu bez konieczności ponownego logowania użytkownika. Tokeny odświeżania są ważne dłużej, ale również w końcu wygasają.
+
+W przypadku uwierzytelniania Server-to-Server nie ma tokenów odświeżania. Same dane uwierzytelniające klienta nigdy nie wygasają (chyba że zostaną ręcznie zmienione), więc aplikacja zawsze może zażądać nowego tokenu dostępu.
+
+Zestawy SDK Frame.io automatycznie obsługują odświeżanie tokenów — szczegóły znajdziesz w [przewodnikach dotyczących poszczególnych SDK](#sdk-authentication-guides).
+
+### Zakresy {#scopes}
+
+Podczas tworzenia danych uwierzytelniających w [Adobe Developer Console](https://developer.adobe.com/console) skonfigurujesz zakresy OAuth, które określają, do czego aplikacja ma dostęp. Zestawy SDK Frame.io używają następujących zakresów domyślnych:
+
+| Przepływ | Domyślne zakresy |
+| --- | --- |
+| **Server-to-Server** | `openid AdobeID frame.s2s.all` |
+| **Uwierzytelnianie użytkownika** (Web App, SPA, Native App) | `openid email profile offline_access additional_info.roles` |
+
+<Note>
+
+Zakres `offline_access` jest wymagany w przepływach uwierzytelniania użytkownika, aby otrzymać token odświeżania. Bez niego otrzymasz tylko token dostępu, a użytkownicy będą musieli ponownie się uwierzytelnić po jego wygaśnięciu.
+
+</Note>
+
+---
+
+## Starsze tokeny programisty {#legacy-developer-tokens}
+
+W przypadku kont zmigrowanych do V4, które **nie są jeszcze administrowane za pośrednictwem [Adobe Admin Console](https://adminconsole.adobe.com/)**, możesz nadal używać starszych tokenów programisty (Legacy Developer Tokens) zarządzanych w [witrynie dla programistów Frame.io](https://developer.frame.io/app/tokens). Przekaż token bezpośrednio do SDK:
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers={"x-frameio-legacy-token-auth": "true"},
+)
+```
+
+<Warning>
+
+Korzystając ze starszego tokenu programisty z API V4, musisz dodać do wszystkich żądań API nagłówek `x-frameio-legacy-token-auth` o wartości `true`. Jeśli używasz SDK, ustaw go za pomocą opcji żądań klienta.
+
+</Warning>
+
+Starsze tokeny programisty nie wygasają, ale stanowią mechanizm przejściowy. W przypadku nowych integracji i obciążeń produkcyjnych zalecamy korzystanie z jednego z przepływów OAuth 2.0 opisanych poniżej. Szczegóły znajdziesz w [przewodniku po migracji](/pl/platform/docs/resources/migration#authentication).
+
+<Note>
+
+Jeśli jesteś klientem Enterprise migrującym z Frame.io Legacy do V4, skontaktuj się ze swoim opiekunem klienta (CSM), aby uzyskać pomoc w konfiguracji starszego tokenu programisty i V4
+
+</Note>
+
+<Tip>
+
+Szczegóły dotyczące przejścia ze starszych tokenów na uwierzytelnianie Adobe IMS znajdziesz w [przewodniku po migracji](/pl/platform/docs/resources/migration#authentication).
+
+</Tip>

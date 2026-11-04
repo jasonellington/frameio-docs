@@ -1,0 +1,208 @@
+---
+title: "入門ガイド"
+sidebarTitle: "はじめに"
+---
+
+## Adobe Developer Console {#adobe-developer-console}
+
+Adobe API を使用する最初のステップは、Adobe Developer Console で **Project** を作成することです。Developer Console の Project は、Frame.io Developer API を利用するために構築するアプリケーションに対応します。これは Frame.io 内のプロジェクトとは別のものです。
+
+<CardGroup cols={2}>
+
+<Card title="Adobe Developer Console" icon="gear" iconType="solid" href="https://developer.adobe.com/developer-console/" />
+
+<Card title="Projects ガイド" icon="folders" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/projects/" />
+
+</CardGroup>
+
+Developer Console で Project を作成したら、そこに Frame.io API を追加します。
+
+## Frame.io V4 Developer API の新機能 {#what’s-new-in-the-frame-io-v4-developer-api}
+
+Frame.io アプリケーションがバージョン 4 で完全に生まれ変わったのと同様に、V4 API もゼロから再設計されました。一部の主要な概念はレガシーバージョンと似ていますが、より強力なコラボレーションワークフローとインテグレーションをサポートするために、多くの概念が置き換えられたり再設計されたりしています。また、まったく新しい API の導入は、運用を大幅に簡素化し、重要な顧客ワークフローを優先する機会にもなりました。
+
+<Info>
+
+Frame.io V4 とレガシーバージョンの比較は[こちら](https://help.frame.io/en/articles/9084073-frame-io-v4-legacy-feature-comparison)をご覧ください。
+
+</Info>
+
+V4 API では、Workspaces (レガシーバージョンの Frame.io では Teams と呼ばれていたもの) のように、Frame.io バージョン 4 に合わせて名前が変更されたリソースがあります。また、レガシーバージョンの Assets のように、開発者の混乱を減らすために特定のストレージエンティティ (Files、Folders、Version Stacks) を指す名前に変更されたリソースもあります。さらに、Custom Fields や Shares のように、まったく新しいリソースもあります。その他の大きな変更点として、リソースリクエストに対してデフォルトで返されるデータ量を大幅に削減し、API 全体でより正確かつ一貫性のあるものにするためにレスポンス内の一部のプロパティ名を変更し、新しいカーソルベースのページネーションの仕組みに切り替えました。そのため、Camera to Cloud (C2C) API を除き、レガシー API と連携するクライアントは V4 API と互換性がないことを理解しておくことが重要です。
+
+さらに、一部の機能は現在も開発中であり、実際の顧客のユースケースやフィードバックに応じて、迅速に追加・進化していく予定です。例としては、カスタムアクションやバージョンスタックを作成する機能などがあります。以前のレガシー API で利用できた機能が見当たらない場合、代替手段があるか、近いうちに利用可能になる可能性が高いですが、ぜひご意見をお聞かせください。
+
+V4 API を詳しく見ていく前に、まず Frame.io バージョン 4 アプリケーションで表現されている基本概念を理解しておくと役立ちます。手始めには [Frame.io V4 ナレッジベース](https://help.frame.io/en/)がおすすめです。Accounts、Users、Workspaces、Projects、Collections、Shares、Custom Fields (メタデータ) といった概念は V4 API でそれぞれ個別のリソースとしてモデル化されており、アプリケーション内でのそれらの関係や機能を理解することで、V4 API での動作も理解しやすくなります。
+
+## API の概要 {#api-overview}
+
+Frame.io V4 API は RESTful なアーキテクチャ原則に従うように設計されており、リソースごとに一意の URL と組み合わせて、標準的な HTTP メソッドとレスポンスコードを使用します。Frame.io は V4 API の [OpenAPI 3.0 仕様](https://api.frame.io/v4/openapi.json)を公開しており、エンドポイント、リクエストパラメーター、レスポンスに関する詳細な情報を提供しています。OpenAPI 仕様はさまざまなサードパーティ製のコード生成ツールで利用でき、クライアントアプリケーションの迅速な開発に役立ちます。
+
+### URL とパスの規則 {#url-and-path-conventions}
+
+OpenAPI 仕様で公開されている URL パスは、一般的にリソースの所有関係と包含関係を反映しています。そのため、一部のリクエストパラメーター (例: アカウント ID、フォルダー ID など) はリソースパスに埋め込まれています。これらのパスは予測しやすく理解しやすいことを意図していますが、API リクエストによって返される一部の URL (例: 署名付きアップロード URL や表示用リンク) の構造は変更される可能性があるため、クライアントアプリケーションで直接組み立てるべきではありません。
+
+### リクエストクエリパラメーター {#request-query-parameters}
+
+ページネーションの動作や、レスポンスオブジェクトへの関連リソースの任意の包含を制御するリクエストパラメーターは、標準的なクエリパラメーターのセットとして定義されています: `include`、`page_size`、`include_total_count`。一部のリクエストでは、そのリソースや操作に固有の追加のクエリパラメーターをサポートしている場合があります。
+
+```html
+GET https://api.frame.io/v4/accounts/{account_id}/folders/{folder_id}/children?&include=project&page_size=5&include_total_count=true
+```
+
+### リクエストとレスポンスのペイロード {#request-and-response-payloads}
+
+リクエストとレスポンスのペイロードはどちらも JSON オブジェクトとして構成されます。そのため、HTTP の POST、PUT、PATCH リクエストの content-type ヘッダーには `application/json` メディアタイプを指定する必要があります。リソースを作成または更新する場合、リクエストの `data` プロパティにリソースオブジェクトを含める必要があります。作成または更新するリソースの属性は、このオブジェクト内に含めます。同様に、リソースを含む成功レスポンスでは、それらがレスポンスの `data` プロパティ内に格納されます。
+
+### ページネーション {#pagination}
+
+大量のリソースオブジェクトを返す可能性のあるレスポンス (例: フォルダーやコメントの一覧) は、結果セットが大きくなった際のリクエストのレイテンシを抑えるためにページネーションされます。つまり、リクエストに対するレスポンスには、結果の 1「ページ」分しか含まれない場合があります。前述のとおり、クライアントはリクエスト時に `page_size` クエリパラメーターを使用して、最大 100 要素までの特定のページサイズを選択できます。指定しない場合、ページサイズはデフォルトで 50 要素になります。V4 API は *カーソルベースのページネーション* と呼ばれる形式のページネーションを使用しており、レスポンスオブジェクトの `links` プロパティ (下記の例を参照) に相対リンクを含めます。このリンクの `after` クエリパラメーターには不透明なカーソル文字列 (クライアントはこの文字列を自分で組み立てようとしてはいけません) が含まれており、クライアントは後続のリクエストを行うことで結果の次のページを取得できます (下記のレスポンス例を参照)。現時点では、V4 API は一方向のページネーションのみをサポートしています。
+
+```json
+{
+    "data": [
+        {
+            "created_at": "2024-10-02T00:22:44.887775Z",
+            "creator_id": "8ea72912-d40d-4b88-8d31-3762e055a2aa",
+            "file_size": 102432,
+            "id": "df171f3e-c95f-4454-9071-825cd924b572",
+            "media_type": "application/pdf",
+            "name": "sample.pdf",
+            "parent_id": "e183c7ba-07d9-425a-9467-ebdf0223d9ce",
+            "project": {
+                "created_at": "2024-08-21T17:45:41.881596Z",
+                "description": "For demonstration purposes",
+                "id": "976dd413-a92b-4af6-b465-98aded0174a8",
+                "name": "Demo Project",
+                "owner_id": "8ea72912-d40d-4b88-8d31-3762e055a2aa",
+                "root_folder_id": "e183c7ba-07d9-425a-9467-ebdf0223d9ce",
+                "storage": 20881946,
+                "updated_at": "2024-10-02T00:22:47.168489Z",
+                "workspace_id": "378fcbf7-6f88-4224-8139-6a743ed940b2"
+            },
+            "project_id": "976dd413-a92b-4af6-b465-98aded0174a8",
+            "status": "created",
+            "type": "file",
+            "updated_at": "2024-10-02T00:22:44.927993Z"
+        }
+    ],
+    "links": {
+        "next": "/v4/accounts/6f70f1bd-7e89-4a7e-b4d3-7e576585a181/folders/e183c7ba-07d9-425a-9467-ebdf0223d9ce/children?after=g3QAAAACZAAGb2Zmc2V0YQVkAAR0eXBlZAANb2Zmc2V0X2N1cnNvcg%3D%3D"
+    },
+    "total_count": 21
+}
+```
+
+### エラー {#errors}
+
+エラーが発生した場合、レスポンスオブジェクトの `errors` プロパティには、発生したエラーの詳細を示す 1 つ以上のエラーオブジェクトの配列が含まれます。現時点では V4 API はバッチ操作をサポートしていないため、クライアントが部分的な成功とエラーを処理しなければならないケースはありません。
+
+```json
+{
+    "errors": [
+        {
+            "detail": "Unexpected field: foo",
+            "source": {
+                "pointer": "/data/foo"
+            },
+            "title": "Invalid value"
+        }
+    ]
+}
+```
+
+次の表は、V4 API で使用される一般的なステータスコードの一覧です。
+
+| ステータスコード | **ステータス** | 説明 |
+| --- | --- | --- |
+| 200 | OK | リクエストが成功しました。 |
+| 201 | Created | リソースが作成されました。 |
+| 204 | No Content | リソースが削除されました。レスポンスペイロードはありません。 |
+| 400 | Bad Request | リクエストが無効です。多くの場合、パラメーターやペイロードの形式が不正であるか、欠落していることが原因です。 |
+| 401 | Unauthorized | Authorization トークンが欠落しているか、無効です。 |
+| 403 | Forbidden | Authorization トークンに、このリクエストに必要な権限がありません。 |
+| 404 | Not Found | リクエストされたリソースは存在しません。 |
+| 422 | Unprocessable Entity | リクエストのペイロードやパラメーターの形式は正しいものの、その他の理由で無効であり、リクエストを実行できません (400 Bad Request とほぼ同じ意味で使われます)。 |
+| 429 | Too Many Requests | リクエストがこのアカウントの API レート制限を超えました。詳細は入門ガイドのレート制限のセクションを参照してください。 |
+| 5xx | Server Errors | サーバーで予期しないエラーが報告されました。クライアントは少なくとも 30 秒待ってから再試行する必要があります。また、自動再試行は回数を制限し、連続するリクエストで指数バックオフを採用することに加えて、ランダムな間隔を含めるようにしてください。 |
+
+### 認証と認可 {#authentication-and-authorization}
+
+V4 API は、OAuth 2.0 と [Adobe Identity Management Server (IMS)](https://experienceleague.adobe.com/en/docs/commerce-admin/start/admin/ims/adobe-ims-integration-overview) を使用してユーザーを認証 (AuthN) し、そのユーザーに代わってアクセストークンを生成します。アクセストークンは、各 API リクエストで HTTP Authorization ヘッダーを介して指定する必要があります (つまり、Bearer トークン認証)。
+
+<Note>
+
+IMS によって生成される[トークンスコープ](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#scopes)は静的です。ユーザーが何を行えるか (およびそのユーザーに代わって API がどの操作を実行できるか) を決定する認可 (AuthZ) は、Frame.io 内でユーザーに付与されたロールと権限によって決まります。アクセストークンの生成とリクエストの詳細については、「Developer Console の使用を開始する」および「認証のセットアップ」(「Postman で開発を始める」内) のセクションを参照してください。
+
+</Note>
+
+### バージョンと後方互換性 {#versions-and-backward-compatibility}
+
+Frame.io V4 API は、以前のバージョンの Frame.io API と後方互換性が *ありません*。また、V4 の概念とデータモデルには大幅な変更が加えられているため、一般的にレガシーアカウント内のリソースへのアクセスや更新には使用できません。そのため、V4 API に関連付けられた URI にはすべて `/v4` のパスプレフィックスが含まれています。ただし、V4 API は現在も急速に進化しており、新機能によってまれに破壊的変更が必要になる可能性があります。より一般的には、Frame.io は一定期間試験的なものと見なす新しい *追加機能* を API にリリースし、顧客からのフィードバックや利用状況の指標を受け取って対応できるようにします。高い稼働率が求められる本番品質のインテグレーションを管理している顧客にとって、後方互換性は大きな関心事であることを踏まえ、V4 API ではカスタム HTTP ヘッダーによる追加のバージョニングレベルをサポートするよう設計を進めています。これにより、クライアントは試験的なエンドポイントの使用をオプトインし、破壊的変更を回避でき、V4 名前空間内で後方互換性が保証されるようになります。詳細は追ってお知らせしますが、現時点では、V4 API の初回リリースは安定版と見なされており、破壊的変更の導入を検討するのはしばらく先になると考えて問題ありません。
+
+### レート制限 {#rate-limiting}
+
+すべての V4 API 呼び出しにはレート制限があり、各 API リソースと操作にはそれぞれ独自の制限が設定されています。制限は、1 分あたり 10 リクエストという低いものから、1 秒あたり 100 リクエストという高いものまであります。現時点では、各制限は *ユーザー* ごとに適用されますが、ポリシーや制限自体は変更される可能性があります。
+
+V4 API は、段階的なレート制限として「[リーキーバケット](https://wikipedia.org/wiki/Leaky_bucket)」アルゴリズムを使用しており、制限は割り当てられた時間枠の中で徐々に回復します。言い換えると、特定のリソースの制限が一斉にリセットされるような明確な区切り (つまり「固定ウィンドウ」や「スライディングウィンドウ」の適用方式) という概念はありません。代わりに、残りの制限はリソースの制限と時間枠に応じたペースで常に回復し続けます。特定のエンドポイントのレート制限を超えたリクエストは、429 HTTP エラーで失敗します。
+
+429 エラーへの対応として推奨される方法は、一般に「指数バックオフ」と呼ばれるものです。
+要点は次のとおりです。
+
+- `429` を受け取ったら、リクエストを再試行する前に一定時間 (少なくとも 1 秒) 待機する
+- さらに `429` を受け取った場合は、通常の動作に戻るまで、前回の待機時間を指数関数的に (少なくとも 2 倍に) 増やす
+
+特定のリクエストに適用されるレート制限を確認するには、クライアントはレスポンスで返される次の HTTP ヘッダーを確認できます。
+
+| ヘッダー | 値の説明 |
+| --- | --- |
+| `x-ratelimit-limit` | このリソースパスのレート制限 (リクエスト数)。 |
+| `x-ratelimit-remaining` | 現在の時間枠内で残っているリクエスト数。 |
+| `x-ratelimit-window` | このリソースパスの制限の時間枠 (ミリ秒 (ms) 単位)。 |
+
+## API の詳細 {#api-details}
+
+V4 API の決定版ドキュメントは [API リファレンスガイド](/ja/platform/api-reference/account-permissions/account-user-roles-update)ですが、最初のリクエストを送信する前に、V4 API でモデル化されているリソースの階層を理解しておくと役立ちます。
+
+### リソースの階層 {#resource-hierarchy}
+
+[Account](https://help.frame.io/en/collections/8779087-account-settings) は通常、組織に関連付けられており、サブスクリプションプラン、コンテンツの所有権、ユーザーのロールと権限、ワークスペースの構成を決定する基本的なリソースです。そのため、V4 API のほぼすべてのエンドポイントの URL パスには、リソースが存在するアカウントを識別するプレフィックスが含まれています。
+
+Workspaces (レガシーバージョンの Frame.io では Teams と呼ばれていたもの) と [Projects](https://help.frame.io/en/articles/9101006-project-settings) は、誰がどのコンテンツにアクセスできるかを含め、コンテンツとユーザーの両方を整理するために使用されます。
+
+Frame.io におけるコンテンツリソースの基本的な階層は次のとおりです。
+
+<CardGroup cols={2}>
+
+<Card title="リソースの階層" icon="sitemap" iconType="solid">
+
+**Account → Workspace → Project → Folder → Folder / Version Stack / File**
+
+</Card>
+
+</CardGroup>
+
+Frame.io にアップロードされたすべてのアセットは、最終的に [File](https://help.frame.io/en/articles/9436564-supported-file-types-on-frame-io) として表されます。一方、[Folders](https://help.frame.io/en/articles/9101044-creating-folders) と [Version Stacks](https://help.frame.io/en/articles/9101068-version-stacking) はコンテナーとして機能するストレージリソースであり、バージョン管理されたアセットをサポートする階層型ストレージモデルの基盤となります。ほとんどのユーザーは、Frame.io における Folder の基本的な概念にすでに慣れているでしょう。Folder は単に他のストレージリソース (`children` としてモデル化) を順序なしで格納するコンテナーであり、フォルダーツリー内のノードを表します。すべての Project には固有のルートフォルダー (`root_folder_id` キーで識別) があり、Project のすべてのアセットが存在するフォルダーツリーのルートとして機能します。
+
+Version Stack は File を順序付けて格納するコンテナーです。その順序は厳密に線形であり、各子要素のバージョン番号を決定しますが、クライアントはバージョンスタック内の File を必要に応じて並べ替えることができます。File は常に、任意の時点でちょうど 1 つの Folder *または* Version Stack の子 (その中に含まれるもの) になります。同様に、Folder や Version Stack は常にちょうど 1 つの Folder の子になります (Project のルートフォルダーを除く)。
+
+Frame.io に保存された File や Folder に対する基本的な CRUD 操作の詳細については、[API リファレンスガイド](https://developer.frame.io/platform/v4-experimental/api/current)を参照してください。現時点では、V4 API は Folder の内容を一覧表示する場合にのみ Version Stack をサポートしていますが、Version Stack を作成・更新するためのエンドポイントも近日提供予定です。
+
+## SDK {#sdks}
+
+SDK は TypeScript と Python で利用できます。以下のコマンドを使用してインストールできます。ドキュメントの SDK リファレンスのセクションには、[Python](/ja/platform/docs/sdk-reference/python-sdk-reference) と [TypeScript](/ja/platform/docs/sdk-reference/type-script-sdk-reference) の SDK の完全なリファレンスが掲載されています。
+
+### TypeScript {#typescript}
+
+```bash
+npm i -s frameio
+```
+
+[npm](https://www.npmjs.com/package/frameio) で見る
+
+### Python {#python}
+
+```bash
+pip install frameio
+```
+
+[PyPi](https://pypi.org/project/frameio/) で見る

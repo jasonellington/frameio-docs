@@ -1,0 +1,205 @@
+---
+title: "使用 Make 自动化您的 Frame.io 工作流"
+sidebarTitle: "Make"
+---
+
+Make 是一个无代码自动化平台，可将您的各种应用和服务连接起来。它采用可视化界面，您可以通过按顺序排列不同的模块来构建称为“场景”（scenario）的工作流。
+
+每个场景都有一个触发器（例如“在 Frame.io 中创建了新项目”）以及随后执行的操作（例如“在 Google Sheets 中添加一行”）。您可以通过可视化方式连接这些模块，定义要执行的内容及其执行顺序。
+
+## 为什么要将 Frame.io 连接到 Make？ {#why-connect-frame-io-to-make}
+
+Make 能将 Frame.io 扩展到您的整个工作流中。您可以将文件同步到存储、更新项目管理工具、生成报告、通知团队，或者根据 Frame.io 中的活动构建自定义工作流。Frame.io 与您的技术栈连接得越多，它的功能就越强大。
+
+**自动化创意：**
+
+- 当客户提交接收表单时，自动创建 Frame.io 项目
+- 当 Frame.io 中的视频被添加评论时，在 Slack 中发布消息
+- 当创建新的 Frame.io 项目时，更新 Google Sheet
+
+以上只是几个示例。如需查看所有可用的 Frame.io 模块，请访问 [Make.com](https://www.make.com/en/integrations/frame-io#:~:text=All-,Modules,-(26)) 上的此页面。
+
+## 您需要准备什么 {#what-you-need}
+
+- **一个 Frame.io 账户**（订阅信息请参阅[此处](https://frame.io/pricing)）
+- **一个 Make 账户**（提供免费套餐）
+
+<br />
+
+<Note>
+
+**本指南的组织结构**<br />
+
+下一节介绍 Make 的基础知识。如果您想直接开始构建，可以跳到教程部分，我们将在那里连接您的 Frame.io 账户，并构建一个将新的 Frame.io 项目记录到 Google Sheet 的场景。
+
+</Note>
+
+## 模块类型 {#module-types}
+
+Make 有四种模块类型：触发器、搜索、操作和通用模块。
+
+<CardGroup cols={2}>
+
+<Card title="触发器" icon="bell" iconType="solid" horizontal={true}>
+
+触发器会监视服务中的变化，并将其传送到 Make，以便您在场景中使用这些数据。每个场景只能添加**一个**触发器模块。
+
+<br />
+
+有关轮询触发器与即时触发器的详细信息，请参阅下方的**触发器类型**部分。
+
+<br />
+
+- 您可以点击场景工具栏中的 **Schedule settings** 来设置触发器模块的运行频率
+- Make 强烈建议以触发器模块作为场景的开始。
+
+</Card>
+
+<Card title="搜索" icon="magnifying-glass" iconType="solid" horizontal={true}>
+
+搜索模块从服务中检索特定数据。您可以在场景中的任意位置添加多个搜索模块。大多数搜索每次运行最多返回 3,200 个对象。
+
+<br />
+
+**搜索模块的类型：**
+
+<br />
+
+- **Search 模块**允许您通过筛选和查询来查找特定数据
+  （Search Records、Search Rows 等）
+- **List 模块**检索所有数据而不进行筛选。（List Projects、List Sheets 等）
+
+</Card>
+
+<Card title="操作" icon="bolt" iconType="solid" horizontal={true}>
+
+操作模块处理从服务中检索到的数据。您可以根据需要在场景中的任意位置添加任意数量的操作。
+
+<br />
+
+**操作的类型：**
+
+<br />
+
+- GET
+- CREATE
+- UPDATE
+- DELETE
+
+<br />
+
+</Card>
+
+<Card title="通用模块" icon="code" iconType="solid" horizontal={true}>
+
+当 Make 没有为您的需求提供预构建模块时，通用模块（通常称为 **Make an API Call**）可让您进行自定义 API 调用。
+
+<br />
+
+您可以根据需要添加任意数量的通用模块，并将它们放置在场景中的任意位置。
+
+</Card>
+
+</CardGroup>
+
+## 触发器类型 {#trigger-types}
+
+Make 使用两种类型的触发器：轮询触发器和即时触发器。
+
+**轮询触发器**会按计划检查您的服务账户中是否有新数据。它们通常被命名为“Watch Records”或“Watch Rows”之类的名称。场景运行时，Make 会询问服务是否有新内容。如果有，场景就会对其进行处理。
+
+**即时触发器**的工作方式不同。它们使用 webhook，因此当事件发生时，服务会立即通知 Make，您的场景也会立即运行。您可以通过模块上的闪电图标和“Instant”标签识别它们。
+
+Frame.io 的 Watch Events 模块是一个即时触发器，因此我们稍后构建的场景将实时运行。
+
+有关不同模块类型如何运行的更多详细信息，请参阅 [Make 帮助中心的此部分](https://help.make.com/types-of-modules)。
+
+# Make 界面 {#the-make-interface}
+
+您的 Make 仪表板会显示您的所有场景。您可以在这里监控活动场景、场景性能和点数使用情况。点击页眉中的 **Create scenario** 即可打开构建器。
+
+### 添加应用和模块 {#adding-applications-+-modules}
+
+要向场景添加模块，请点击构建器中央的加号按钮。这将打开一个面板，您可以在其中搜索所需的应用（例如 Frame.io 或 Google Sheets），然后选择所需的具体模块（例如“Watch Events”或“Add a Row”）。在构建器中拖放模块即可将它们连接起来，构建您的场景。
+
+### 管理和重新连接应用 {#managing-+-reconnecting-apps}
+
+左侧边栏可让您访问场景、连接、webhook 以及其他 Make 功能。
+
+如果需要重新连接 Frame.io 或任何其他应用，请点击左侧边栏中的 **Connections**。您将看到所有已连接的应用，每个应用旁边都有一个 **Reauthorize** 按钮。点击该按钮即可重新完成身份验证流程。
+
+### 测试 {#testing}
+
+要测试您的场景，请点击工具栏中的 **Run once**。测试完成后，每个模块上方都会出现操作气泡，显示运行了多少次操作。点击气泡即可查看该步骤的输入和输出数据。
+
+**使用现有数据进行测试：**
+
+默认情况下，触发器只处理新事件。要使用现有数据进行测试，请点击 **Run once** 按钮旁边的下拉箭头。这将打开一个对话框，您可以在其中重新运行之前收到的 webhook 事件中的数据。
+
+---
+
+# 构建您的第一个场景：将新项目记录到 Google Sheets {#building-your-first-scenario-log-new-projects-to-google-sheets}
+
+开始之前，请创建一个包含以下列标题的 Google Sheet：
+
+**Event Type**、**Resource ID**、**Workspace ID**、**User ID**。在本示例中，我们将该表格命名为“Frame Projects”。
+
+<Steps>
+
+<Step title="连接到 Frame.io 并添加触发器">
+
+点击 Make 构建器中的加号以添加模块。搜索“Frame.io”并选择 **Watch Events**。这将创建一个 webhook，在 Frame.io 中发生特定事件时触发。
+
+**连接 Frame.io：**
+
+- 点击连接字段旁边的 **Add**
+- 保留默认连接名称或对其重命名
+- 系统将提示您登录 Adobe 账户并授权 Make
+- 连接成功后，您将在下拉菜单中看到所有可用的 Frame.io 账户和工作区
+
+**配置 Webhook：**
+
+- 选择您的账户以及要监视的工作区。在本示例中，我们将使用“New Workspace”
+- 在事件下，选择 **Project Created**（有关受支持事件的更多信息，请参阅我们的 [webhook 文档](https://developer.adobe.com/frameio/guides/Webhooks/#webhook-event-subscriptions)）
+- 为您的 webhook 命名并保存更改
+
+</Step>
+
+<Step title="添加 Google Sheets">
+
+点击加号以添加下一步。搜索并选择 Google Sheets 应用，然后点击 **Add a Row** 模块。
+
+**连接 Google Sheets：**
+
+- 点击 **Add** 创建新连接
+- 点击 **Sign in with Google** 并授权 Make 访问您的 Google 账户
+- 连接成功后，您应该会在下拉菜单中看到您账户中的表格
+- 选择表格/标签页名称（在本例中为“Frame Projects”）
+
+**映射数据：**
+现在将 Frame.io 数据映射到电子表格的各列。点击每个字段，并从 Frame.io 触发器中选择相应的数据：
+
+- **Event Type** → 映射到 Frame.io Event Type
+- **Resource ID** → 映射到 Frame.io Resource
+- **Workspace ID** → 映射到 Frame.io Workspace ID
+- **User ID** → 映射到 Frame.io User ID
+
+</Step>
+
+<Step title="测试并激活">
+
+点击 **Run once** 测试场景，然后在所选的 Frame.io 工作区中创建一个新项目。如果一切设置正确，您的电子表格中应该会出现新的一行。
+
+![Sheet](/images/platform/docs/guides/make/frame_sheet_example.gif)
+
+准备好正式上线后，将开关切换为 **Active**，场景就会自动运行。
+
+</Step>
+
+</Steps>
+
+您刚刚构建了第一个自动化流程。接下来，您可以向此场景添加更多步骤，或使用 [Make.com](https://www.make.com/en/integrations/frame-io#:~:text=All-,Modules,-(26)) 上其他可用的 Frame.io 模块构建新的场景。
+
+如果您遇到问题、有任何疑问或想分享您构建的内容，请访问[社区论坛](https://forum.frame.io/)。
+
+---

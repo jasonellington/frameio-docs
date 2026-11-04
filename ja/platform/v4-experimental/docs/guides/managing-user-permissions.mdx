@@ -1,0 +1,385 @@
+---
+title: "ユーザー権限の管理"
+---
+
+このガイドでは、Frame.io V4 APIを使ってユーザー権限を管理する方法を説明します。Account、Workspace、Projectの各レベルで権限がどのように機能するか、またそれぞれのレベルでどのエンドポイントを使用するかを取り上げます。
+
+---
+
+## 権限レベル {#permission-levels}
+
+Frame.ioの権限は、Account、Workspace、Projectの各レベルで管理されます。各レベルには、それぞれ独自のロールがあります。
+
+```
+Account 
+│
+├── (admin)  - full access to all Workspaces, Projects, and Restricted Projects
+│
+└── (member)
+        │
+        ├── Workspace - (full_access | editor | edit_only | commenter | viewer)
+        │       │
+        │       └── Project - (full_access | editor | edit_only | commenter | viewer)
+        │
+        └── Restricted Project - (members require direct invite)
+```
+
+すべてのユーザーにはアカウントロールがあります。APIを通じて、ユーザーのロールを<Tooltip tip="APIレスポンスでOwnerやReviewerが返されることがありますが、これらのロールはAPIでは設定できません。詳細はアカウントレベルの権限のセクションで説明しています。">`admin`または`member`</Tooltip>に設定できます。
+Account Adminは、すべてのWorkspaceとProjectにフルアクセスできます。Account Memberは、必要なWorkspaceとProjectに個別に追加できます。
+
+Account MemberをWorkspaceに追加すると、割り当てた権限レベル(`full_access`、`editor`、`edit_only`、`commenter`、`viewer`)が、そのWorkspace内の既存および今後作成されるすべてのProjectに適用されます。たとえば、Account Memberを`viewer`として追加すると、そのユーザーはそのWorkspace内のどのProjectにアクセスする場合でも`viewer`権限を持ちます。
+
+同じAccount Memberを、そのWorkspace内の特定のProjectに`editor`として追加することもできます。その結果、そのユーザーはそのProjectにアクセスするときは常に`editor`権限を持ちます。そのWorkspace内の他のすべてのProjectには、引き続き`viewer`権限が適用されます。
+
+Projectへの割り当てはWorkspaceへの割り当てとは別に管理されるため、そのAccount MemberをWorkspaceから削除しても、その1つのProjectに対する`editor`権限は保持されます。
+
+Restricted Projectは例外です。Account Memberには常に直接の招待が必要です。詳細は、以下のプロジェクトレベルの権限のセクションで説明します。
+
+## アカウントレベルの権限 {#account-level-permissions}
+
+アカウント内のすべてのユーザーにはロールがあります。
+
+| ロール | 権限 | APIで設定可能 | エンドポイント |
+| --- | --- | --- | --- |
+| Owner | すべてのWorkspaceとProjectへのフルアクセス。アカウントごとに1人 | 不可 | — |
+| <Tooltip tip="UIでは「Content Admin」と表示されます">`admin`</Tooltip> | すべてのWorkspaceとProjectへのフルアクセス | 可 | `PATCH /accounts/:account_id/users/:user_id` |
+| `member` | WorkspaceレベルやProjectレベルで設定された権限 | 可 | `PATCH /accounts/:account_id/users/:user_id` |
+| Reviewer | 共有リンク経由でのみアクセス。ユーザーがセキュアな共有に追加されたときに作成される | <Tooltip tip="ReviewerはFrame.ioに認証してログインするためアカウントのユーザーリストに表示されますが、WorkspaceやProjectの権限システムの外に存在します。コンテンツにはセキュアな共有リンクを通じてのみアクセスします。">不可</Tooltip> | — |
+
+---
+
+Account Adminはすべての場所にフルアクセスできます。Adminのアクセスを特定のリソースに制限するには、まずそのユーザーのアカウントロールをMemberに変更し、その後、必要なWorkspaceやProjectに追加します。
+
+例:
+
+<Steps>
+
+<Step title="アカウントのユーザーロールを一覧表示して、ユーザーIDと現在のロールを確認します:">
+
+```bash
+
+curl https://api.frame.io/v4/accounts/:account_id/users \
+     -H "Authorization: Bearer <token>"
+```
+
+</Step>
+
+<Step title="アカウントロールをMemberに更新します:">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/users/:user_id \
+ -H "Authorization: Bearer <token>" \
+ -H "Content-Type: application/json" \
+ -d '{
+"data": {
+"role": "member"
+}
+}'
+```
+
+</Step>
+
+<Step title="Projectに追加します:">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+"data": {
+ "role": "edit_only"
+}
+}'
+```
+
+</Step>
+
+</Steps>
+
+### アカウント権限のエンドポイント {#account-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="アカウントのユーザーロールを一覧表示">
+
+<CardGroup cols={2}>
+
+<Card title="アカウントのユーザーロールを一覧表示" icon="list" iconType="solid">
+
+<br />
+
+指定したアカウント内のユーザーを、ユーザーの詳細(ID、名前、メールアドレス)とアカウントロールを含めて一覧表示します。
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/users`
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/account-permissions/account-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="ユーザーロールを更新">
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーロールを更新" icon="pen-to-square" iconType="solid">
+
+<br />
+
+アカウントにおけるユーザーのロールを更新します。現在、これは実験的なエンドポイントです。
+
+<br /><br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/users/:user_id`
+
+<br />
+
+[ドキュメント](https://developer.frame.io/platform/v4-experimental/api-reference/account-permissions/developer-api-web-experimental-account-user-roles-controller-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## ワークスペースレベルの権限 {#workspace-level-permissions}
+
+Account MemberをWorkspaceに追加すると、そのユーザーはWorkspace内のすべてのProjectでその権限レベルを持ちます。Workspaceは招待制のため、Account Memberには追加されたWorkspaceのみが表示されます。
+
+<br />
+
+| ロール | 権限 |
+| --- | --- |
+| `full_access` | アップロード、管理、共有、コメント、閲覧、ダウンロード、設定の管理、ユーザーの招待 |
+| `editor` | アップロード、管理、共有、コメント、閲覧、ダウンロード |
+| `edit_only` | アップロード、管理、コメント、閲覧。共有とダウンロードは不可 |
+| `commenter` | 閲覧とコメント |
+| `viewer` | 閲覧のみ |
+
+<br />
+
+### ワークスペース権限のエンドポイント {#workspace-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="ワークスペースのユーザーロールを一覧表示">
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーを一覧表示" icon="list" iconType="solid">
+
+<br />
+
+指定したワークスペースにアクセスできるユーザーを、ユーザーの詳細(ID、名前、メールアドレス)とロールを含めて一覧表示します。
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users`
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/workspace-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="ユーザーロールを更新">
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーロールを更新" icon="pen-to-square" iconType="solid">
+
+<br />
+
+指定したワークスペースにおけるユーザーのロールを変更します。ユーザーがすでにワークスペースに追加されている場合はロールを更新し、追加されていない場合は指定したロールで追加します。
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/workspace-permissions/workspace-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="ユーザーを削除">
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーを削除" icon="xmark" iconType="solid">
+
+<br />
+
+指定したワークスペースからユーザーを削除します
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/workspace-permissions/workspace-user-roles-delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## プロジェクトレベルの権限 {#project-level-permissions}
+
+Projectでは、Workspaceと同じ権限レベルを使用します。ユーザーが特定のProjectにのみアクセスする必要がある場合や、Workspaceでの割り当てとは異なる権限レベルが必要な場合は、ユーザーをProjectに直接追加します。ユーザーをProjectに追加するために、Workspaceへのアクセス権は必要ありません。
+
+<br />
+
+| ロール | 権限 |
+| --- | --- |
+| `full_access` | アップロード、管理、共有、コメント、閲覧、ダウンロード、設定の管理、ユーザーの招待 |
+| `editor` | アップロード、管理、共有、コメント、閲覧、ダウンロード |
+| `edit_only` | アップロード、管理、コメント、閲覧。共有とダウンロードは不可 |
+| `commenter` | 閲覧とコメント |
+| `viewer` | 閲覧のみ |
+
+<br />
+
+**例: ユーザーをProjectに追加する**
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+  "data": {
+    "role": "full_access"
+  }
+}'
+```
+
+---
+
+### Restricted Project {#restricted-projects}
+
+Restricted Projectには直接の招待が必要です。Workspaceへのアクセス権は引き継がれないため、
+ユーザーはRestricted Projectに直接追加された場合にのみアクセスできます。
+
+Memberにアクセス権を付与するには、適切な権限レベルでそのユーザーをProjectに追加します。
+
+<Note>
+
+Account AdminとOwnerは例外で、すべての
+Restricted Projectにアクセスできます。
+
+</Note>
+
+### プロジェクト権限のエンドポイント {#project-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="プロジェクトのユーザーロールを一覧表示">
+
+<CardGroup cols={2}>
+
+<Card title="プロジェクトのユーザーロールを一覧表示" icon="list" iconType="solid">
+
+<br />
+
+指定したプロジェクトにアクセスできるユーザーを、ユーザーの詳細(ID、名前、メールアドレス)とロールを含めて一覧表示します。
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users`
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/project-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="ユーザーロールを更新">
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーロールを更新" icon="pen-to-square" iconType="solid">
+
+<br />
+
+指定したプロジェクトにおけるユーザーのロールを変更します。ユーザーがすでにプロジェクトに追加されている場合はロールを更新し、追加されていない場合は指定したロールで追加します。
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id `
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/project-permissions/project-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="ユーザーを削除">
+
+<CardGroup cols={2}>
+
+<Card title="ユーザーを削除" icon="xmark" iconType="solid">
+
+<br />
+
+指定したプロジェクトからユーザーを削除します
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id`
+
+<br />
+
+[ドキュメント](/ja/platform/api-reference/project-permissions/delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## リソース {#resources}
+
+その他の役立つリソース:
+
+- Frame.ioの[Developer Forum](https://forum.frame.io/)では、開発者が質問したり、フィードバックを共有したり、構築しているものについて議論したりできます
+- ユーザーロールと権限に関する[Help Centerの記事](https://help.frame.io/en/articles/9875389-user-roles-and-permissions)
+- 関係ベースおよび属性ベースのアクセス制御に関する詳細情報については、OWASPの[Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html#prefer-attribute-and-relationship-based-access-control-over-rbac)を参照してください

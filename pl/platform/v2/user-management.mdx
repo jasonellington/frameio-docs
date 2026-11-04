@@ -1,0 +1,203 @@
+---
+title: "Zarządzanie użytkownikami"
+---
+
+## Przegląd {#overview}
+
+Ten samouczek opisuje podstawowe zarządzanie użytkownikami za pomocą API Frame.io. Zakłada, że czytelnik skonfigurował już [uwierzytelnianie](/pl/platform/v2/authentication) przez OAuth2.0 lub za pomocą tokenu deweloperskiego.
+
+### Podstawowe pojęcia {#core-concepts}
+
+Pomijając szczegółowe niuanse różnych ról i uprawnień członków zespołu, podczas zarządzania użytkownikami za pomocą API Frame.io należy zrozumieć dwie ważne kwestie:
+
+1. **Członkowie zespołu (Team Members) należą do zespołów** i mają dostęp do wszystkich nieprywatnych projektów w tych zespołach. Role Team Manager i Admin są rozszerzeniami roli Team Member.
+2. **Współpracownicy projektu (Project Collaborators) należą do pojedynczych projektów**. W zależności od konfiguracji tych projektów mogą, ale nie muszą, mieć możliwość tworzenia prezentacji, pobierania zasobów lub zapraszania innych współpracowników.
+
+Więcej informacji znajdziesz w naszej dokumentacji pomocy dotyczącej [różnic między członkami zespołu a współpracownikami](https://support.frame.io/getting-started/sharing-with-your-team-or-clients/difference-between-team-members-vs-collaborators) oraz [ról zarządzania kontem](https://support.frame.io/enterprise-accounts/enterprise-account-management-roles).
+
+### Jak użytkownicy dołączają do kont {#how-users-join-accounts}
+
+Zasadniczo nowi użytkownicy są zapraszani przez obecnych użytkowników — bezpośrednio lub za pomocą unikalnego adresu URL dołączania do projektu. Członkowie zespołu mogą także:
+
+1. Dodawać się do nieprywatnych projektów w publicznych zespołach na swoim koncie
+2. Dodawać się do publicznych zespołów na swoim koncie
+3. Prosić o dołączenie do prywatnych zespołów na swoim koncie
+
+We wszystkich przypadkach operacje dołączania przechodzą przez szereg logicznych kroków, które obejmują sprawdzenie wcześniejszego członkostwa, utworzenie rekordów „oczekujących” oraz — w odpowiednich przypadkach — wysłanie wiadomości e-mail z zaproszeniem lub prośbą o dołączenie.
+
+Dobra wiadomość jest taka, że cała ta logika jest ukryta za API Frame.io. Jeśli chcesz dodać kogoś do projektu, użyj ścieżek dotyczących współpracowników (Collaborator); jeśli chcesz zaprosić kogoś do zespołu, użyj ścieżek dotyczących członków zespołu (Team Member).
+
+### Wymagane zakresy {#required-scopes}
+
+| Zakres | Powód |
+| --- | --- |
+| **Teams:** Update | Dodawanie i usuwanie członków zespołu. |
+| **Projects:** Update | Dodawanie i usuwanie współpracowników projektu. |
+
+## Zarządzanie członkami zespołu {#managing-team-members}
+
+### Dodawanie członków zespołu {#adding-team-members}
+
+Aby dodać nowego członka do zespołu, potrzebujesz:
+
+1. `id` docelowego zespołu
+2. Adresu e-mail docelowego użytkownika.
+
+Następnie po prostu wykonaj autoryzowane żądanie `POST` do `https://api.frame.io/v2/teams/:id/members` z adresem e-mail docelowego użytkownika w treści żądania, na przykład:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**Jeśli zaproszony użytkownik jest już członkiem zespołu w Twojej organizacji**, odpowiedź API to wskaże:
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>"
+}
+```
+
+**Jeśli zaproszonego użytkownika nie ma jeszcze w Twojej organizacji**, żądanie uruchomi przepływ zaproszenia, a odpowiedź API będzie wyglądać mniej więcej tak:
+
+```json
+{
+    "_type": "pending_team_member",
+    "email": "user@example.com",
+    "id": "<oending-team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>
+}
+```
+
+**Uwaga**: ponieważ użytkownik nie został jeszcze utworzony ani rozpoznany, w odpowiedzi `pending_team_member` nie będzie identyfikatora `user_id`, który można by zmapować.
+
+### Usuwanie członków zespołu {#removing-team-members}
+
+Aby usunąć członka z zespołu, potrzebujesz:
+
+1. `id` docelowego zespołu
+2. Adresu e-mail docelowego użytkownika.
+
+Następnie wykonasz wywołanie `DELETE` na ten sam adres URL, którego używasz do dodawania członka zespołu, przekazując specjalny ciąg zapytania:
+
+`DELETE` [`https://api.frame.io/v2/teams/:id/members/_?email=user@example.com`](/pl/platform/v2/api-reference/teams/add-team-member)
+
+<Info>
+
+**Czym jest wzorzec „include”?**
+
+**Zwróć uwagę** na konstrukcję `/_?email=` — jest to specjalny wzorzec w API Frame.io zwany „include”, który pozwala zażądać dodatkowych danych w żądaniu API (w tym przypadku adresu e-mail użytkownika).
+
+</Info>
+
+Po pomyślnym wywołaniu API zwróci ładunek podobny do tego przy dodawaniu członka zespołu. Jeśli członek zespołu jest usuwany po raz pierwszy, zobaczysz atrybut `updated_at` odpowiadający czasowi wywołania. Jeśli członek zespołu został wcześniej usunięty, ten znacznik czasu nie zostanie zaktualizowany (tj. będzie odzwierciedlać czas pierwszego usunięcia członka zespołu).
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>",
+    "updated_at": "<timestamp>"
+}
+```
+
+Próby usunięcia członków zespołu, którzy nie istnieją lub nigdy nie byli powiązani z zespołem, zakończą się błędami 404.
+
+## Zarządzanie współpracownikami projektu {#managing-project-collaborators}
+
+### Dodawanie współpracowników projektu {#adding-project-collaborators}
+
+Zarządzanie współpracownikami jest bardzo podobne do zarządzania członkami zespołu. Aby dodać nowego współpracownika, potrzebujesz:
+
+1. `id` docelowego projektu
+2. Adresu e-mail docelowego użytkownika.
+
+Następnie wykonaj autoryzowane żądanie `POST` do [`https://api.frame.io/v2/projects/:id/collaborators`](/pl/platform/v2/api-reference/projects/add-collaborator-to-project) z adresem e-mail docelowego użytkownika w treści żądania:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**Jeśli zaproszony użytkownik zostanie rozpoznany** i rolę współpracownika można od razu przypisać, odpowiedź API to wskaże i zwróci pełny obiekt użytkownika:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+<Info>
+
+**Członkostwo w zespole**
+
+Jeśli użytkownik jest już członkiem zespołu w Twojej organizacji, ale nie jest członkiem docelowego projektu, nadal możesz użyć ścieżki dla współpracowników, a API odpowie jak powyżej. W tle członek zespołu zostanie dodany do docelowego projektu i nadal pozostanie członkiem zespołu. Innymi słowy, za pomocą tej ścieżki nie można przypadkowo „zdegradować” członków zespołu.
+
+</Info>
+
+**Jeśli zaproszony użytkownik jest nowy w Twojej organizacji**, żądanie uruchomi przepływ zaproszenia, a API odpowie rekordem `pending_collaborator`, na przykład:
+
+```json
+{
+    "_type": "pending_collaborator",
+    "email": "user@example.com",
+    "id": "<pending-collaborator-record-id>",
+    "project_id": "<project-id>"
+}
+```
+
+### Usuwanie współpracowników projektu {#removing-project-collaborators}
+
+**Uwaga:** ten proces jest w zasadzie identyczny ze sposobem obsługi członków zespołu (powyżej).
+
+Aby usunąć współpracownika z projektu, potrzebujesz:
+
+1. `id` docelowego projektu.
+2. Adresu e-mail docelowego użytkownika.
+
+Następnie wykonasz wywołanie `DELETE` na ten sam adres URL, którego używasz do dodawania współpracownika, przekazując specjalny ciąg zapytania.
+
+`DELETE` [`https://api.frame.io/v2/projects/:id/collaborators/_?email=user@example.com`](/pl/platform/v2/api-reference/teams/add-team-member)
+
+Po pomyślnym wywołaniu API zwróci ładunek podobny do tego przy dodawaniu współpracownika projektu:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+Próby usunięcia współpracowników, którzy nie istnieją lub nigdy nie byli powiązani z projektem, zakończą się błędami 404.
+
+<Warning>
+
+**Ostrzeżenie: usuwanie współpracowników nie jest idempotentne**
+
+W przeciwieństwie do usuwania członków zespołu, próby usunięcia już usuniętych współpracowników zakończą się błędami 404
+
+</Warning>

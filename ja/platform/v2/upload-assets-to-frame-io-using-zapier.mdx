@@ -1,0 +1,37 @@
+---
+title: "Zapier を使って Frame.io に Asset をアップロードする"
+---
+
+## 概要 {#overview}
+
+既存のクラウドベースのアプリや Asset を配信する URL から Frame.io にファイルをアップロードしたい場合、一般に Zapier が適したソリューションです。Zapier の製品は、クラウドアプリとの連携を厄介なものにしている API 設計の多くの違いを解消してくれるからです。このガイドでは、Zapier のアップロードサービスの主な特性を明確にし、インテグレーションで何が起きているのかを正確に理解できるようにします。
+
+## ファイルアップロード方法を設定する {#setting-the-file-upload-method}
+
+Zapier は、接続する API ごとに最も柔軟なファイルアップロード方法を自動的に見つけようとします。たとえば Zapier は、アプリのドメイン外からアクセスできない制限付きのリンクを、公開されているダウンロードリンクに変換しようとします。
+
+読み取れない元のリンク:
+`https://www.dropbox.com/s/hriinb9w3a2107m/iPad%20intro.pdf`
+
+Frame.io の Uploader API で使用できる、変換後のリンク:
+`https://dl.dropboxusercontent.com/s/hriinb9w3a2107m/iPad%20intro.pdf`
+
+### Zapier のファイルの制限 {#zapier’s-file-limitations}
+
+重要な点として、Frame.io の API に渡す静的なダウンロード URL を Zapier が見つけられ**ない**場合、Zapier 自身のサービスがその場でファイルをダウンロードして Frame.io に渡します。Zapier はこの方法を **[100MB 未満](https://zapier.com/help/doc/common-problems-dropbox)**のファイルに制限しています。
+
+Direct URL を渡している場合(つまり制限がない場合)でも、Zapier の UI がファイルサイズの制限について警告を表示することがある点に注意してください。そのため、File URL の仕組みを理解しておく価値があります。
+
+![Customize Asset screenshot](/images/platform/v2/upload-assets-to-frame-io-using-zapier/6624ec27fbbe109eea2aefe8a345a4ffba99ed3f9fe0d8e5f9e6af7de253917e.webp)
+
+## 一般的なアプリやサービスのアップロード方法 {#upload-methods-for-common-apps-and-services}
+
+**注:** Type が **File Upload** のインテグレーションには、Zapier の UI に示されるファイルサイズの制限が適用されます。Direct Link にはサイズの制限がなく、処理もより速く確実なため、こちらをお勧めします。
+
+| アプリ | Type | ヒントと参考資料 |
+| --- | --- | --- |
+| Gmail | File Upload | [Zapier ヘルプドキュメント](https://zapier.com/help/doc/common-problems-gmail#how-can-i-attach-a-file-to-my-email-that39s-not-in-my-trigger) |
+| Google Drive | Direct Link | File セレクターに `webContentLink` を貼り付けます。これは Google Drive にアップロードしたファイルでは機能しますが、Drive 内で作成されたドキュメントやプレゼンテーションでは機能しません。[Zapier ヘルプドキュメント](https://zapier.com/help/doc/common-problems-google-drive#unable-to-get-a-value-when-looking-for-quotfilequot-is-it-missing)、[Google Drive V3 API](https://developers.google.com/drive/api/v3/manage-downloads) |
+| Dropbox | Direct Link | Dropbox のファイルを Frame.io に自動アップロードする |
+| Box | Direct Link | `Info Shared Link Download URL` を使用します。[Box API ガイド](https://developer.box.com/guides/downloads/shared-link/) |
+| S3 | Direct Link | Zapier ガイド: S3 に関する一般的な問題 |

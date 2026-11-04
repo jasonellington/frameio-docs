@@ -1,0 +1,58 @@
+---
+title: "Limites de taxa"
+---
+
+# Visão geral {#overview}
+
+Seja um token distribuído pelo Portal do desenvolvedor, por uma concessão OAuth ou pelo backend de Accounts que atende aos próprios aplicativos do Frame.io, **todas as chamadas de API ao Frame.io estão sujeitas a limites de taxa.**
+
+Os limites de taxa são aplicados a todas e quaisquer solicitações de API de um usuário individual (independentemente do token ou método de autenticação usado), são consumidos e reabastecidos progressivamente e são refletidos nos cabeçalhos de resposta de todas as solicitações feitas à API do Frame.io. Cada endpoint é configurado com seus próprios limites, que variam de apenas `10` solicitações/minuto a até `100` solicitações/segundo.
+
+As solicitações que excederem o limite de taxa de um determinado endpoint receberão um erro HTTP `429` como resposta.
+
+## Consumo e reabastecimento {#depletion-and-refill}
+
+A API do Frame.io usa uma estratégia de [leaky bucket](https://wikipedia.org/wiki/Leaky_bucket) de limitação de taxa progressiva, na qual os limites são renovados gradualmente durante a janela de tempo definida. Em outras palavras, não existe um ponto de corte rígido após o qual os limites são renovados para um determinado recurso (ou seja, as estratégias de aplicação de "janela fixa" e "janela deslizante"). Em vez disso, os limites restantes são renovados constantemente em um ritmo proporcional ao limite e à janela de tempo do recurso.
+
+### Backoff exponencial {#exponential-backoff}
+
+A estratégia que recomendamos para lidar com limites de taxa costuma ser chamada de "backoff exponencial".
+
+Em resumo:
+
+- Ao receber um `429`, faça uma pausa por um período (normalmente um segundo)
+- Se receber outro `429`, aumente exponencialmente o período de espera até que o funcionamento normal seja retomado
+
+## Cabeçalhos {#headers}
+
+As respostas às solicitações de API sempre incluirão os três cabeçalhos a seguir, que devem ser usados para limitar suas solicitações de saída:
+
+| Cabeçalho | Valor |
+| --- | --- |
+| `x-ratelimit-limit` | O limite de taxa para esse caminho de recurso, medido em solicitações. |
+| `x-ratelimit-remaining` | O número de solicitações restantes na janela de tempo atual. |
+| `x-ratelimit-window` | A janela de tempo dos limites desse caminho de recurso, medida em milissegundos (ms). |
+
+### Exemplo {#example}
+
+O exemplo a seguir é da resposta a `GET v2/assets/:id/children`, usado para buscar os assets filhos da raiz de um Project, de uma pasta ou de um Version Stack. O limite para esse caminho é de 40 solicitações a cada 60.000 ms (um minuto), e restam 39 solicitações depois que uma foi feita.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Detalhes {#details}
+
+Os limites de taxa variam muito entre os caminhos de recursos da API do Frame.io. Abaixo estão alguns detalhes selecionados, expressos para facilitar a leitura como recurso e ação (por exemplo, "Assets — Update" em vez de `PUT /assets/:id`).
+
+Como regra geral, os caminhos de recursos que criam novos dados são limitados a 100 chamadas por minuto ou menos, e os caminhos de recursos que buscam listas de assets são limitados a 200 chamadas por minuto.
+
+| Recurso | Ação | Limite (solicitações) | Janela do limite (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1.000 |
+| **Assets** | `update` | `10` | 1.000 |
+| **Assets** | `read` | `5` | 1.000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60.000 |
+| **Search** | `read` | `200` | 60.000 |

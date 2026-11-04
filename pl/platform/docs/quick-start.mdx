@@ -1,0 +1,131 @@
+---
+title: "Szybki start"
+---
+
+Ten przewodnik przedstawia najszybszą drogę do pierwszego udanego wywołania API Frame.io V4. Utworzysz projekt w Adobe Developer Console, wygenerujesz poświadczenia i wykonasz swoje pierwsze żądanie API.
+
+---
+
+## Krok 1: Utwórz projekt w Adobe Developer Console i dodaj API Frame.io V4 {#step-1-create-a-project-in-your-adobe-developer-console-+-add-the-frame-io-v4-api}
+
+W [Adobe Developer Console](https://developer.adobe.com/developer-console/) utwórz nowy projekt i dodaj API Frame.io V4.
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-1.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+<Tip>
+
+Ten przewodnik używa uwierzytelniania OAuth 2.0 Web App. Informacje o innych metodach uwierzytelniania znajdziesz w **[przewodniku po uwierzytelnianiu](/pl/platform/docs/guides/authentication/overview)**
+
+</Tip>
+
+## Krok 2: Skonfiguruj aplikację {#step-2-configure-your-application}
+
+Wybierz OAuth Web App jako typ aplikacji i ustaw pola przekierowania.
+
+| **Redirect URI** | Ścieżka w Twojej aplikacji, która odbiera odpowiedź OAuth z Adobe IMS. Gdy użytkownik zaloguje się i zatwierdzi dostęp, Adobe IMS przekierowuje go na ten adres URL z kodem autoryzacji w ciągu zapytania, który Twoja aplikacja następnie wymienia na token dostępu |
+| --- | --- |
+| **Redirect URI pattern** | Wzorce pasujące do dodatkowych adresów URL przekierowania poza domyślnym Redirect URI. Przydaje się to, gdy aplikacja działa w wielu środowiskach lub korzysta z dynamicznego routingu. Wiele wzorców należy podać jako listę rozdzieloną przecinkami |
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-2.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+## Krok 3: Uwierzytelnianie {#step-3-authentication}
+
+Rozpocznij przepływ OAuth, przekierowując użytkownika do endpointu autoryzacji Adobe IMS:
+
+```
+  https://ims-na1.adobelogin.com/ims/authorize/v2
+  ?client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}
+  &scope=offline_access,openid,email,profile,additional_info.roles
+  &response_type=code
+```
+
+Gdy użytkownik zaloguje się i zatwierdzi dostęp, Adobe IMS przekierowuje go z powrotem na skonfigurowany Redirect URI z kodem autoryzacji w ciągu zapytania. Wymień ten kod na token dostępu, wysyłając żądanie POST do endpointu tokenów IMS.
+
+<br />
+
+Poniżej znajduje się lista definicji parametrów wraz z przykładowym żądaniem i odpowiedzią:
+
+| Parametr | Wymagany | Opis |
+| --- | --- | --- |
+| **code** | Tak | Wartość parametru code z ciągu zapytania zwracana do Twojego `redirect_uri`, gdy użytkownik uwierzytelnia się w Twojej aplikacji |
+| **grant_type** | Tak | Wartość powinna zawsze wynosić `authorization_code` |
+| **authorization** | Wymagany dla klientów poufnych | Ciąg nagłówka uwierzytelniania `Basic`. Jest to dosłownie słowo `Basic`, po którym następuje zakodowany w Base64 ciąg `clientID:clientSecret` |
+
+**Przykładowe żądanie**
+
+```
+curl -X POST 'https://ims-na1.adobelogin.com/ims/token/v3' \
+  -H 'Authorization: Basic {AUTHORIZATION}' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'code={CODE}&grant_type=authorization_code'
+```
+
+**Przykładowa odpowiedź**
+
+```
+{
+    "access_token": "{ACCESS_TOKEN}",
+    "refresh_token": "{REFRESH_TOKEN}",
+    "sub": "B0DC108C5CD449CA0A494133@c62f24cc5b5b7e0e0a494004",
+    "id_token": "{ID_TOKEN}",
+    "token_type": "bearer",
+    "expires_in": 86399
+}
+```
+
+<Tip>
+
+**Obsługa SDK**
+
+Zarówno SDK dla Pythona, jak i dla TypeScriptu zawierają moduły uwierzytelniania, które obsługują uzgadnianie OAuth, wymianę tokenów i automatyczne odświeżanie tokenów. Więcej informacji o każdym z nich znajdziesz tutaj:
+[**Python**](/pl/platform/docs/sdk-reference/python-sdk-reference)  | [**TypeScript**](/pl/platform/docs/sdk-reference/type-script-sdk-reference)
+
+</Tip>
+
+---
+
+## Krok 4: Wykonaj pierwsze żądania API {#step-4-make-your-first-api-requests}
+
+Mając token dostępu, zacznij od wywołania endpointu [`/v4/me`](/pl/platform/api-reference/users/show):
+
+```
+curl https://api.frame.io/v4/me \
+-H "Authorization: Bearer <token>"
+```
+
+To żądanie wywołuje <Tooltip tip="Więcej informacji o Adobe IMS znajdziesz w **[API Reference](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#request-2)**">**Adobe IMS API**</Tooltip> w celu weryfikacji tokena i informacji o użytkowniku.
+
+Pomyślne żądanie zwraca szczegóły uwierzytelnionego użytkownika, w tym `user_id`, imię i nazwisko oraz adres e-mail. Użyj go, aby potwierdzić, że przepływ uwierzytelniania działa zgodnie z oczekiwaniami.
+
+Większość endpointów API V4 wymaga `account_id`, którego `/v4/me` nie zwraca. Aby uzyskać `account_id`, wyślij żądanie do [`/v4/accounts`](/pl/platform/api-reference/accounts/index):
+
+```
+curl https://api.frame.io/v4/accounts \
+-H "Authorization: Bearer <token>"
+```
+
+Zwraca ono listę kont dostępnych dla uwierzytelnionego użytkownika. Użyj `account_id` z tej odpowiedzi w kolejnych żądaniach API.
+
+<Tip>
+
+**User ID a Account ID**
+
+Twój **`user_id`** identyfikuje Cię jako osobę, a Twój **`account_id`** reprezentuje organizację, do której należysz. Większość endpointów V4 działa na poziomie konta.
+
+</Tip>
+
+---
+
+## Kolejne kroki {#next-steps}
+
+Mając skonfigurowane uwierzytelnianie i swój `account_id`, możesz rozpocząć pracę z API Frame.io. Na początek mogą pomóc następujące materiały:
+
+- [Przewodnik po uwierzytelnianiu](/pl/platform/docs/guides/authentication/overview)
+- [Konta, projekty i obszary robocze](/pl/platform/docs/guides/accounts-projects-and-workspaces)
+- [API Reference](/pl/platform/api-reference/account-permissions/account-user-roles-update)
+- [Kolekcja Postman](/pl/platform/docs/guides/postman-collection)

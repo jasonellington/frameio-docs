@@ -1,0 +1,345 @@
+---
+title: "Frame.io Legacy API 迁移至 V4 指南"
+sidebarTitle: "迁移"
+---
+
+## 简介 {#introduction}
+
+Frame.io V4 API 是对 Legacy API（通常称为 *V2 端点*或 *Frame.io V3 API*）的重新设计。此次重新设计充分利用了 Frame V4 的新功能和特性，同时保留了 Legacy API 的所有相关功能。本指南概述了 Legacy API 与 V4 API 之间的主要区别，并提供分步指导，帮助您顺利完成迁移。
+
+## 迁移检查清单 {#migration-checklist}
+
+<Steps>
+
+<Step title="身份验证">
+
+对于尚未通过 Adobe Admin Console 管理的 <Tooltip tip="曾使用生成的开发者令牌调用 Legacy API 并已自动迁移到 V4 的账户。在 V4 上创建或手动迁移的账户不包括在内">**自动迁移到 V4 的账户**</Tooltip>，您可以继续使用在 [Frame.io 开发者网站](/cn/platform/welcome)中管理的 Legacy 开发者令牌，但需要在 API 请求中添加一个键为 `x-frameio-legacy-token-auth`、值为 `true` 的标头。否则，请按照下方[身份验证](#adobe-developer-console-managed-authentication)部分中的步骤操作。
+
+</Step>
+
+<Step title="更新现有 API 调用">
+
+所有 Legacy API 路由都需要映射到新的 V4 API 路由和 JSON 负载。下方提供了一个相当全面的[映射](#endpoint-mappings-legacy-api-to-v4)表，以协助完成此过程。
+
+</Step>
+
+<Step title="强烈建议进行测试">
+
+**进行全面测试。** 由于 API 有许多变化，建议使用 V4 账户进行测试，以确保新 API 按预期工作。
+
+</Step>
+
+<Step title="实现专用登录">
+
+由于授权 URL 不同，请为 V4 实现专用的登录方式。V4 授权 URL 与 Legacy API 不同，它不会在响应中返回尚未升级到 V4 的账户，因此应将其视为一个独立的集成。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+如果您对下方映射表中未列出的某个端点有疑问，请通过 [support@frame.io](mailto:support@frame.io) 联系我们的支持团队以了解更多信息。
+
+</Note>
+
+## 通过 Adobe Developer Console 管理的身份验证 {#adobe-developer-console-managed-authentication}
+
+对于通过 [Adobe Developer Console](https://developer.adobe.com/developer-console/) 管理的已迁移到 V4 的账户，您需要通过 OAuth2.0 使用 V4 API。请按照以下步骤操作。
+
+<Steps>
+
+<Step title="创建 Adobe 项目">
+
+**在 Adobe Developer Console 中创建一个项目**，并将 Frame.io 添加为产品。
+
+</Step>
+
+<Step title="选择身份验证类型">
+
+**进行身份验证。** 有关更多信息，请参阅[身份验证指南](https://developer.adobe.com/frameio/guides/Authentication/)。如果您的 V4 账户尚未通过 Adobe Admin Console 管理，可以跳过此步骤。
+
+- **用户身份验证**：使用 Client ID 和/或 Client Secret 连接到 Frame，并要求用户使用其用户名和密码登录。
+- **服务器到服务器身份验证**：使用 Client ID 和 Client Secret 连接到 Frame，但不需要用户参与通过浏览器登录。
+
+</Step>
+
+<Step title="实现 Bearer 身份验证">
+
+**JWT Bearer 身份验证**：对于每个 API 请求，通过键为 `Authorization`、值为 `Bearer <IMS_ACCESS_TOKEN>` 的标头传递身份验证令牌。
+
+</Step>
+
+</Steps>
+
+## 端点映射（Legacy API 到 V4） {#endpoint-mappings-legacy-api-to-v4}
+
+<Note>
+
+如果您使用的是旧版开发者令牌身份验证，则需要在 API 请求中添加一个键为 x-frameio-legacy-token-auth、值为 true 的标头。
+
+</Note>
+
+有助于迁移的一般说明：
+
+<Steps>
+
+<Step title="负载">
+
+请求和响应负载可能有所不同。
+
+</Step>
+
+<Step title="Teams → Workspaces">
+
+Legacy API 中的"Teams"相当于 V4 中的"Workspaces"。
+
+</Step>
+
+<Step title="Assets">
+
+Legacy API 中的"Assets"在 V4 中被拆分为"Files"、"Folders"和"Version Stacks"。
+
+</Step>
+
+<Step title="权限">
+
+V4 中的权限和角色有所不同，这改变了端点的结构。在 V4 中，有工作区和项目两级用户角色。有关更多详细信息，请参阅[管理用户权限](/cn/platform/docs/guides/managing-user-permissions)。
+
+</Step>
+
+</Steps>
+
+### 1. 账户与用户信息 {#1-accounts-&-user-info}
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/accounts` <br />([获取用户的账户](/cn/platform/v2/api-reference/accounts/get-accounts)) | **GET** | `/v4/accounts` <br />([列出账户](/cn/platform/api-reference/accounts/index)) | V4 返回用户可以访问的所有账户。 |
+| **GET** | `/v2/accounts/{account_id}` <br />([按 ID 获取账户](/cn/platform/v2/api-reference/accounts/get-account)) | N/A | N/A | 特定账户的信息可以在列出账户端点中找到。 |
+| **GET** | `/v2/me` <br />([获取当前用户](/cn/platform/v2/api-reference/users/get-me)) | **GET** | `/v4/me` <br />([用户详细信息](/cn/platform/api-reference/users/show)) | 获取当前用户的个人资料。 |
+| **GET** | `/v2/accounts/{account_id}/membership` | N/A | N/A | 角色和权限通过工作区和项目权限进行处理。 |
+
+### 2. 工作区（取代 Team 端点） {#2-workspaces-replaced-team-endpoints}
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/accounts/{account_id}/teams` <br />([获取账户下的所有 Team](/cn/platform/v2/api-reference/teams/get-teams-by-account)) | **GET** | `/v4/accounts/{account_id}/workspaces` <br />([列出工作区](/cn/platform/api-reference/workspaces/index)) | Legacy API 中的"teams"概念 → V4 中的"workspaces"。 |
+| **POST** | `/v2/accounts/{account_id}/teams` <br />([为指定账户创建 Team](/cn/platform/v2/api-reference/teams/create-team)) | **POST** | `/v4/accounts/{account_id}/workspaces` <br />([创建工作区](/cn/platform/api-reference/workspaces/create)) | 请求体类似（name 等）。响应是 workspace 对象，而不是 team 对象。 |
+| **GET** | `/v2/teams/{team_id}` <br />([获取 Team](/cn/platform/v2/api-reference/teams/get-team)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}` <br />([显示工作区](/cn/platform/api-reference/workspaces/show)) | Team ID → V4 中的 Workspace ID。 |
+| **GET** | `/v2/teams/{team_id}/members` <br />([获取 Team 成员](/cn/platform/v2/api-reference/teams/get-team-members)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/users` <br />[(获取工作区成员)](/cn/platform/api-reference/workspace-permissions/index) | 返回工作区中的所有用户 |
+| **POST** | `/v2/teams/{team_id}/members` <br />([添加 Team 成员)](/cn/platform/v2/api-reference/teams/add-team-member)) | **PATCH** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/users/{user_id}` <br />([在工作区中添加或更新用户角色](/cn/platform/api-reference/workspace-permissions/workspace-user-roles-update)) | 允许向工作区添加用户或从中移除用户 |
+| **GET** | `/v2/teams/{team_id}/membership` <br />([获取用户在 Team 中的成员身份](/cn/platform/v2/api-reference/teams/get-membership-by-team)) | N/A | N/A | 角色和权限通过工作区和项目权限进行处理。 |
+
+### 3. 项目 {#3-projects}
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/teams/{team_id}/projects` <br />([按 Team 获取项目](/cn/platform/v2/api-reference/projects/get-projects-by-team)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects` <br />([列出项目](/cn/platform/api-reference/projects/index)) | 在 V4 中必须同时提供 `account_id` 和 `workspace_id`。 |
+| **GET** | `/v2/projects/shared` | **GET** | `/v4/accounts/{account_id}/invited_projects` <br />([列出受邀项目](https://next.developer.frame.io/platform/api-reference/projects/invited-projects-index)) | 仅列出受邀项目；`/v4/accounts/{account_id}/projects` 会列出所有项目，包括受邀项目 |
+| **POST** | `/v2/teams/{team_id}/projects` <br />([创建项目](/cn/platform/v2/api-reference/projects/create-project)) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects` <br />([创建项目](/cn/platform/api-reference/projects/create)) | 请求体类似：`{ "name": "MyProject", ... }`。 |
+| **GET** | `/v2/projects/{project_id}` <br />([按 ID 获取项目](/cn/platform/v2/api-reference/projects/get-project)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}` <br />([显示项目](/cn/platform/api-reference/projects/show)) | 需要 `account_id` 和 `project_id` |
+| **PUT** | `/v2/projects/{project_id}` <br />([更新项目](/cn/platform/v2/api-reference/projects/update-project)) | **PATCH** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects/{project_id}` <br />([更新项目](/cn/platform/api-reference/projects/update)) | V4 使用 PATCH 进行部分更新。 |
+| **DELETE** | `/v2/projects/{project_id}` <br />[(按 ID 删除项目)](/cn/platform/v2/api-reference/projects/delete-project) | **DELETE** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects/{project_id}` <br />[(删除项目)](/cn/platform/api-reference/projects/delete) | 删除项目。 |
+| **GET** | `/v2/projects/{project_id}/collaborators` <br />([获取项目协作者](/cn/platform/v2/api-reference/projects/get-project-collaborators)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}/users` <br />([列出项目用户角色](/cn/platform/api-reference/project-permissions/index)) | 返回项目中的所有用户（最接近旧版协作者端点的等效端点） |
+| **POST** | `/v2/projects/{project_id}/collaborators` <br />([向项目添加协作者](/cn/platform/v2/api-reference/projects/add-collaborator-to-project)) | **PATCH** | `/v4/accounts/{account_id}/projects/{project_id}/users/{user_id}` <br />([更新指定项目的用户角色](/cn/platform/api-reference/project-permissions/project-user-roles-update)) | 允许向项目添加用户或从中移除用户（最接近旧版协作者端点的等效端点） |
+
+### 4. 文件夹 {#4-folders}
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/assets/{asset_id}/children` <br />([获取子 Assets](/cn/platform/v2/api-reference/assets/get-assets)) | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/children` <br />([列出文件夹子项](/cn/platform/api-reference/folders/index)) | 如果您在 Legacy API 中的 `asset_id` 是一个文件夹，那么在 V4 中它现在是 `folder_id`。 |
+| **POST** | `/v2/assets/{parent_asset_id}/children` <br />([创建 Asset](/cn/platform/v2/api-reference/assets/create-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/folders` <br />([创建文件夹](/cn/platform/api-reference/folders/create)) | 在 Legacy API 中您使用 `"type": "folder"`，在 V4 中使用 `{"data": {"name": "Folder name"}}`。 |
+| **GET** | `/v2/assets/{asset_id}` <br />([获取 Asset](/cn/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([显示文件夹](/cn/platform/api-reference/folders/show)) | Legacy API 需要 "type": "folder" <br />V4 API 需要在路径参数中提供 `folder_id` 和 `account_id` |
+| **PUT** | `/v2/assets/{asset_id}` ([更新 Asset](/cn/platform/v2/api-reference/assets/update-asset)) | **PATCH** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([更新文件夹](/cn/platform/api-reference/folders/update)) | Legacy API：`asset_id` 即您的文件夹 ID <br />V4 API：请求体：`{"data": {"name": "New Folder Name"}}`。 |
+| **DELETE** | `/v2/assets/{asset_id}` <br />([删除 Asset](/cn/platform/v2/api-reference/assets/delete-asset)) | **DELETE** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([删除文件夹)](/cn/platform/api-reference/folders/delete) | 删除文件夹。 |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/folders` <br />([列出文件夹](/cn/platform/api-reference/folders/list)) | 列出指定文件夹中的文件夹。（从显示项目路由获取 root_folder_id，您可以用它列出最顶层的所有文件夹。） |
+
+### 5. 版本堆栈 {#5-version-stacks}
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/assets/{destination_folder}/copy` <br />([复制 Asset](/cn/platform/v2/api-reference/assets/copy-asset)) | **POST** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/copy` <br />([复制版本堆栈](/cn/platform/api-reference/version-stacks/copy)) | Legacy：目标文件夹位于路径中；在请求中配合版本堆栈使用。V4：复制版本堆栈。 |
+| **POST** | `/v2/assets/{asset_id}/version` <br />([为 Asset 添加版本](/cn/platform/v2/api-reference/assets/add-version-to-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/version_stacks` <br />([创建版本堆栈](/cn/platform/api-reference/version-stacks/create)) | 创建版本堆栈。请求体中需要 2–10 个文件 ID。 |
+| **POST** | `/v2/assets/{asset_id}/version` <br />([为 Asset 添加版本](/cn/platform/v2/api-reference/assets/add-version-to-asset)) | **PATCH** | `/v4/accounts/{account_id}/files/{file_id}/move` <br />([将文件移动到版本堆栈](/cn/platform/api-reference/files/move)) | 将文件移动到现有版本堆栈。在请求体中将 `version_stack_id` 用作 `parent_id`。 |
+| **GET** | `/v2/assets/{asset_id}/children` <br />([获取子 Assets](/cn/platform/v2/api-reference/assets/get-assets)) | **GET** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/children` <br />([列出版本堆栈子项](/cn/platform/api-reference/version-stacks/index)) | Legacy：配合版本堆栈的 asset_id 使用。V4：列出版本堆栈中的子项（文件/版本）。 |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/version_stacks` <br />([列出版本堆栈](/cn/platform/api-reference/version-stacks/list)) | 列出文件夹中的版本堆栈。 |
+| N/A | N/A | **PATCH** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/move` <br />([移动版本堆栈](/cn/platform/api-reference/version-stacks/move)) | 将版本堆栈移动到另一个文件夹。 |
+| **GET** | `/v2/assets/{asset_id}` <br />([获取 Asset](/cn/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}` <br />([显示版本堆栈](/cn/platform/api-reference/version-stacks/show)) | Legacy：配合版本堆栈的 asset_id 使用。V4：显示版本堆栈详细信息。 |
+| **DELETE** | `/v2/assets/{asset_id}/unversion`（删除版本关联） | N/A | N/A | V4 目前不支持取消版本关联。 |
+
+### 6. 文件 {#6-files}
+
+注意：V4 中现在有两个用于创建文件的端点（本地上传和通过 S3 上传）。有关更多详细信息，请参阅[上传文件](/cn/platform/v4-experimental/docs/guides/how-to-upload)。
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/assets/{parent_asset_id}/children` <br />([创建 Asset](/cn/platform/v2/api-reference/assets/create-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/files/local_upload` <br />([创建文件（本地上传）](/cn/platform/api-reference/files/create-local-upload)) | Legacy API：需要 name、type、filetype、filesize 和 auto_version_id <br />V4 API：路径参数中需要 account_id 和 folder_id，负载中需要 file_size 和 name |
+| N/A | N/A | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/files/remote_upload` <br />([创建文件（远程上传）](/cn/platform/api-reference/files/create-remote-upload)) | 路径参数中需要 account_id 和 folder_id，负载中需要源 URL 和 name |
+| **GET** | `/v2/assets/{asset_id}` <br />([获取 Asset](/cn/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/files/{file_id}` <br />([显示文件)](/cn/platform/api-reference/files/show) | 显示文件详细信息——有许多 includes 可用于在响应中返回额外的文件详细信息。 |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/files/{file_id}/status` <br />([获取文件元数据](/cn/platform/api-reference/files/show-file-upload-status)) | 获取通过创建文件（远程上传）端点发起的远程上传的状态。 |
+| **PUT** | `/v2/assets/{asset_id}` <br />([更新 Asset](/cn/platform/v2/api-reference/assets/update-asset)) | **PATCH** | `/v4/accounts/{account_id}/files/{file_id}` <br />([更新文件](/cn/platform/api-reference/files/update)) | 更新文件名。 |
+| **DELETE** | `/v2/assets/{asset_id}` <br />([删除 Asset](/cn/platform/v2/api-reference/assets/delete-asset)) | **DELETE** | `/v4/accounts/{account_id}/files/{file_id}` <br />([删除文件](/cn/platform/api-reference/files/delete)) | 成功时返回 204 No Content。 |
+
+### 7. 评论 {#7-comments}
+
+目前已支持大多数 V4 API 评论功能。
+
+<Info>
+
+**即将推出的功能：**
+
+- 评论回应，即表情符号
+- 查看或修改评论的完成状态
+- 查看谁已看过某条评论（浏览记录）
+
+</Info>
+
+<Note>
+
+"timestamp" 字段表示评论所在的帧号（从 1 开始），而不是时间戳
+
+</Note>
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/assets/{asset_id}/comments` <br />([获取评论线程中的所有评论和回复](/cn/platform/v2/api-reference/comments/get-comments)) | **GET** | `/v4/accounts/{account_id}/files/{file_id}/comments` <br />([列出评论](/cn/platform/api-reference/comments/index)) | 列出文件上的评论。 |
+| **POST** | `/v2/assets/{asset_id}/comments` <br />([创建评论](/cn/platform/v2/api-reference/comments/create-comment)) | **POST** | `/v4/accounts/{account_id}/files/{asset_id}/comments` <br />([创建评论](/cn/platform/api-reference/comments/create)) | 创建评论。请求体类似：`{"text":"Nice","timestamp":12.3}`。 |
+| **GET** | `/v2/comments/{comment_id}` <br />([按 ID 获取评论](/cn/platform/v2/api-reference/comments/get-comment)) | **GET** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([显示评论](/cn/platform/api-reference/comments/show)) | 按 ID 获取单条评论。 |
+| **PUT** | `/v2/comments/{comment_id}` <br />([更新评论](/cn/platform/v2/api-reference/comments/update-comment)) | **PATCH** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([更新评论)](/cn/platform/api-reference/comments/update) | 更新文本、时间等。 |
+| **DELETE** | `/v2/comments/{comment_id}` <br />([删除评论](/cn/platform/v2/api-reference/comments/delete-comment)) | **DELETE** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([删除评论](/cn/platform/api-reference/comments/delete)) | 删除评论。 |
+| **GET** | `/v2/comments/{comment_id}/impressions` <br />([获取浏览记录](/cn/platform/v2/api-reference/comments/get-comment-impressions)) | N/A | N/A | V4 目前不支持浏览记录（impressions）。 |
+
+### 8. 分享（审阅链接 / 演示） {#8-shares-review-links-/-presentations}
+
+在 Frame V4 中，分享链接不再区分审阅链接和演示链接。在 V4 中，分享链接现在可以配置不同的样式，以匹配审阅或演示体验。
+
+注意：不支持通过 V4 API 与旧版审阅链接和演示进行交互。
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/projects/{project_id}/review_links` <br />([列出项目中的审阅链接](/cn/platform/v2/api-reference/review-links/list)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}/shares` <br />([列出分享](https://developer.adobe.com/frameio/api/current/#tag/Shares/operation/shares.index)) | 列出项目中的分享（注意：这不包括旧版审阅链接和演示） |
+| **POST** | `/v2/projects/{project_id}/review_links` <br />([创建审阅链接)](/cn/platform/v2/api-reference/review-links/review-link-create)) | **POST** | `/v4/accounts/{account_id}/projects/{project_id}/shares` <br />([创建分享](https://developer.adobe.com/frameio/api/current/#tag/Shares/operation/shares.create)) | 创建新的分享链接。请求体可能为 `{"data":{"name":"Review Link","type":"review"}}`。 |
+| **POST** | `/v2/review_links/{link_id}/assets` <br />([向审阅链接添加 Asset](/cn/platform/v2/api-reference/review-links/review-link-item-create)) | **POST** | `/v4/accounts/{account_id}/shares/{share_id}/assets` <br />([向分享添加新资源](/cn/platform/api-reference/shares/add-asset)) | 向分享添加资源。支持文件、文件夹和版本堆栈。 |
+| N/A | 不存在 | **DELETE** | `/v4/accounts/{account_id}/shares/{share_id}/assets/{asset_id}` <br />[(删除分享)](/cn/platform/api-reference/shares/remove-asset) | 从分享中移除资源 |
+| **DELETE** | `/v2/review_links/{link_id}` <br />([删除审阅链接](/cn/platform/v2/api-reference/review-links/review-link-delete)) | **DELETE** | `/v4/accounts/{account_id}/shares/{share_id}` <br />[(删除分享)](/cn/platform/api-reference/shares/delete) | 删除分享链接。 |
+| **PUT** | `/v2/review_links/{review_link_id}` <br />([更新审阅链接](/cn/platform/v2/api-reference/review-links/review-link-update)) | **PATCH** | `/v4/accounts/{account_id}/shares/{share_id}` <br />[(更新分享)](/cn/platform/api-reference/shares/update) | 更新分享链接 |
+
+### 9. Webhooks {#9-webhooks}
+
+您在 V3 中使用的 webhook 将被迁移过来，并且在大多数情况下功能保持不变。迁移时它们会被禁用，需要重新启用才能运行。资源事件需要进行一些更改，这些事件现在被拆分为文件事件和文件夹事件。还有一些 V4 特有的新事件需要注意：metadata.value.updated、collection 相关事件和 share 相关事件。
+
+在重新启用已迁移的 webhook 之前，请查看 [webhook 速率限制](/cn/platform/docs/guides/webhooks#webhook-rate-limits)。V4 webhook 和 Custom Action 事件共享每个账户**每分钟 1,000 个事件**和**每小时 20,000 个事件**的限制。这两项限制都适用于整个账户中两者的合计量。
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/teams/{team_id}/hooks` <br />[(创建 Webhook)](/cn/platform/v2/api-reference/webhooks/create-webhook-for-team) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspaces_id}/webhooks` <br />[(创建 Webhook)](/cn/platform/api-reference/webhooks/create) | 提供 `{"data":{"url":"...","events":["file.created",...]}}`。 |
+| **GET** | `/v2/accounts/{account_id}/webhooks` <br />[(获取账户的 Webhooks)](/cn/platform/v2/api-reference/webhooks/get-webhooks-by-account) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspaces_id}/webhooks` <br />[(列出 Webhooks)](/cn/platform/api-reference/webhooks/index) | 获取工作区的所有 webhook。注意：要获取账户的所有 webhook，您需要先获取该账户的所有工作区，然后获取这些工作区的所有 webhook。 |
+| **GET** | `/v2/hooks/{hook_id}` <br />[(获取 Webhook)](/cn/platform/v2/api-reference/webhooks/get-webhook) | **GET** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(列出 Webhooks)](/cn/platform/api-reference/webhooks/index) | 获取 webhook 信息 |
+| **PUT** | `/v2/hooks/{hook_id}` <br />[(更新 Webhook)](/cn/platform/v2/api-reference/webhooks/update-webhook) | **PATCH** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(更新 Webhook)](https://developer.adobe.com/frameio/api/experimental/#tag/Webhooks/operation/webhooks.update) | 更新 webhook 设置 |
+| **DELETE** | `/v2/hooks/{hook_id}` <br />[(删除 Webhook)](/cn/platform/v2/api-reference/webhooks/delete-webhook) | **DELETE** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(删除 Webhook)](https://developer.adobe.com/frameio/api/experimental/#tag/Webhooks/operation/webhooks.delete) | 删除 webhook。 |
+
+### 10. Custom Actions {#10-custom-actions}
+
+您在 V3 中使用的 Custom Actions 将被迁移过来，但需要对请求和响应处理进行一些修改。迁移时它们会被禁用，需要重新启用才能运行。有关更多详细信息，请参阅此[（文档）](/cn/platform/docs/guides/custom-actions#migrated-actions)
+
+注意：Custom Actions 端点目前位于实验性 API 中，需要添加标头："api-version: experimental"。
+
+| 方法 | Legacy 端点 | 方法 | V4 端点 | 说明 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/teams/{team_id}/actions` ([创建 Custom Action](/cn/platform/v2/api-reference/custom-actions/create-action-for-team)) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/actions` ([创建 Custom Action](/cn/platform/v4-experimental/api-reference/custom-actions/actions-create)) | 在工作区中创建 Custom Action。 |
+| **DELETE** | `/v2/actions/{action_id}` ([删除 Custom Action](/cn/platform/v2/api-reference/custom-actions/delete-action)) | **DELETE** | `/v4/accounts/{account_id}/actions/{action_id}` ([删除 Custom Action](/cn/platform/v4-experimental/api-reference/custom-actions/actions-delete)) | 删除 Custom Action。 |
+| **PUT** | `/v2/actions/{action_id}` ([更新 Custom Action](/cn/platform/v2/api-reference/custom-actions/update-action)) | **PATCH** | `/v4/accounts/{account_id}/actions/{action_id}` ([更新 Custom Action](/cn/platform/v4-experimental/api-reference/custom-actions/actions-update)) | 更新 Custom Action 详细信息。 |
+| **GET** | `/v2/teams/{team_id}/actions` ([获取 Team 的 Custom Actions)](/cn/platform/v2/api-reference/custom-actions/get-actions-by-account) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/actions` ([列出 Custom Actions](/cn/platform/v4-experimental/api-reference/custom-actions/actions-index)) | 列出指定工作区中的 Custom Actions。 |
+| **GET** | `/v2/actions/{action_id}` ([按 ID 获取 Custom Action](/cn/platform/v2/api-reference/custom-actions/get-action)) | **GET** | `/v4/accounts/{account_id}/actions/{action_id}` ([显示 Custom Action 详细信息](/cn/platform/v4-experimental/api-reference/custom-actions/actions-show)) | 显示 Custom Action 详细信息。 |
+
+## 迁移步骤 {#migration-steps}
+
+<Steps>
+
+<Step title="调整不受支持的 V2 端点">
+
+**调整**所有不受支持的 Legacy V2 端点。
+
+</Step>
+
+<Step title="更新基础 URL">
+
+将**基础 URL** 从 `api.frame.io/v2/...` **更新**为 `api.frame.io/v4/...`。
+
+</Step>
+
+<Step title="更新 API 请求">
+
+**更新**代码中的 **API 请求**，以引用新的端点架构。
+
+</Step>
+
+<Step title="更新 JSON 负载">
+
+**更新**请求/响应架构的 **JSON 负载**，确保您生成和使用的是正确的字段。
+
+</Step>
+
+<Step title="更新术语">
+
+在您的代码和前端中更新术语："teams" → "workspaces"；"assets" → "files/folders"；"review links" 或 "presentation links" → "shares"。
+
+</Step>
+
+<Step title="测试端点">
+
+**测试**所有新更新的端点。如果遇到 403、404、422 错误，请确认端点、请求负载结构等。
+
+</Step>
+
+<Step title="解析错误响应">
+
+如果 API 调用失败，请**解析**新的详细错误响应，在 `{"errors": [...]}` JSON 响应中查找问题。
+
+</Step>
+
+<Step title="部署到生产环境">
+
+使用 V4 [Frame.io](http://frame.io/) 账户验证后，**部署**到生产环境。
+
+</Step>
+
+</Steps>
+
+## 错误处理与常见问题 {#error-handling-&-common-issues}
+
+<Note>
+
+某些路由返回的错误带有自定义描述，可能与以下示例略有不同。
+
+</Note>
+
+<CardGroup cols={2}>
+
+<Card title="客户端错误（4xx）" icon="triangle-exclamation" iconType="solid">
+
+- **400** Bad Request：检查负载是否准确。
+- **401** Unauthorized：授权令牌无效或缺失。
+- **403** Forbidden：缺少 scope 或用户没有访问权限。
+- **404** Not Found：确认端点、API 版本或 ID。
+- **422** Unprocessable Entity：验证请求数据
+- **429** Too Many Requests：实现带退避的重试。
+
+</Card>
+
+<Card title="服务器错误（5xx）" icon="server" iconType="solid">
+
+- **500** Internal Server Error：短暂延迟后重试。
+
+</Card>
+
+</CardGroup>
+
+## SDK 支持 {#sdk-support}
+
+与 Legacy SDK 类似，现在提供了供开发者使用的 Python SDK，并且首次提供了 TypeScript SDK。这些 SDK 功能相似，但方法完全不同；如果您要从 Legacy SDK 升级到 V4 SDK，请务必相应地更新您的代码。您可以通过以下链接找到它们：
+[SDK 入门](/cn/platform/docs/getting-started#sdks)
+[Python SDK](/cn/platform/docs/sdk-reference/python-sdk-reference)
+[TypeScript SDK](/cn/platform/docs/sdk-reference/type-script-sdk-reference)
+
+---

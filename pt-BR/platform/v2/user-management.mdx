@@ -1,0 +1,203 @@
+---
+title: "Gerenciamento de usuários"
+---
+
+## Visão geral {#overview}
+
+Este tutorial aborda o gerenciamento básico de Users pela API do Frame.io. Ele pressupõe que o leitor já configurou a [autenticação](/pt-BR/platform/v2/authentication) via OAuth2.0 ou com um token de desenvolvedor.
+
+### Conceitos principais {#core-concepts}
+
+Deixando de lado as nuances específicas das diferentes funções e permissões de Team Member, há dois pontos importantes a entender ao gerenciar Users pela API do Frame.io:
+
+1. **Team Members pertencem a Teams** e têm acesso a todos os Projects não privados desses Teams. Team Managers e Admins são extensões da função de Team Member.
+2. **Project Collaborators pertencem a Projects individuais**. Dependendo de como esses Projects estão configurados, eles podem ou não conseguir criar Presentations, baixar Assets ou convidar outros Collaborators.
+
+Para mais informações, consulte nossa documentação de suporte sobre [Team Members vs. Collaborators](https://support.frame.io/getting-started/sharing-with-your-team-or-clients/difference-between-team-members-vs-collaborators) e [funções de gerenciamento de Account](https://support.frame.io/enterprise-accounts/enterprise-account-management-roles).
+
+### Como os Users entram em Accounts {#how-users-join-accounts}
+
+Em geral, novos Users são convidados por Users atuais, diretamente ou por meio de uma URL exclusiva de entrada no Project. Team Members também podem:
+
+1. Adicionar-se a Projects não privados dentro de Teams públicos da sua Account
+2. Adicionar-se a Teams públicos dentro da sua Account
+3. Solicitar a entrada em Teams privados dentro da sua Account
+
+Em todos os casos, as atividades de entrada passam por uma série de etapas lógicas que incluem verificar participação anterior, criar registros "pendentes" e enviar e-mails de convite ou de solicitação de entrada quando apropriado.
+
+A boa notícia é que toda essa lógica é abstraída pela API do Frame.io. Se quiser adicionar alguém a um Project, use as rotas de Collaborator; se quiser convidar alguém para um Team, use as rotas de Team Member.
+
+### Scopes necessários {#required-scopes}
+
+| Scope | Motivo |
+| --- | --- |
+| **Teams:** Update | Adicionar e remover Team Members. |
+| **Projects:** Update | Adicionar e remover Project Collaborators. |
+
+## Gerenciar Team Members {#managing-team-members}
+
+### Adicionar Team Members {#adding-team-members}
+
+Para adicionar um novo Team Member a um Team, você precisará de:
+
+1. O `id` do Team de destino
+2. O endereço de e-mail do User de destino.
+
+A partir daí, basta fazer um `POST` autorizado para `https://api.frame.io/v2/teams/:id/members` com o e-mail do User de destino no payload do corpo, assim:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**Se o User que você convidou já for Team Member na sua organização**, a resposta da API indicará isso:
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>"
+}
+```
+
+**Se o User que você convidou ainda não estiver na sua organização**, sua solicitação acionará um fluxo de convite, e a resposta da API será mais parecida com esta:
+
+```json
+{
+    "_type": "pending_team_member",
+    "email": "user@example.com",
+    "id": "<oending-team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>
+}
+```
+
+**Observação**: como o User ainda não foi criado nem reconhecido, não haverá um `user_id` mapeável na resposta `pending_team_member`.
+
+### Remover Team Members {#removing-team-members}
+
+Para remover um Team Member de um Team, você precisará de:
+
+1. O `id` do Team de destino
+2. O endereço de e-mail do User de destino.
+
+A partir daí, você fará uma chamada `DELETE` para a mesma URL usada para adicionar um Team Member, passando uma query string especial:
+
+`DELETE` [`https://api.frame.io/v2/teams/:id/members/_?email=user@example.com`](/pt-BR/platform/v2/api-reference/teams/add-team-member)
+
+<Info>
+
+**O que é o padrão 'include'?**
+
+**Observe** a construção `/_?email=` — esse é um padrão especial da API do Frame.io chamado 'include', que permite solicitar dados adicionais na sua solicitação de API (neste caso, o endereço de e-mail do usuário).
+
+</Info>
+
+Em uma chamada bem-sucedida, a API retornará um payload semelhante ao da adição de Team Member. Se o Team Member estiver sendo excluído pela primeira vez, você verá um atributo `updated_at` correspondente ao horário da sua chamada. Se o Team Member já tiver sido excluído anteriormente, esse timestamp não será atualizado (ou seja, refletirá o horário em que o Team Member foi removido inicialmente).
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>",
+    "updated_at": "<timestamp>"
+}
+```
+
+Tentativas de remover Team Members que não existem ou que nunca foram associados ao Team resultarão em erros 404.
+
+## Gerenciar Project Collaborators {#managing-project-collaborators}
+
+### Adicionar Project Collaborators {#adding-project-collaborators}
+
+O gerenciamento de Collaborators é extremamente semelhante ao gerenciamento de Team Members. Para adicionar um novo Collaborator, você precisará de:
+
+1. O `id` do Project de destino
+2. O endereço de e-mail do User de destino.
+
+A partir daí, faça um `POST` autorizado para [`https://api.frame.io/v2/projects/:id/collaborators`](/pt-BR/platform/v2/api-reference/projects/add-collaborator-to-project), com o e-mail do User de destino no payload do corpo:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**Se o User que você convidou for reconhecido** e a função de Collaborator puder ser instanciada imediatamente, a resposta da API indicará isso e retornará um objeto User completo:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+<Info>
+
+**Participação em Teams**
+
+Se o User já for Team Member na sua organização, mas não for membro do Project de destino, você ainda poderá usar a rota de Collaborator, e a API responderá como acima. Nos bastidores, o Team Member será adicionado ao Project de destino e continuará sendo Team Member. Em outras palavras, não é possível "rebaixar" Team Members acidentalmente com essa rota.
+
+</Info>
+
+**Se o User que você convidou for novo na sua organização**, sua solicitação acionará um fluxo de convite, e a API responderá com um registro `pending_collaborator`, assim:
+
+```json
+{
+    "_type": "pending_collaborator",
+    "email": "user@example.com",
+    "id": "<pending-collaborator-record-id>",
+    "project_id": "<project-id>"
+}
+```
+
+### Remover Project Collaborators {#removing-project-collaborators}
+
+**Observação:** esse processo é fundamentalmente idêntico ao tratamento de Team Members (acima).
+
+Para remover um Collaborator de um Project, você precisará de:
+
+1. O `id` do Project de destino.
+2. O endereço de e-mail do User de destino.
+
+A partir daí, você fará uma chamada `DELETE` para a mesma URL usada para adicionar um Collaborator, passando uma query string especial.
+
+`DELETE` [`https://api.frame.io/v2/projects/:id/collaborators/_?email=user@example.com`](/pt-BR/platform/v2/api-reference/teams/add-team-member)
+
+Em uma chamada bem-sucedida, a API retornará um payload semelhante ao da adição de Project Collaborator:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+Tentativas de remover Collaborators que não existem ou que nunca foram associados ao Project resultarão em erros 404.
+
+<Warning>
+
+**Aviso: a remoção de Collaborators não é idempotente**
+
+Ao contrário da remoção de Team Members, tentativas de remover Collaborators já removidos resultarão em erros 404
+
+</Warning>

@@ -1,0 +1,58 @@
+---
+title: "速率限制"
+---
+
+# 概述 {#overview}
+
+无论 token 是通过开发者门户、OAuth 授权，还是通过为 Frame.io 自有应用提供服务的 Accounts 后端分发的，**所有对 Frame.io 的 API 调用都会受到速率限制。**
+
+速率限制适用于单个用户发出的所有 API 请求（无论使用哪种 token 或认证方式），会逐步消耗和补充，并反映在向 Frame.io API 发出的每个请求的响应 header 中。每个端点都配置了各自的限制，范围从低至每分钟 `10` 个请求，到高达每秒 `100` 个请求。
+
+超出特定端点速率限制的请求将收到 `429` HTTP 错误响应。
+
+## 消耗与补充 {#depletion-and-refill}
+
+Frame.io API 采用[漏桶](https://wikipedia.org/wiki/Leaky_bucket)策略进行渐进式速率限制，限额会在其分配的时间窗口内逐步刷新。换句话说，不存在某个硬性截止时间点、过后特定资源的限额才会刷新的概念（即“固定窗口”和“滑动窗口”执行策略）。相反，剩余限额会根据资源的限制和时间窗口，以相应的速度持续刷新。
+
+### 指数退避 {#exponential-backoff}
+
+我们推荐的速率限制管理策略通常称为“指数退避”。
+
+简而言之：
+
+- 收到 `429` 时，暂停一段时间（通常为一秒）
+- 如果再次收到 `429`，则以指数方式增加等待时间，直到恢复正常运行
+
+## Headers {#headers}
+
+API 请求的响应始终包含以下三个 header，应利用它们来限制您的出站请求：
+
+| Header | 值 |
+| --- | --- |
+| `x-ratelimit-limit` | 此资源路径的速率限制，以请求数计量。 |
+| `x-ratelimit-remaining` | 当前时间窗口内剩余的请求数。 |
+| `x-ratelimit-window` | 此资源路径限制的时间窗口，以毫秒（ms）计量。 |
+
+### 示例 {#example}
+
+以下示例来自 `GET v2/assets/:id/children` 的响应，该请求用于获取 Project 根目录、文件夹或 Version Stack 的子 assets。该路径的限制为每 60,000 ms（一分钟）40 个请求，在发出一个请求后还剩 39 个请求。
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## 详细信息 {#details}
+
+Frame.io API 中不同资源路径的速率限制差异很大。以下列出部分详细信息，为便于阅读，以资源和操作的形式表示（例如用“Assets — Update”代替 `PUT /assets/:id`）。
+
+一般而言，创建新数据的资源路径限制为每分钟 100 次调用或更低，而获取 assets 列表的资源路径限制为每分钟 200 次调用。
+
+| 资源 | 操作 | 限制（请求数） | 限制窗口（ms） |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1,000 |
+| **Assets** | `update` | `10` | 1,000 |
+| **Assets** | `read` | `5` | 1,000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60,000 |
+| **Search** | `read` | `200` | 60,000 |

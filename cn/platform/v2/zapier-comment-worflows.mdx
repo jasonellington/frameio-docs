@@ -1,0 +1,108 @@
+---
+title: "使用 Zapier 的评论工作流"
+---
+
+## 概述 {#overview}
+
+在本指南中，您将使用 Frame.io 的 [Zapier 应用](https://zapier.com/apps/frameio/)从 Frame.io “捕获”评论（Comment），并在 Zapier 中使用其他应用对其进行处理。
+
+为了构建一个完整的工作流，我们将按照[此模板](https://zapier.com/apps/frameio/integrations/frameio/47537/translate-frameio-comments-with-zapier)进行操作，实现对 Frame.io 中某个 Team 上留下的任何评论进行自动翻译。
+
+您可以从上面链接的模板开始，也可以在 Zapier 中从零开始创建一个新的 Zap。本指南将采用后一种方式。
+
+## 准备工作 {#things-you’ll-need}
+
+开始之前，您需要准备以下三样东西：
+
+1. Frame.io 账户访问权限（以便创建 API 令牌）
+2. Frame.io 中某个 Team 的 Team Manager 或 Admin 访问权限（以便创建 Webhook）
+3. 一个 Zapier 账户（免费版即可），以及 [Frame.io 的 Zapier 应用](https://zapier.com/apps/frameio/integrations)
+
+要验证前两项，请前往 [developer.frame.io](/cn/platform/v2) 并登录。如果您看不到 “Tokens” 和 “Webhooks” 菜单项（如下所示），请联系您的 Frame.io 账户管理员。
+
+## 教程 {#tutorial}
+
+### 1. 上传新的 Asset 并发表评论 {#1-upload-a-new-asset-and-make-a-comment}
+
+Frame.io 的 Zapier 应用依赖于查找最新的数据，因此如果我们要处理评论，最好的起点是打开 Frame.io，上传一个新的 Asset，并在其上留下一条评论。由于评论严格绑定到其父 Asset，这将帮助 Zapier 确保获取到您最新的示例。
+
+需要提醒的是，Zapier webhook 特定于 Frame.io 中的单个 Team——因此请确保您的评论所在的 Asset 属于您要安装工作流的那个 Team！
+
+![在新 Asset 上发表评论](/images/platform/v2/zapier-comment-worflows/1e5258be5ee86a989424885a821d593279bba52ee4cfc42f8222c2ef5a80b856.webp)
+
+### 2. 连接您的 Frame.io 账户并获取评论 {#2-connect-your-frame-io-account-and-fetch-your-comment}
+
+首先，点击 Zapier 控制面板上醒目的橙色 “Make a Zap” 按钮来创建一个新的 Zap。然后搜索 “Frame.io”，选择 Frame.io 应用，并选择 “**New Comment**” 触发器。
+
+![4032c5d-2. Zapier 触发器](/images/platform/v2/zapier-comment-worflows/82ec07bdfaf828fe1c1e9ee0f2ec440a0ca414ead914894bdff2aa321c95fe6c.webp)
+
+在下一个界面中，如果您尚未连接 Frame.io 账户，则需要生成一个 API 令牌并输入。
+
+### 2.5 创建 API 令牌 {#2-5-create-an-api-token}
+
+前往 [Frame.io 开发者门户](/cn/platform/v2)，使用您的 Frame.io 账户登录，然后点击 “Tokens” 创建一个新的 [API 令牌](https://developer.frame.io/tokens/new)。
+
+为新令牌起一个描述性的名称，并选择以下 scope：
+
+- **Accounts:** Read
+- **Projects:** Read
+- **Assets:** Read
+- **Team:** Read, Update
+- **Comment:** Create Read, Update
+- **Webhooks:**  Create, Read, Update, Delete（所有 scope）
+
+完成后，点击 “**Create**”，并复制您的令牌。然后回到 Zapier，点击 “**Connect an Account**”，并输入您的新令牌。
+
+![9c6282d-2.5 令牌](/images/platform/v2/zapier-comment-worflows/5fec1fd7a8a456e390de9a6e2b7ad56e593fe13b8e7ab35fefc5e67509abddc1.webp)
+
+### 3. 选择 Team 并获取示例评论 {#3-select-a-team-and-grab-your-sample-comment}
+
+使用新连接的账户保存后，接着选择一个 Team 并保存。
+
+Zapier 现在将搜索 “Samples”——排在最上面的应该是您在第 1 步中留下的评论。展开它进行确认，如果一切正常，请再次保存。
+
+![5db288d-3. 示例搜索](/images/platform/v2/zapier-comment-worflows/2dc0dab4efff48d4b75619f00432d70e20018c89cff751a78d15ab479f6d2c63.webp)
+
+### 4. 添加翻译操作 {#4-add-your-translation-action}
+
+现在可以为您的 Zap 添加一个操作（Action）了！搜索 “Translate”，您应该能找到 “**Translate by Zapier**” 操作。
+
+在随后的配置界面中，选择中间框右上角的图标，然后从触发器步骤中选择 “Text”。这将确保 Zapier 始终动态处理进入此 Zap 的任何新评论的文本。
+
+接着选择您的语言，保存并测试。
+
+如果一切正常，请确认并点击 “**Add a Step**”。
+
+![de48d15-4. 翻译配置](/images/platform/v2/zapier-comment-worflows/0aa91c5a7c923ade94fa0f01d7a613e7a753b8d5d51b93de613f3ffc919bc00f.webp)
+
+### 5. 更新您的 Frame.io 评论 {#5-update-your-frame-io-comment}
+
+现在我们已经有了原始文本和翻译后的文本，是时候重建我们的评论了！
+
+选择 Frame.io 应用，并选择 **Update Comment** 操作。
+
+在下一个界面底部的 “Comment” 字段中，点击下拉菜单并选择 “**Use a Custom Value**”。然后从触发器步骤中选择 “**ID**”。与上一步类似，这可以确保新评论始终得到动态处理。
+
+![Custom-value.png](/images/platform/v2/zapier-comment-worflows/07c9d89dbfd52426941a410869fd5d22a050e766288fe1d8a0a51c9c9a4850d1.webp)
+
+![8020a1d-5. 选择 ID](/images/platform/v2/zapier-comment-worflows/78cd6dd39ea6f26288a113288ba0bcd4058da55cb915945e45edbb82ee552870.webp)
+
+现在，点击 “Refresh Fields”，并结合原始文本和翻译后的文本构建动态评论文本。
+
+![c57593d-5. 最终模板](/images/platform/v2/zapier-comment-worflows/f680b858d4fb9c1a249d9bd3f7b11214f5127289c807e4e527e6d469fe0cdfe7.webp)
+
+### 6. 测试您的操作 {#6-test-your-action}
+
+一切就绪后，点击 “**Continue**”，然后测试您的操作。这会将翻译后的评论发送回 Frame.io。
+
+前往 Frame.io，如果看到了预期的结果，就大功告成了！
+
+![2b95dcd-6. 确认](/images/platform/v2/zapier-comment-worflows/26c303f216b40be6cb087ef89dfd29b15ab3471f122ffca9bafb6d73ea729416.webp)
+
+### 6.5. 收尾 {#6-5-finishing-up}
+
+恭喜！最难的部分已经完成了！
+
+最后，点击 “**Finish**”，为您的 Zap 命名并将其开启！现在，您在同一 Team 中留下的任何评论都将遵循您的工作流并被动态翻译。
+
+![a35d3b5-6. 全部完成](/images/platform/v2/zapier-comment-worflows/3eeb71698cb39348baed2981fa9e3816b0583a8f67c6347b8454fdb7030b4704.webp)

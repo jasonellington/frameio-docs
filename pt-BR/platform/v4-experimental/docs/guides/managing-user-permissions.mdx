@@ -1,0 +1,385 @@
+---
+title: "Gerenciando permissões de usuários"
+---
+
+Este guia explica como gerenciar permissões de usuários com a API do Frame.io V4. Ele aborda como as permissões funcionam nos níveis de Conta, Workspace e Projeto, e quais endpoints usar em cada um.
+
+---
+
+## Níveis de permissão {#permission-levels}
+
+As permissões no Frame.io são gerenciadas nos níveis de Conta, Workspace e Projeto. Cada nível usa seu próprio conjunto de funções:
+
+```
+Account 
+│
+├── (admin)  - full access to all Workspaces, Projects, and Restricted Projects
+│
+└── (member)
+        │
+        ├── Workspace - (full_access | editor | edit_only | commenter | viewer)
+        │       │
+        │       └── Project - (full_access | editor | edit_only | commenter | viewer)
+        │
+        └── Restricted Project - (members require direct invite)
+```
+
+Todo usuário tem uma função na conta. Pela API, você pode definir a função de um usuário como <Tooltip tip="Você pode ver Owner e Reviewer retornados nas respostas da API, mas essas funções não podem ser configuradas pela API. Mais detalhes sobre isso estão na seção Permissões no nível da conta.">`admin` ou `member`.</Tooltip>
+Os Admins da conta têm acesso total a todos os Workspaces e Projetos. Os Membros da conta podem ser adicionados seletivamente aos Workspaces e Projetos de que precisam.
+
+Quando você adiciona um Membro da conta a um Workspace, o nível de permissão atribuído (`full_access`, `editor`, `edit_only`, `commenter` ou `viewer`) se aplica a todos os Projetos existentes e futuros dentro dele. Por exemplo, se você adicionar um Membro da conta como `viewer`, ele terá permissões de `viewer` sempre que acessar qualquer Projeto nesse Workspace.
+
+Esse mesmo Membro da conta pode ser adicionado a um Projeto específico dentro desse Workspace como `editor`. Como resultado, sempre que acessar esse Projeto, ele terá permissões de `editor`. Suas permissões de `viewer` continuam valendo para todos os outros Projetos desse Workspace.
+
+Como as atribuições de Projeto são separadas das atribuições de Workspace, se você remover esse Membro da conta do Workspace, ele manterá suas permissões de `editor` para aquele único Projeto.
+
+Os Projetos restritos são a exceção. Os Membros da conta sempre precisam de um convite direto. Saiba mais na seção Permissões no nível do projeto abaixo.
+
+## Permissões no nível da conta {#account-level-permissions}
+
+Todo usuário na sua Conta tem uma função:
+
+| Função | Permissões | Configurável pela API | Endpoint |
+| --- | --- | --- | --- |
+| Owner | Acesso total a todos os Workspaces e Projetos. Um por conta | Não | — |
+| <Tooltip tip="Chamado de 'Content Admin' na interface">`admin`</Tooltip> | Acesso total a todos os Workspaces e Projetos | Sim | `PATCH /accounts/:account_id/users/:user_id` |
+| `member` | Permissões definidas no nível de Workspace e/ou Projeto | Sim | `PATCH /accounts/:account_id/users/:user_id` |
+| Reviewer | Acesso somente por links de compartilhamento. Criado quando um usuário é adicionado a um compartilhamento seguro | <Tooltip tip="Os Reviewers aparecem nas listas de usuários da conta porque se autenticam no Frame.io, mas existem fora do sistema de permissões de Workspace e Projeto. Eles acessam conteúdo apenas por links de compartilhamento seguros.">Não</Tooltip> | — |
+
+---
+
+Os Admins da conta têm acesso total a tudo. Para limitar o acesso de um Admin a recursos específicos, primeiro altere a função dele na conta para Member e, em seguida, adicione-o aos Workspaces ou Projetos de que ele precisa.
+
+Por exemplo:
+
+<Steps>
+
+<Step title="Liste as funções dos usuários da conta para encontrar o ID do usuário e confirmar a função atual dele:">
+
+```bash
+
+curl https://api.frame.io/v4/accounts/:account_id/users \
+     -H "Authorization: Bearer <token>"
+```
+
+</Step>
+
+<Step title="Atualize a função na conta para Member:">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/users/:user_id \
+ -H "Authorization: Bearer <token>" \
+ -H "Content-Type: application/json" \
+ -d '{
+"data": {
+"role": "member"
+}
+}'
+```
+
+</Step>
+
+<Step title="Adicione-o a um Projeto:">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+"data": {
+ "role": "edit_only"
+}
+}'
+```
+
+</Step>
+
+</Steps>
+
+### Endpoints de permissões da conta {#account-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="Listar funções dos usuários da conta">
+
+<CardGroup cols={2}>
+
+<Card title="Listar funções dos usuários da conta" icon="list" iconType="solid">
+
+<br />
+
+Lista os usuários de uma determinada conta, incluindo os detalhes do usuário (ID, nome, e-mail) e a função dele na conta.
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/users`
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/account-permissions/account-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Atualizar função do usuário">
+
+<CardGroup cols={2}>
+
+<Card title="Atualizar função do usuário" icon="pen-to-square" iconType="solid">
+
+<br />
+
+Atualiza a função de um usuário na conta. No momento, este é um endpoint experimental.
+
+<br /><br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/users/:user_id`
+
+<br />
+
+[Documentação](https://developer.frame.io/platform/v4-experimental/api-reference/account-permissions/developer-api-web-experimental-account-user-roles-controller-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Permissões no nível do Workspace {#workspace-level-permissions}
+
+Quando você adiciona um Membro da conta a um Workspace, ele passa a ter esse nível de permissão em todos os Projetos dentro dele. Os Workspaces são somente por convite, portanto os Membros da conta veem apenas os Workspaces aos quais foram adicionados.
+
+<br />
+
+| Função | Permissões |
+| --- | --- |
+| `full_access` | Fazer upload, gerenciar, compartilhar, comentar, visualizar, baixar, gerenciar configurações e convidar usuários |
+| `editor` | Fazer upload, gerenciar, compartilhar, comentar, visualizar, baixar |
+| `edit_only` | Fazer upload, gerenciar, comentar, visualizar. Não pode compartilhar nem baixar |
+| `commenter` | Visualizar e comentar |
+| `viewer` | Somente visualizar |
+
+<br />
+
+### Endpoints de permissões do Workspace {#workspace-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="Listar funções dos usuários do Workspace">
+
+<CardGroup cols={2}>
+
+<Card title="Listar usuários" icon="list" iconType="solid">
+
+<br />
+
+Lista os usuários com acesso a um determinado workspace, incluindo os detalhes do usuário (ID, nome, e-mail) e a função dele.
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users`
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/workspace-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Atualizar funções dos usuários">
+
+<CardGroup cols={2}>
+
+<Card title="Atualizar função do usuário" icon="pen-to-square" iconType="solid">
+
+<br />
+
+Modifica a função de um usuário em um determinado workspace. Isso atualizará a função do usuário se ele já tiver sido adicionado ao workspace ou o adicionará com a função informada.
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/workspace-permissions/workspace-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Remover um usuário">
+
+<CardGroup cols={2}>
+
+<Card title="Remover usuário" icon="xmark" iconType="solid">
+
+<br />
+
+Remove um usuário de um determinado workspace
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/workspace-permissions/workspace-user-roles-delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Permissões no nível do projeto {#project-level-permissions}
+
+Os Projetos usam os mesmos níveis de permissão que os Workspaces. Adicione um usuário diretamente a um Projeto quando ele precisar de acesso apenas a esse Projeto específico ou quando precisar de um nível de permissão diferente da sua atribuição no Workspace. Os usuários não precisam ter acesso ao Workspace para serem adicionados a um Projeto.
+
+<br />
+
+| Função | Permissões |
+| --- | --- |
+| `full_access` | Fazer upload, gerenciar, compartilhar, comentar, visualizar, baixar, gerenciar configurações e convidar usuários |
+| `editor` | Fazer upload, gerenciar, compartilhar, comentar, visualizar, baixar |
+| `edit_only` | Fazer upload, gerenciar, comentar, visualizar. Não pode compartilhar nem baixar |
+| `commenter` | Visualizar e comentar |
+| `viewer` | Somente visualizar |
+
+<br />
+
+**Exemplo: adicionar um usuário a um Projeto**
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+  "data": {
+    "role": "full_access"
+  }
+}'
+```
+
+---
+
+### Projetos restritos {#restricted-projects}
+
+Os Projetos restritos exigem um convite direto. O acesso ao Workspace não é herdado,
+portanto os usuários só podem acessar um Projeto restrito se tiverem sido adicionados diretamente a ele.
+
+Para conceder acesso a um Membro, adicione-o ao Projeto com o nível de permissão adequado.
+
+<Note>
+
+Admins e Owners da conta são a exceção e têm acesso a todos os
+Projetos restritos.
+
+</Note>
+
+### Endpoints de permissões do projeto {#project-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="Listar funções dos usuários do projeto">
+
+<CardGroup cols={2}>
+
+<Card title="Listar funções dos usuários do projeto" icon="list" iconType="solid">
+
+<br />
+
+Lista os usuários com acesso a um determinado projeto, incluindo os detalhes do usuário (ID, nome, e-mail) e a função dele.
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users`
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/project-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Atualizar funções dos usuários">
+
+<CardGroup cols={2}>
+
+<Card title="Atualizar funções dos usuários" icon="pen-to-square" iconType="solid">
+
+<br />
+
+Modifica a função de um usuário em um determinado projeto. Isso atualizará a função do usuário se ele já tiver sido adicionado ao projeto ou o adicionará com a função informada.
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id `
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/project-permissions/project-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Remover um usuário">
+
+<CardGroup cols={2}>
+
+<Card title="Remover um usuário" icon="xmark" iconType="solid">
+
+<br />
+
+Remove um usuário de um determinado projeto
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id`
+
+<br />
+
+[Documentação](/pt-BR/platform/api-reference/project-permissions/delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Recursos {#resources}
+
+Recursos adicionais que podem ser úteis:
+
+- O [Fórum de Desenvolvedores](https://forum.frame.io/) do Frame.io é onde os desenvolvedores podem fazer perguntas, compartilhar feedback e discutir o que estão criando
+- [Artigo da Central de Ajuda](https://help.frame.io/en/articles/9875389-user-roles-and-permissions) sobre funções e permissões de usuários
+- A [Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html#prefer-attribute-and-relationship-based-access-control-over-rbac) da OWASP, para mais informações sobre controle de acesso baseado em relacionamentos e atributos

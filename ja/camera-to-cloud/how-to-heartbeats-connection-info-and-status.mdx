@@ -1,0 +1,229 @@
+---
+title: "ハウツー: ステータスと状態の管理"
+sidebarTitle: "ステータスと状態の管理"
+---
+
+## はじめに {#introduction}
+
+このガイドでは、デバイスのステータスを管理し、Frame.io との同期を維持する方法について説明します。当社では、Frame.io とデバイスの間でリアルタイム通信を可能にする WebSocket プロトコルを使用しています。WebSocket になじみがない場合でも、このガイドを読めば C2C インテグレーションにおける WebSocket の実装を理解できます。
+
+WebSocket を使用すると、Frame.io はデバイスにメッセージをプッシュできます。また、永続的な接続を維持することで、従来の HTTP リクエストよりも効率的な通信チャネルを提供します。
+
+このガイドでは、次の内容を取り上げます。
+
+- ソケット接続を開いて、デバイスが「オンライン」であることを示す
+- デバイスの接続に関する情報を取得する
+- Frame.io のバックエンドが利用可能かどうかを確認する
+
+## 前提条件 {#prerequisites}
+
+まだご覧になっていない場合は、先に進む前に [Implementing C2C: Setting Up](/ja/camera-to-cloud/implementing-c2c-setting-up) ガイドを確認してください。
+
+[認証と認可のプロセス](/ja/camera-to-cloud/implementing-c2c-authentication-and-authorization)で取得した `access_token` が必要になります。トークンは 8 時間で有効期限が切れるため、トークンを更新するか、認可プロセスをもう一度行う必要がある場合があることに注意してください。
+
+このガイドの WebSocket 接続の例では、[websocat](https://github.com/vi/websocat) の使用をおすすめします。これは CLI ツールで、さまざまなオペレーティングシステム向けの詳しいインストール手順が用意されています。
+
+<Info>
+
+**MacOS**
+
+インストール方法: `brew install websocat`
+
+</Info>
+
+## 接続情報の取得 {#retrieving-connection-information}
+
+新たに認可を行った後やトークンを更新した後は、デバイスはただちに `identity` エンドポイントにクエリを送信する必要があります。これにより、接続に関する重要な情報が得られます。
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/me \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+レスポンスは次のようになります (一部のデータは省略しています)。
+
+```
+{
+    "_type": "project_device",
+    "id": "a7e95254-8cd6-4d59-b54d-28c58570a8de",
+    "asset_type": "video",
+    "authorization": {
+        "_type": "project_device_authorization",
+        "creator": {
+            "_type": "user",
+            "id": "e7e96254-8bd6-4d59-b54d-28c58570a8de",
+            "name": "Harry Potter"
+        },
+        "expires_at": null,
+        "id": "7b2b68e5-788d-497c-8597-f9362cb1a75e",
+        ...
+        "project_device_id": "14856308-46e0-4d7d-8438-320262eec74e",
+        "scopes": {
+            ...
+            "asset_create": true,
+            ...
+            "id": "0fe0accb-447f-44f6-b2af-177d913b3a29",
+            "offline": true,
+            ...
+        }
+    },
+    ...
+    "name": "Frameio-BPEAKE-TEST-DEVICE",
+    "project": {
+        "_type": "project",
+        "id": "2ad59fe6-77b6-4fbc-a9d2-3dd0413ed4a3",
+        "name": "Testbed"
+    },
+    "project_id": "2ad59fe6-77b6-4fbc-a9d2-3dd0413ed4a3",
+    "status": "online",
+    ...
+}
+```
+
+このエンドポイントは接続の詳細を確認するのに役立ちます。デバイスは次の情報をユーザーに表示する必要があります。
+
+- `project.name` - 接続先のプロジェクト名
+
+- `authorization.creator.name` - デバイスを認可したユーザー
+
+- `authorization.expires_at` (オプション) - 接続の有効期限 (設定されている場合)
+
+- `status` (オプション) - デバイスのステータス。次のいずれかです。
+
+  - `online` - デバイスはオンラインでペアリング済みです
+  - `offline` - デバイスが 5 分以上通信していません (このエンドポイントにクエリを送信すると、ステータスは `online` に変わります)
+  - `paused` - Frame.io の C2C Connections パネルでデバイスが一時的に無効化されています
+
+有効期限と一時停止のステータスは Frame.io 内でいつでも変更される可能性があるため、この情報をユーザーに表示する場合は、定期的にポーリングすることを検討してください。ポーリングの頻度は 60 秒に 1 回以下に抑えることをおすすめします。
+
+<Info>
+
+**id**
+
+次のセクションで WebSocket 接続に必要になるため、`id` の値を控えておいてください
+
+</Info>
+
+## WebSocket 接続の確立 {#establishing-the-websocket-connection}
+
+Frame.io の C2C Connections パネルには、各デバイスの接続ステータスが表示されます。アクティブなソケット接続を持つデバイスは、カードの左上隅に緑色のインジケーターが付いた `online` として表示されます。アクティブな接続がないデバイスは、グレーアウトした表示で `offline` として表示されます。
+
+サーバーは、「ハートビート」メッセージが 60 秒間ないとソケット接続を自動的に終了します。この間隔で十分ですが、信頼性を高めるために 15 秒ごとにハートビートを送信することをおすすめします。接続が予期せず閉じられた場合は、再確立するだけです。
+
+Frame.io の WebSocket への接続は、次の 2 つのステップで行います。
+
+1. TCP/IP ハンドシェイクを確立し、物理的な WebSocket 接続を開く
+2. デバイス固有のチャンネルに参加し、当社のバックエンドに対してデバイスを識別させる
+
+WebSocket 接続を開くには、次のようにします。
+
+```shell
+websocat -n "wss://api.frame.io/devices/websocket?Authorization=Bearer ACCESS_TOKEN"
+```
+
+<Info>
+
+**Authorization ヘッダー**
+
+アクセストークンを `Authorization` ヘッダーに含める標準的な API エンドポイントとは異なり、WebSocket 接続では URL エンコードされたクエリパラメーターとして含めます。アクセストークンの前には引き続き `Bearer ` (スペース付き) を含める必要があることに注意してください。URL エンコードされた文字列ではスペースは `%20` として表示されるため、この形式は想定どおりです。
+
+</Info>
+
+接続に成功すると `101` ステータスコードが返され、プロトコルが `wss` に切り替わったことを示します。お使いの WebSocket ライブラリがこれを自動的に処理する場合もあります。トークンの有効期限が切れている場合は `403` レスポンスが返されます。
+
+次に、接続情報の `id` を使用して次の JSON メッセージを送信し、デバイスのチャンネルに参加します。
+
+```json
+{"topic":"devices:YOUR_DEVICE_ID", "event":"phx_join", "payload":"", "ref":"channel_connect"}
+```
+
+確認のレスポンスが返されます。
+
+```json
+{"event":"phx_reply","payload":{"response":{},"status":"ok"},"ref":"channel_connect","topic":"devices:YOUR_DEVICE_ID"}
+```
+
+<Info>
+
+**ref フィールドと payload フィールド**
+
+`ref` フィールドは、レスポンスとそのきっかけとなったイベントを関連付けます。イベントの順序は保証されないため、この識別子はサーバーのレスポンスとトリガーとなったイベントを対応付けるのに役立ちます。Frame.io は受信イベントにこのフィールドを使用しません。これはクライアントの参照専用です。`payload` フィールドは常に存在する必要がありますが、多くの場合は空の文字列でかまいません (ペイロードに特定の内容が必要な場合は明記します)。
+
+</Info>
+
+C2C ダッシュボードを確認してください。デバイスがオンラインとして表示されているはずです! この接続を維持するために、バックグラウンドプロセスを実装することをおすすめします。
+
+```python title="Python"
+def heartbeat_task():
+    """
+    Task that emits heartbeats every 15 seconds.
+    """
+
+    while True:
+        c2c.emit_socket_heartbeat()
+        sleep(15)
+```
+
+ハートビートメッセージの形式:
+
+```json
+{"topic":"phoenix", "event":"heartbeat", "payload":"", "ref":"heartbeat"}
+```
+
+これに対して次のレスポンスが返されます。
+
+```json
+{"event":"phx_reply","payload":{"response":{},"status":"ok"},"ref":"heartbeat","topic":"phoenix"}
+```
+
+アクティブなソケット接続とチャンネルのサブスクリプションがあれば、デバイスは Frame.io の C2C Connections パネルでオンラインとして表示されます。接続が終了すると、オフラインとして表示されます。
+
+## デバイスステータスの表示 {#displaying-device-status}
+
+生のステータス値 (`online`、`offline`、`paused`) をそのまま表示するのではなく、ユーザーにとってよりわかりやすいインジケーターに変換することをおすすめします。
+
+- **一時停止中**: true/false - ステータスが `paused` の場合は `true`、それ以外の場合は `false` を表示します
+- **接続済み**: true/false - デバイスが Frame.io のバックエンドに到達できるかどうかを示します (後述のバックエンド接続テストを参照)
+
+## 一時停止ステータスの管理 {#managing-the-paused-status}
+
+一時停止ステータスの表示はオプションですが、その機能を理解しておくことは重要です。
+
+一時停止機能は、機密性の高いコンテンツが一時的にアップロードされないようにするためのものです。ネットワークトラフィックをブロックするのではなく、特定のメディアが Frame.io に届くのを防ぎます。これは、即座にクラウドストレージに保存するのが不適切な機密素材を含むシーンを撮影する場合などに便利です。
+
+一時停止は、インテグレーションではなく Frame.io のインターフェースから制御します。デバイスが一時停止されている場合、ブロックされるのは一時停止期間中に作成されたメディアのみで、それ以前に撮影されたメディアは引き続きアップロードの対象となります。
+
+重要な考慮事項:
+
+- アップロードの可否を判断するために identity エンドポイントだけに頼らないでください。当社のバックエンドがこれを自動的に処理します
+- ソケットイベントにより、`event: "status_updated"` と `payload: "paused"` または `"resumed"` でステータスの変更が通知されます
+- イベントはステータスの管理に役立ちますが、見逃されたり、順序が入れ替わって配信されたりする可能性があります
+- アップロード中に `409` エラーを受け取っても、デバイスが現在一時停止中であるとは限りません。メディアが以前の一時停止期間中に作成されたことを示している可能性があります
+- 一時停止ステータスを表示する場合は、定期的に接続情報を確認して、その正確性を検証してください
+
+## バックエンド接続の確認 {#verifying-backend-connectivity}
+
+Frame.io のバックエンドが利用可能かどうかを確認するには、次のエンドポイントを使用します。
+
+```shell
+curl -X GET https://api.frame.io/health \
+    | python -m json.tool
+```
+
+このエンドポイントには認可は必要ありません。成功したレスポンスは、接続できていることを示します。
+
+```json
+{
+    "ok": true
+}
+```
+
+このヘルスチェックは、一般的なネットワークの可用性ではなく、Frame.io との接続を明確に確認できるため、特に有用です。ネットワーク自体は機能していても、サービスの問題やルーティングの問題により Frame.io に到達できない場合もあります。
+
+## 次のステップ {#next-steps}
+
+ご不明な点があればお気軽に私たちのチームにお問い合わせのうえ、[基本的なアップロードガイド](/ja/camera-to-cloud/how-to-basic-upload)に進んでください。皆さまのインテグレーションの進捗をサポートできることを楽しみにしています。
+
+デバイスの認可の管理について詳しくは、[認可管理ガイド](/ja/camera-to-cloud/how-to-authorization-management)を参照してください。

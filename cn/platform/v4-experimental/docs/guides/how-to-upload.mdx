@@ -1,0 +1,321 @@
+---
+title: "本地上传与远程上传的工作原理"
+sidebarTitle: "如何上传"
+---
+
+本指南详细介绍了使用 Frame.io V4 API 上传文件的完整流程，涵盖本地上传和远程上传的原始 API 请求与响应。
+
+<Info>
+
+**在寻找 SDK 专用指南？** 如需内置分块、重试和进度跟踪功能的上传实现，请参阅 [Python SDK 上传指南](/cn/platform/docs/guides/uploading-to-frame-io/python-sdk-upload-guide)。
+
+</Info>
+
+## 前提条件 {#prerequisites}
+
+在开始上传文件之前，请确保已完成以下设置步骤：
+
+<Steps>
+
+<Step title="Frame.io V4 账户">
+
+您拥有一个通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理的 Frame.io V4 账户，或者您已为自己的账户用户[切换到 Adobe 身份验证](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication)
+
+</Step>
+
+<Step title="Adobe Developer Console 设置">
+
+您已登录 [Adobe Developer Console](https://developer.adobe.com/console)，并已将 Frame.io API 添加到新项目或现有项目中
+
+</Step>
+
+<Step title="身份验证凭据">
+
+您已为项目生成了[相应的身份验证凭据](https://developer.adobe.com/frameio/guides/Authentication/)
+
+</Step>
+
+<Step title="访问令牌">
+
+您已成功使用这些凭据生成了访问令牌
+
+</Step>
+
+</Steps>
+
+## 选择上传方式 {#choosing-your-upload-method}
+
+使用 Frame.io API 上传文件有两种方式：`Create File (local upload)` 和 `Create File (remote upload)`。
+
+<CardGroup cols={2}>
+
+<Card title="本地上传" icon="upload" iconType="solid">
+
+当您的应用程序可以在本地访问媒体时使用，类似于从桌面拖放文件
+
+</Card>
+
+<Card title="远程上传" icon="link" iconType="solid">
+
+当需要通过网络访问媒体时使用，例如通过与其他服务的集成
+
+</Card>
+
+</CardGroup>
+
+在本指南中，我们将从较简单的远程上传开始介绍。
+
+## 远程上传 {#remote-upload}
+
+要通过远程上传创建文件，请选择 **Create File (remote upload)** 端点。请求正文需要包含文件名及其源 URL。
+
+<Warning>
+
+远程上传目前有 **500 GB 的文件大小限制**。对于大于 500 GB 的文件，请改用[本地上传](#local-upload)。
+
+</Warning>
+
+### 请求示例 {#request-example}
+
+```json
+{ 
+    "data": {
+        "name": "my_file.jpg",
+        "source_url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.jpg"
+    }
+}
+```
+
+### 响应示例 {#response-example}
+
+请求成功后将返回类似如下的响应：
+
+```json
+{
+    "data": {
+        "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+        "name": "my_file.jpg",
+        "status": "created",
+        "type": "file",
+        "file_size": 518,
+        "updated_at": "2025-06-26T20:14:33.796116Z",
+        "media_type": "image/jpeg",
+        "parent_id": "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+        "project_id": "7e46e495-4444-4555-8649-bee4d391a997",
+        "created_at": "2025-06-26T20:14:33.159489Z",
+        "view_url": "https://next.frame.io/project/7e46e495-4444-4555-8649-bee4d391a997/view/93e4079d-0a8a-4bf3-96cd-e6a03c465e5e"
+    },
+    "links": {
+        "status": "/v4/accounts/6f70f1bd-7e89-4a7e-b4d3-7e576585a181/files/93e4079d-0a8a-4bf3-96cd-e6a03c465e5e/status"
+    }
+}
+```
+
+## 本地上传 {#local-upload}
+
+要通过本地上传创建文件，请选择 **Create File (local upload)** 端点。请求正文需要包含文件名以及以字节为单位的文件大小。
+
+### 请求示例 {#request-example-1}
+
+```json
+{ 
+    "data": {
+        "name": "my_file.jpg",
+        "file_size": 50645990
+    }
+}
+```
+
+### 响应示例 {#response-example-1}
+
+如果请求成功，系统会创建一个不含任何内容的占位文件资源。根据文件大小，响应正文将包含一个或多个 `upload_urls`。在本示例中，我们需要分多个部分来处理此次上传。
+
+```json
+{
+    "data": {
+        "id": "fa18ba7b-b3ee-4dd6-9b31-bd07e554241d",
+        "name": "my_file.jpg",
+        "status": "created",
+        "type": "file",
+        "file_size": 50645990,
+        "updated_at": "2025-06-26T20:08:06.823170Z",
+        "media_type": "image/jpeg",
+        "parent_id": "2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+        "project_id": "7e46e495-4444-4555-8649-bee4d391a997",
+        "created_at": "2025-06-26T20:08:06.751313Z",
+        "upload_urls": [
+            {
+                "size": 16881997,
+                "url": "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_1?..."
+            },
+            {
+                "size": 16881997,
+                "url": "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_2?..."
+            },
+            {
+                "size": 16881996,
+                "url": "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_3?..."
+            }
+        ],
+        "view_url": "https://next.frame.io/project/7e46e495-4444-4555-8649-bee4d391a997/view/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d"
+    }
+}
+```
+
+<Warning>
+
+**重要的上传要求：**
+
+发送后续上传请求时，请牢记以下重要细节：
+
+- HTTP 请求方法必须为 `PUT`
+- 必须包含 `x-amz-acl` 标头，并将其设置为 private
+- `Content-Type` 标头必须与原始 **Create File (local upload)** 请求中指定的 `media_type` 一致。即使将文件分成多个部分上传也是如此。在上面的示例中，`media_type` 的值为 `image/jpeg`，因此 `Content-Type` 的值也必须为 `image/jpeg`。
+
+</Warning>
+
+## 分段上传 {#multi-part-upload}
+
+当某个文件返回多个上传 URL 时，您需要将源文件拆分为多个分块，并为每个分块发出一个 PUT 请求。
+
+<Info>
+
+**推荐：** [Python SDK 上传指南](/cn/platform/docs/guides/uploading-to-frame-io/python-sdk-upload-guide)介绍了如何使用 `FrameioUploader` 进行分段上传，它开箱即用地处理分块、并行上传、重试和进度跟踪。
+
+</Info>
+
+如果您需要手动实现上传（例如使用没有 SDK 的语言，或需要完全控制整个过程），下面的脚本演示了如何将文件拆分为分块，并使用预签名 URL 上传每个分块。
+
+### Python 实现示例 {#python-implementation-example}
+
+```python title="Multi-part Upload Script"
+import requests
+import math
+from typing import List
+from tqdm import tqdm  # For progress bar
+
+def upload_file_in_chunks(file_path: str, upload_urls: list[str], content_type: str | None = None, chunk_size: int | None = None) -> bool:
+    """
+    Upload a file in chunks using presigned URLs.
+    """
+    try:
+        # Auto-detect content type based on file extension
+        if content_type is None:
+            detected_content_type, _ = mimetypes.guess_type(file_path)
+            content_type = detected_content_type # Default fallback
+
+        print(f"Detected content type: {content_type}")
+
+        # Get file size
+        with open(file_path, 'rb') as f:
+            f.seek(0, 2)  # Seek to end of file
+            file_size = f.tell()
+
+        # Calculate chunk size if not provided
+        if chunk_size is None:
+            chunk_size = math.ceil(file_size / len(upload_urls))
+
+        print(f"File size: {file_size} bytes")
+        print(f"Chunk size: {chunk_size} bytes")
+        print(f"Number of chunks: {len(upload_urls)}")
+
+        # Upload each chunk
+        with open(file_path, 'rb') as f:
+            with tqdm(total=len(upload_urls), desc="Uploading chunks") as pbar:
+                for i, url in enumerate(upload_urls):
+                    start_byte = i * chunk_size
+                    end_byte = min(start_byte + chunk_size, file_size)
+
+                    # Read chunk from file
+                    f.seek(start_byte)
+                    chunk = f.read(end_byte - start_byte)
+
+                    print(f"Uploading chunk {i+1}: {len(chunk)} bytes")
+
+                    # Upload chunk with minimal headers matching the signature
+                    response = requests.put(
+                        url,
+                        data=chunk,
+                        headers={
+                            'content-type': content_type,
+                            'x-amz-acl': 'private'
+                        }
+                    )
+
+                    if response.status_code != 200:
+                        print(f"Failed to upload chunk {i+1}. Status code: {response.status_code}")
+                        print(f"Response text: {response.text}")
+                        print(f"Response headers: {dict(response.headers)}")
+                        return False
+                    else:
+                        print(f"Chunk {i+1} uploaded successfully!")
+
+                    pbar.update(1)
+
+        return True
+
+    except Exception as e:
+        print(f"Error during upload: {str(e)}")
+        return False
+
+# Example usage
+if __name__ == "__main__":
+    # Replace these with your actual values
+    file_path = "/Users/MyComputer/local_upload/sample.jpg"  # Path to your file
+    upload_urls = [
+        "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_1?...",
+        "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_2?...",
+        "https://frameio-uploads-development.s3-accelerate.amazonaws.com/parts/fa18ba7b-b3ee-4dd6-9b31-bd07e554241d/part_3?..."
+    ]
+    content_type = "image/jpeg"
+
+    print("Starting file upload...")
+    success = upload_file_in_chunks(file_path, upload_urls, content_type)
+
+    if success:
+        print("File upload completed successfully!")
+    else:
+        print("File upload failed!")
+```
+
+## 上传流程摘要 {#upload-flow-summary}
+
+<Steps>
+
+<Step title="选择上传方式">
+
+在远程上传（可通过 URL 访问的文件）和本地上传（位于您系统上的文件）之间做出选择
+
+</Step>
+
+<Step title="创建文件请求">
+
+发出初始请求，使用所需的元数据创建文件资源
+
+</Step>
+
+<Step title="处理上传 URL">
+
+对于本地上传，处理返回的 upload_urls（单个或多个部分）
+
+</Step>
+
+<Step title="上传文件内容">
+
+使用带有正确标头的 PUT 请求，将文件内容上传到提供的 URL
+
+</Step>
+
+<Step title="验证上传">
+
+检查文件状态，确认上传和处理已成功完成
+
+</Step>
+
+</Steps>
+
+<Info>
+
+**后续步骤**：文件上传完成后，您可以使用返回的文件 ID 添加评论、创建分享，或通过 Frame.io V4 API 执行其他操作。
+
+</Info>

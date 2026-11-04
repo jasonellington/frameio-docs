@@ -1,0 +1,205 @@
+---
+title: "Automatyzuj przepływy pracy Frame.io za pomocą Make"
+sidebarTitle: "Make"
+---
+
+Make to platforma automatyzacji bez kodu, która łączy Twoje aplikacje i usługi. Korzysta z interfejsu wizualnego, w którym tworzysz przepływy pracy zwane scenariuszami, układając w sekwencję różne moduły.
+
+Każdy scenariusz ma wyzwalacz (np. „utworzono nowy projekt w Frame.io”) oraz następujące po nim akcje (np. „dodaj wiersz w Google Sheets”). Łączysz te moduły wizualnie, aby określić, co ma się wydarzyć i w jakiej kolejności.
+
+## Dlaczego warto połączyć Frame.io z Make? {#why-connect-frame-io-to-make}
+
+Make rozszerza Frame.io na cały Twój przepływ pracy. Synchronizuj pliki z magazynem, aktualizuj narzędzia do zarządzania projektami, generuj raporty, powiadamiaj zespół lub twórz niestandardowe przepływy pracy oparte na aktywności w Frame.io. Im więcej narzędzi ze swojego stosu technologicznego połączysz z Frame.io, tym większe możliwości zyskasz.
+
+**Pomysły na automatyzację:**
+
+- Automatyczne tworzenie projektów Frame.io, gdy klient prześle formularz zgłoszeniowy
+- Publikowanie wiadomości w Slacku, gdy do filmu w Frame.io zostaną dodane komentarze
+- Aktualizowanie arkusza Google Sheets po utworzeniu nowego projektu Frame.io
+
+To tylko kilka przykładów. Pełną listę dostępnych modułów Frame.io znajdziesz na tej stronie w serwisie [Make.com](https://www.make.com/en/integrations/frame-io#:~:text=All-,Modules,-(26)).
+
+## Czego potrzebujesz {#what-you-need}
+
+- **Konta Frame.io** (informacje o subskrypcjach znajdziesz [tutaj](https://frame.io/pricing))
+- **Konta Make** (dostępny jest plan bezpłatny)
+
+<br />
+
+<Note>
+
+**Struktura tego przewodnika**<br />
+
+W następnej sekcji omówiono podstawy Make. Jeśli chcesz od razu przejść do tworzenia, przejdź do samouczka, w którym połączymy Twoje konto Frame.io i zbudujemy scenariusz zapisujący nowe projekty Frame.io w arkuszu Google Sheets.
+
+</Note>
+
+## Typy modułów {#module-types}
+
+Make ma cztery typy modułów: wyzwalacze, wyszukiwania, akcje i moduły uniwersalne.
+
+<CardGroup cols={2}>
+
+<Card title="Wyzwalacze" icon="bell" iconType="solid" horizontal={true}>
+
+Wyzwalacze obserwują zmiany w usłudze i przekazują je do Make, aby można było wykorzystać te dane w scenariuszu. W jednym scenariuszu możesz dodać **jeden** moduł wyzwalacza.
+
+<br />
+
+Szczegóły dotyczące wyzwalaczy odpytujących i natychmiastowych znajdziesz w sekcji **Typy wyzwalaczy** poniżej.
+
+<br />
+
+- Możesz ustawić, jak często uruchamiany jest moduł wyzwalacza, klikając **Schedule settings** na pasku narzędzi scenariusza
+- Make zdecydowanie zaleca rozpoczynanie scenariuszy od modułu wyzwalacza.
+
+</Card>
+
+<Card title="Wyszukiwania" icon="magnifying-glass" iconType="solid" horizontal={true}>
+
+Moduły wyszukiwania pobierają określone dane z usługi. Możesz dodać wiele modułów wyszukiwania w dowolnym miejscu scenariusza. Większość wyszukiwań zwraca do 3200 obiektów na jedno uruchomienie.
+
+<br />
+
+**Typy modułów wyszukiwania:**
+
+<br />
+
+- **Moduły wyszukiwania** pozwalają filtrować dane i używać zapytań do znajdowania konkretnych informacji
+  (Search Records, Search Rows itp.)
+- **Moduły listujące** pobierają wszystkie dane bez filtrowania. (List Projects, List Sheets itp.)
+
+</Card>
+
+<Card title="Akcje" icon="bolt" iconType="solid" horizontal={true}>
+
+Moduły akcji przetwarzają dane pobrane z usługi. Możesz dodać dowolną liczbę akcji w dowolnym miejscu scenariusza.
+
+<br />
+
+**Typy akcji:**
+
+<br />
+
+- GET
+- CREATE
+- UPDATE
+- DELETE
+
+<br />
+
+</Card>
+
+<Card title="Moduły uniwersalne" icon="code" iconType="solid" horizontal={true}>
+
+Moduły uniwersalne (zwykle nazywane **Make an API Call**) pozwalają wykonywać niestandardowe wywołania API, gdy Make nie oferuje gotowego modułu do tego, czego potrzebujesz.
+
+<br />
+
+Możesz dodać dowolną liczbę modułów uniwersalnych i umieścić je w dowolnym miejscu scenariusza.
+
+</Card>
+
+</CardGroup>
+
+## Typy wyzwalaczy {#trigger-types}
+
+Make korzysta z dwóch typów wyzwalaczy: odpytujących i natychmiastowych.
+
+**Wyzwalacze odpytujące** sprawdzają konto usługi pod kątem nowych danych zgodnie z harmonogramem. Zwykle mają nazwy takie jak „Watch Records” czy „Watch Rows”. Gdy scenariusz zostaje uruchomiony, Make pyta usługę, czy pojawiło się coś nowego. Jeśli tak, scenariusz to przetwarza.
+
+**Wyzwalacze natychmiastowe** działają inaczej. Korzystają z webhooków, więc usługa powiadamia Make natychmiast, gdy coś się wydarzy. Twój scenariusz uruchamia się od razu. Rozpoznasz je po ikonie błyskawicy i etykiecie „Instant” na module.
+
+Moduł Watch Events w Frame.io jest wyzwalaczem natychmiastowym, więc scenariusz, który zbudujemy w dalszej części, będzie działał w czasie rzeczywistym.
+
+Więcej informacji o tym, jak działają różne typy modułów, znajdziesz w [tej sekcji Centrum pomocy Make](https://help.make.com/types-of-modules).
+
+# Interfejs Make {#the-make-interface}
+
+Pulpit Make wyświetla wszystkie Twoje scenariusze. To tutaj monitorujesz aktywne scenariusze, ich wydajność oraz zużycie kredytów. Kliknij **Create scenario** w nagłówku, aby otworzyć kreator.
+
+### Dodawanie aplikacji i modułów {#adding-applications-+-modules}
+
+Aby dodać moduły do scenariusza, kliknij przycisk plusa na środku kreatora. Otworzy się panel, w którym możesz wyszukać potrzebną aplikację, np. Frame.io lub Google Sheets, a następnie wybrać konkretny moduł (np. „Watch Events” lub „Add a Row”). Przeciągaj i upuszczaj moduły w kreatorze, aby je połączyć i zbudować scenariusz.
+
+### Zarządzanie aplikacjami i ponowne łączenie {#managing-+-reconnecting-apps}
+
+Lewy pasek boczny zapewnia dostęp do scenariuszy, połączeń, webhooków i innych funkcji Make.
+
+Jeśli musisz ponownie połączyć Frame.io lub inną aplikację, kliknij **Connections** na lewym pasku bocznym. Zobaczysz wszystkie połączone aplikacje z przyciskiem **Reauthorize** obok każdej z nich. Kliknij go, aby ponownie przejść przez proces uwierzytelniania.
+
+### Testowanie {#testing}
+
+Aby przetestować scenariusz, kliknij **Run once** na pasku narzędzi. Po zakończeniu testu nad każdym modułem pojawią się dymki operacji pokazujące, ile operacji zostało wykonanych. Kliknij dymek, aby zobaczyć dane wejściowe i wyjściowe danego kroku.
+
+**Testowanie na istniejących danych:**
+
+Domyślnie wyzwalacze przetwarzają tylko nowe zdarzenia. Aby przeprowadzić test na istniejących danych, kliknij strzałkę rozwijaną obok przycisku **Run once**. Otworzy się okno dialogowe, w którym możesz ponownie przetworzyć dane z wcześniej odebranego zdarzenia webhooka.
+
+---
+
+# Tworzenie pierwszego scenariusza: zapisywanie nowych projektów w Google Sheets {#building-your-first-scenario-log-new-projects-to-google-sheets}
+
+Zanim zaczniemy, utwórz arkusz Google Sheets z następującymi nagłówkami kolumn:
+
+**Event Type**, **Resource ID**, **Workspace ID**, **User ID**. W tym przykładzie nazwiemy arkusz „Frame Projects”.
+
+<Steps>
+
+<Step title="Połącz się z Frame.io i dodaj wyzwalacz">
+
+Kliknij znak plusa w kreatorze Make, aby dodać moduł. Wyszukaj „Frame.io” i wybierz **Watch Events**. Spowoduje to utworzenie webhooka, który uruchamia się, gdy w Frame.io wystąpią określone zdarzenia.
+
+**Łączenie z Frame.io:**
+
+- Kliknij **Add** obok pola połączenia
+- Zachowaj domyślną nazwę połączenia lub ją zmień
+- Pojawi się prośba o zalogowanie się na konto Adobe i autoryzowanie Make
+- Po połączeniu na listach rozwijanych zobaczysz wszystkie dostępne konta i Workspace'y Frame.io
+
+**Konfiguracja webhooka:**
+
+- Wybierz swoje konto i Workspace, który chcesz obserwować. W tym przykładzie użyjemy „New Workspace”
+- W sekcji zdarzeń wybierz **Project Created** (więcej informacji o obsługiwanych zdarzeniach znajdziesz w naszej [dokumentacji webhooków](https://developer.adobe.com/frameio/guides/Webhooks/#webhook-event-subscriptions))
+- Nadaj nazwę webhookowi i zapisz zmiany
+
+</Step>
+
+<Step title="Dodaj Google Sheets">
+
+Kliknij znak plusa, aby dodać kolejny krok. Wyszukaj i wybierz aplikację Google Sheets, a następnie kliknij moduł **Add a Row**.
+
+**Łączenie z Google Sheets:**
+
+- Kliknij **Add**, aby utworzyć nowe połączenie
+- Kliknij **Sign in with Google** i autoryzuj Make do uzyskania dostępu do Twojego konta Google
+- Po połączeniu na listach rozwijanych powinny pojawić się arkusze z Twojego konta
+- Wybierz nazwę arkusza/karty (w naszym przypadku „Frame Projects”)
+
+**Mapowanie danych:**
+Teraz zmapuj dane z Frame.io na kolumny arkusza. Kliknij każde pole i wybierz odpowiednie dane z wyzwalacza Frame.io:
+
+- **Event Type** → zmapuj na Frame.io Event Type
+- **Resource ID** → zmapuj na Frame.io Resource
+- **Workspace ID** → zmapuj na Frame.io Workspace ID
+- **User ID** → zmapuj na Frame.io User ID
+
+</Step>
+
+<Step title="Przetestuj i aktywuj">
+
+Kliknij **Run once**, aby przetestować scenariusz, a następnie utwórz nowy projekt w wybranym Workspace Frame.io. Jeśli wszystko zostało poprawnie skonfigurowane, w arkuszu powinien pojawić się nowy wiersz.
+
+![Arkusz](/images/platform/docs/guides/make/frame_sheet_example.gif)
+
+Gdy wszystko będzie gotowe do uruchomienia produkcyjnego, przestaw przełącznik na **Active**, a scenariusz będzie działał automatycznie.
+
+</Step>
+
+</Steps>
+
+Właśnie zbudowano Twoją pierwszą automatyzację. Teraz możesz dodać kolejne kroki do tego scenariusza lub tworzyć nowe, korzystając z innych modułów Frame.io dostępnych w serwisie [Make.com](https://www.make.com/en/integrations/frame-io#:~:text=All-,Modules,-(26))
+
+Jeśli napotkasz problemy, masz pytania lub chcesz pochwalić się tym, co udało Ci się zbudować, odwiedź [Forum społeczności](https://forum.frame.io/).
+
+---

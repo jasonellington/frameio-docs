@@ -1,0 +1,480 @@
+---
+title: "媒体链接"
+---
+
+Frame.io 会存储并处理上传到您项目中的文件 — 图片、视频、PDF 等。当您通过 API 获取文件时，基本响应中包含核心元数据，例如文件名、状态，以及用于在 Frame.io 应用中打开该文件的 `view_url`。要访问实际的文件内容 — 原始文件、预览或不同质量的再现版本（rendition） — 您需要使用 **includes**。
+
+本指南介绍 **List Files** 和 **Get File** 端点上可用的媒体链接 includes、每个 include 返回的内容，以及各自的使用时机。
+
+## 什么是 includes？ {#what-are-includes}
+
+Includes 是您可以随文件响应一起请求的可选字段。默认情况下，API 仅返回核心文件元数据 — 名称、状态、类型、时间戳和 `view_url`。Includes 允许您按需选择获取额外数据，从而在不需要全部内容时保持响应精简。
+
+### 如何添加 includes {#how-to-add-includes}
+
+在任何 **Get File** 或 **List Files** 请求中，将以逗号分隔的 include 名称列表作为 `include` 查询参数传入：
+
+```bash title="Single include"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+```bash title="Multiple includes"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```bash title="Includes on List Files"
+GET /v4/accounts/{account_id}/folders/{folder_id}/files?include=media_links.thumbnail
+```
+
+Includes 在单文件端点和列表端点上的工作方式相同。在 List Files 上使用时，会为响应中的每个文件解析 includes。
+
+### SDK 示例 {#sdk-examples}
+
+<CodeGroup>
+
+```python title="Python SDK"
+import frameio
+
+client = frameio.Frameio(auth="<YOUR_TOKEN>")
+
+file = client.files.get(
+    file_id="93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    include=["media_links.thumbnail", "media_links.original"]
+)
+
+print(file.media_links.thumbnail.url)
+```
+
+```typescript title="TypeScript SDK"
+import Frameio from "frameio";
+
+const client = new Frameio({ auth: "<YOUR_TOKEN>" });
+
+const file = await client.files.get("93e4079d-0a8a-4bf3-96cd-e6a03c465e5e", {
+  include: ["media_links.thumbnail", "media_links.original"],
+});
+
+console.log(file.media_links?.thumbnail?.url);
+```
+
+</CodeGroup>
+
+未请求的 includes 会被完全从响应中省略。
+
+## 媒体链接 includes 概览 {#media-link-includes-overview}
+
+<CardGroup cols={2}>
+
+<Card title="media_links.original" icon="file-arrow-down" iconType="solid">
+
+原始上传的文件，与上传时完全一致
+
+</Card>
+
+<Card title="media_links.thumbnail" icon="image" iconType="solid">
+
+用于展示的 PNG 预览图
+
+</Card>
+
+<Card title="media_links.high_quality" icon="star" iconType="solid">
+
+可用的最佳处理后再现版本
+
+</Card>
+
+<Card title="media_links.efficient" icon="bolt" iconType="solid">
+
+适用于低带宽场景的最小可用再现版本
+
+</Card>
+
+<Card title="media_links.video_h264_180" icon="film" iconType="solid">
+
+用于流式传输和播放的低分辨率 180p H264 视频转码
+
+</Card>
+
+<Card title="media_links.scrub_sheet" icon="table-cells" iconType="solid">
+
+由视频帧缩略图组成的 WebP 精灵图，用于构建拖动预览（scrubbing）界面
+
+</Card>
+
+</CardGroup>
+
+## media_links.original {#media_links-original}
+
+返回指向**与上传时完全一致的原始文件**的签名 URL — 不做任何处理，也不做任何转换。
+
+### 字段 {#fields}
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `download_url` | string \| null | 强制下载文件的签名 URL（`Content-Disposition: attachment`） |
+| `inline_url` | string \| null | 直接在浏览器中打开文件的签名 URL（`Content-Disposition: inline; filename=<name>`） |
+
+### 使用时机 {#when-to-use}
+
+当您需要源文件时，请使用 `media_links.original` — 例如，让用户下载原始的 MOV、MP4、MXF、AVI、PSD、PNG 或 TIFF 文件，或将原始字节传递给其他系统。
+
+### 请求示例 {#example-request}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.original
+```
+
+### 响应示例 {#example-response}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+<Warning>
+
+这些 URL 是**临时的 S3 签名 URL** — 它们会过期。请不要缓存或存储它们；每次需要时都请求一个新的 URL。
+
+</Warning>
+
+## media_links.thumbnail {#media_links-thumbnail}
+
+返回资产的 **PNG 预览图**，高度上限为 540px。这是一个经过处理的再现版本 — 而非原始文件 — 并且根据您的账户设置，可能会添加水印。
+
+### 字段 {#fields-1}
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `download_url` | string \| null | 强制下载 PNG 缩略图的签名 URL |
+| `url` | string \| null | 以内联方式提供 PNG 缩略图的签名 URL，不带 `Content-Disposition` 请求头 |
+
+### 使用时机 {#when-to-use-1}
+
+当您需要**展示资产的可视化预览**时，请使用 `media_links.thumbnail` — 例如在网格视图、图库或文件选择器中。它的加载速度比原始文件更快，并且始终为适合网页使用的 PNG 格式。
+
+### 请求示例 {#example-request-1}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+### 响应示例 {#example-response-1}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.high_quality {#media_links-high_quality}
+
+返回资产**可用的最佳处理后再现版本**的下载 URL。Frame.io 会按照分辨率阶梯处理上传的文件，最高可达 2160p。API 返回**请求时**可用的最高再现版本 — 因此，如果您发出请求时只有 540p 再现版本处理完成，API 将返回 540p，直到更高的再现版本就绪。
+
+### 字段 {#fields-2}
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `download_url` | string \| null | 请求时可用的最高质量再现版本的签名 URL |
+
+### 使用时机 {#when-to-use-2}
+
+当您需要**最佳质量的版本但不需要原始文件**时，请使用 `media_links.high_quality` — 例如，导出高分辨率再现版本以供下游处理，或展示全分辨率预览。如果您需要尽可能高的质量，请检查文件的 `status` 字段，并在文件状态为 `ready` 时再请求此 include，以确保完整的分辨率阶梯已处理完毕。
+
+### 请求示例 {#example-request-2}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.high_quality
+```
+
+### 响应示例 {#example-response-2}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "high_quality": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.efficient {#media_links-efficient}
+
+返回**最小可用处理后再现版本**的下载 URL。这与 `high_quality` 相反 — Frame.io 会选择可用的最低分辨率再现版本。
+
+### 字段 {#fields-3}
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `download_url` | string \| null | 最小/最高效再现版本的签名 URL |
+
+### 使用时机 {#when-to-use-3}
+
+当**带宽或文件大小比质量更重要**时，请使用 `media_links.efficient` — 例如，在低带宽环境中生成快速预览，或为不需要全分辨率的缩略图处理流程提供数据。
+
+### 请求示例 {#example-request-3}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.efficient
+```
+
+### 响应示例 {#example-response-3}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "efficient": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.video_h264_180 {#media_links-video_h264_180}
+
+返回资产的**低分辨率 180p H264 视频转码**的流式传输和下载 URL。
+
+<Warning>
+
+这是一个旧版 include。如果没有为该资产生成 180p 转码，它将为 `null`。在大多数使用场景下，请优先使用 `media_links.efficient`，它会选择可用的最佳低质量再现版本，而不依赖于某个特定转码是否存在。
+
+</Warning>
+
+### 字段 {#fields-4}
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `download_url` | string \| null | 下载 180p H264 视频的签名 URL |
+| `url` | string \| null | 流式传输 180p H264 视频的签名 URL |
+
+### 使用时机 {#when-to-use-4}
+
+当您特别需要确保获得 180p H264 转码时，请使用 `media_links.video_h264_180` — 例如，与需要这种特定格式的旧版播放器或处理流程集成。如果某个资产不存在该转码，两个 URL 都将为 `null`。
+
+<Warning>
+
+video_h264_180 文件中不包含音频。它旨在需要时用于非常高效的预览。
+
+</Warning>
+
+### 请求示例 {#example-request-4}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.video_h264_180
+```
+
+### 响应示例 {#example-response-4}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "video_h264_180": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.scrub_sheet {#media_links-scrub_sheet}
+
+返回一张 **WebP 精灵图** — 这是一张包含视频帧缩略图网格的单一图片，缩略图在整个视频时长内均匀采样。它用于构建视频拖动预览界面，即当用户在时间轴上拖动时，播放器会显示预览帧。
+
+<Info>
+
+拖动预览图（scrub sheet）**仅为视频资产**生成。对于图片、PDF 和其他非视频文件，该 include 将返回 `null` URL。
+
+</Info>
+
+### 字段 {#fields-5}
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `download_url` | string \| null | 下载 WebP 精灵图的签名 URL |
+| `url` | string \| null | 以内联方式加载 WebP 精灵图的签名 URL |
+| `metadata` | object \| null | 用于提取单个帧的图块布局信息（仅限实验性 API） |
+
+**`metadata` 字段：**
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `tile_x` | integer | 网格中缩略图的列数 |
+| `tile_y` | integer | 网格中缩略图的行数 |
+| `thumb_width` | integer | 每个缩略图的宽度（像素） |
+| `thumb_height` | integer | 每个缩略图的高度（像素） |
+| `padding` | integer | 缩略图之间的间距（像素） |
+| `frames` | integer | 精灵图中采样的总帧数 |
+
+### 使用时机 {#when-to-use-5}
+
+当您构建的自定义视频播放器或时间轴界面需要在用户拖动时显示预览缩略图时，请使用 `media_links.scrub_sheet`。精灵图将所有预览帧打包到一次图片下载中，而无需为每一帧单独发出请求。
+
+### 请求示例 {#example-request-5}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.scrub_sheet
+```
+
+### 响应示例 {#example-response-5}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "scrub_sheet": {
+        "download_url": "https://assets.frame.io/...",
+        "url": "https://assets.frame.io/...",
+        "metadata": {
+          "tile_x": 10,
+          "tile_y": 10,
+          "thumb_width": 160,
+          "thumb_height": 90,
+          "padding": 1,
+          "frames": 100
+        }
+      }
+    }
+  }
+}
+```
+
+### 从精灵图中提取帧 {#extracting-a-frame-from-the-sprite-sheet}
+
+精灵图是一个由 `tile_x` 列 × `tile_y` 行组成的网格。要显示给定帧索引（从零开始）的缩略图，请计算其在图片中的位置：
+
+```javascript
+function getFrameOffset(frameIndex, metadata) {
+  const { tile_x, thumb_width, thumb_height, padding } = metadata;
+
+  const col = frameIndex % tile_x;
+  const row = Math.floor(frameIndex / tile_x);
+
+  return {
+    x: col * (thumb_width + padding),
+    y: row * (thumb_height + padding),
+    width: thumb_width,
+    height: thumb_height,
+  };
+}
+```
+
+然后，您可以使用 CSS `background-position` 显示精灵图中正确的图块：
+
+```javascript
+function applyFrameToElement(el, frameIndex, scrubSheet) {
+  const { x, y, width, height } = getFrameOffset(frameIndex, scrubSheet.metadata);
+
+  el.style.backgroundImage = `url(${scrubSheet.url})`;
+  el.style.backgroundPosition = `-${x}px -${y}px`;
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+}
+```
+
+要将播放位置（以秒为单位）映射到帧索引，请使用视频总时长和精灵图中的帧数：
+
+```javascript
+function positionToFrameIndex(currentSeconds, durationSeconds, metadata) {
+  const progress = currentSeconds / durationSeconds;
+  return Math.min(
+    Math.floor(progress * metadata.frames),
+    metadata.frames - 1
+  );
+}
+```
+
+<Info>
+
+`metadata` 字段仅在实验性 API 版本中可用。在稳定版 v4 API 中，`scrub_sheet` 仅返回 `download_url` 和 `url`。
+
+</Info>
+
+## 组合多个 includes {#combining-multiple-includes}
+
+您可以在单次 API 调用中请求多个 includes：
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      },
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## 选择合适的 include {#choosing-the-right-include}
+
+| 目标 | 应使用的 include |
+| --- | --- |
+| 在您的界面中显示预览图 | `media_links.thumbnail` |
+| 让用户下载原始文件 | `media_links.original` |
+| 直接在浏览器中打开原始文件 | `media_links.original` → `inline_url` |
+| 获取用于导出的最佳质量再现版本 | `media_links.high_quality` |
+| 获取适用于低带宽场景的小型再现版本 | `media_links.efficient` |
+| 流式传输或下载低分辨率视频（旧版） | `media_links.video_h264_180` |
+| 构建带帧预览的视频拖动预览界面 | `media_links.scrub_sheet` |
+| 将用户引导至 Frame.io 中的文件 | 使用基本文件响应中的 `view_url` |
+
+<Info>
+
+`view_url` — 每个文件响应中都提供，无需 include — 是指向 Frame.io Web 应用的永久深层链接。它**不是**媒体 URL；它会打开 Frame.io 界面，并且不会过期。当您希望引导用户直接在 Frame.io 中审阅或评论资产时使用它，而不是在需要以编程方式提供或下载文件时使用。
+
+</Info>
+
+## Include 可用性 {#include-availability}
+
+只有在 Frame.io 处理完上传的文件后，媒体链接 includes 才会被填充。如果您在上传后立即请求 include，在转码进行期间 URL 可能为 `null`。请检查文件对象上的 `status` 字段 — 一旦状态变为 `ready`，includes 即可使用。

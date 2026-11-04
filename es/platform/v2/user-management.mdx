@@ -1,0 +1,203 @@
+---
+title: "Administración de usuarios"
+---
+
+## Descripción general {#overview}
+
+Este tutorial trata la administración básica de Users mediante la API de Frame.io. Se da por hecho que el lector ya ha configurado la [autenticación](/es/platform/v2/authentication) mediante OAuth2.0 o con un token de desarrollador.
+
+### Conceptos principales {#core-concepts}
+
+Dejando de lado los matices específicos de los distintos roles y permisos de Team Member, hay dos claves importantes que debes entender al administrar Users mediante la API de Frame.io:
+
+1. **Los Team Members pertenecen a Teams** y tienen acceso a todos los Projects no privados de esos Teams. Los Team Managers y los Admins son extensiones del rol de Team Member.
+2. **Los Project Collaborators pertenecen a Projects individuales**. Según cómo estén configurados esos Projects, pueden o no crear Presentations, descargar Assets o invitar a otros Collaborators.
+
+Para obtener más información, consulta nuestra documentación de soporte sobre [Team Members frente a Collaborators](https://support.frame.io/getting-started/sharing-with-your-team-or-clients/difference-between-team-members-vs-collaborators) y [roles de administración de cuentas](https://support.frame.io/enterprise-accounts/enterprise-account-management-roles).
+
+### Cómo se unen los Users a las Accounts {#how-users-join-accounts}
+
+En general, los Users actuales invitan a los nuevos Users, ya sea directamente o mediante una URL única para unirse a un Project. Los Team Members también pueden:
+
+1. Agregarse a Projects no privados dentro de Teams públicos de su Account
+2. Agregarse a Teams públicos de su Account
+3. Solicitar unirse a Teams privados de su Account
+
+En todos los casos, las actividades de incorporación pasan por una serie de pasos lógicos que incluyen comprobar si existe una pertenencia previa, crear registros “pendientes” y enviar correos electrónicos de invitación o de solicitud de incorporación cuando corresponda.
+
+La buena noticia es que toda esa lógica queda abstraída por la API de Frame.io. Si quieres agregar a alguien a un Project, usa las rutas de Collaborator; si quieres invitar a alguien a un Team, usa las rutas de Team Member.
+
+### Scopes requeridos {#required-scopes}
+
+| Scope | Motivo |
+| --- | --- |
+| **Teams:** Update | Agregar y quitar Team Members. |
+| **Projects:** Update | Agregar y quitar Project Collaborators. |
+
+## Administrar Team Members {#managing-team-members}
+
+### Agregar Team Members {#adding-team-members}
+
+Para agregar un nuevo Team Member a un Team, necesitarás:
+
+1. El `id` del Team de destino
+2. La dirección de correo electrónico del User de destino.
+
+A partir de ahí, simplemente haz un `POST` autorizado a `https://api.frame.io/v2/teams/:id/members` con el correo electrónico del User de destino en el payload del cuerpo, así:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**Si el User que has invitado ya es Team Member en tu organización**, la respuesta de la API lo indicará:
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>"
+}
+```
+
+**Si el User que has invitado aún no está en tu organización**, tu solicitud iniciará un flujo de invitación y la respuesta de la API se parecerá más a esta:
+
+```json
+{
+    "_type": "pending_team_member",
+    "email": "user@example.com",
+    "id": "<oending-team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>
+}
+```
+
+**Nota**: como el User aún no se ha creado ni reconocido, no habrá un `user_id` asignable en la respuesta `pending_team_member`.
+
+### Quitar Team Members {#removing-team-members}
+
+Para quitar a un Team Member de un Team, necesitarás:
+
+1. El `id` del Team de destino
+2. La dirección de correo electrónico del User de destino.
+
+A partir de aquí, harás una llamada `DELETE` a la misma URL que usarías para agregar un Team Member y le pasarás una cadena de consulta especial:
+
+`DELETE` [`https://api.frame.io/v2/teams/:id/members/_?email=user@example.com`](/es/platform/v2/api-reference/teams/add-team-member)
+
+<Info>
+
+**¿Qué es el patrón 'include'?**
+
+**Observa** la construcción `/_?email=`: se trata de un patrón especial de la API de Frame.io llamado ‘include’ que te permite solicitar datos adicionales en tu solicitud a la API (en este caso, la dirección de correo electrónico del usuario)).
+
+</Info>
+
+Si la llamada es correcta, la API devolverá un payload similar al de la adición de un Team Member. Si el Team Member se elimina por primera vez, verás un atributo `updated_at` que coincide con la hora de tu llamada. Si el Team Member ya se había eliminado anteriormente, esa marca de tiempo no se actualizará (es decir, reflejará la hora en que se quitó inicialmente al Team Member).
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>",
+    "updated_at": "<timestamp>"
+}
+```
+
+Los intentos de quitar Team Members que no existen o que nunca estuvieron asociados al Team darán como resultado errores 404.
+
+## Administrar Project Collaborators {#managing-project-collaborators}
+
+### Agregar Project Collaborators {#adding-project-collaborators}
+
+La administración de Collaborators es extremadamente similar a la de Team Members. Para agregar un nuevo Collaborator a un team, necesitarás:
+
+1. El `id` del Project de destino
+2. La dirección de correo electrónico del User de destino.
+
+A partir de ahí, haz un `POST` autorizado a [`https://api.frame.io/v2/projects/:id/collaborators`](/es/platform/v2/api-reference/projects/add-collaborator-to-project), con el correo electrónico del User de destino en el payload del cuerpo:
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**Si se reconoce al User que has invitado** y el rol de Collaborator se puede crear al instante, la respuesta de la API lo indicará y devolverá un objeto User completo:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+<Info>
+
+**Membresía del Team**
+
+Si el User ya es Team Member en tu organización, pero no es miembro del Project de destino, puedes seguir usando la ruta de Collaborator y la API responderá como se muestra arriba. En segundo plano, el Team Member se agregará a tu Project de destino y seguirá siendo Team Member. En otras palabras, no puedes “degradar” accidentalmente a Team Members con esta ruta.
+
+</Info>
+
+**Si el User que has invitado es nuevo en tu organización**, tu solicitud iniciará un flujo de invitación y la API responderá con un registro `pending_collaborator`, así:
+
+```json
+{
+    "_type": "pending_collaborator",
+    "email": "user@example.com",
+    "id": "<pending-collaborator-record-id>",
+    "project_id": "<project-id>"
+}
+```
+
+### Quitar Project Collaborators {#removing-project-collaborators}
+
+**Nota:** este proceso es fundamentalmente idéntico a la forma en que se gestionan los Team Members (ver arriba).
+
+Para quitar a un Collaborator de un Project, necesitarás:
+
+1. El `id` del Project de destino.
+2. La dirección de correo electrónico del User de destino.
+
+A partir de aquí, harás una llamada `DELETE` a la misma URL que usarías para agregar un Collaborator y le pasarás una cadena de consulta especial.
+
+`DELETE` [`https://api.frame.io/v2/projects/:id/collaborators/_?email=user@example.com`](/es/platform/v2/api-reference/teams/add-team-member)
+
+Si la llamada es correcta, la API devolverá un payload similar al de la adición de un Project Collaborator:
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+Los intentos de quitar Collaborators que no existen o que nunca estuvieron asociados al Project darán como resultado errores 404.
+
+<Warning>
+
+**Advertencia: la eliminación de Collaborators no es idempotente**
+
+A diferencia de la eliminación de Team Members, los intentos de quitar Collaborators que ya se han eliminado darán como resultado errores 404
+
+</Warning>

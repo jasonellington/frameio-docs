@@ -1,0 +1,73 @@
+---
+title: "使用 ngrok"
+---
+
+Ngrok 是一款易于使用的工具，可以在你的本地机器上创建一条安全隧道，同时提供一个公共 URL，供你测试本地项目，或将你的工作分享给客户或团队成员进行审阅。你可以设置 HTTP 或 HTTPS，而且由于这款工具非常流行，一旦出现问题，网上有大量文章介绍各种解决方法。本文介绍几种安装 ngrok 的简便方法，以及当你的 Web 应用无法与 ngrok 通信时该怎么办。
+
+<Info>
+
+**ngrok**
+
+我们在 ngrok 的朋友撰写了一篇很棒的文章，专门介绍如何通过 ngrok 支持 Frame.io webhooks。请 [在此处](https://ngrok.com/docs/integrations/frameio/webhooks) 查看。
+
+</Info>
+
+## 安装 ngrok {#install-ngrok}
+
+你可以通过几种不同的方式使用 ngrok
+
+### 通过 ngrok 安装程序安装 {#install-via-the-ngrok-installer}
+
+1. 访问 ngrok 网站并按照其中的说明操作：[https://ngrok.com/download](https://ngrok.com/download)
+2. 如果你需要连接账户后提供的功能，则应按照这些说明获取账户和令牌。
+
+你不一定要注册账户或添加令牌，但一定要查看下载页面，看看这些是否是你想要或需要的。
+
+<Info>
+
+**注意：**
+
+如果你使用此方法，除非你让 ngrok 在整个系统范围内可用，否则它只能从你存放它的位置运行。
+
+</Info>
+
+### 使用 Homebrew 安装 {#install-with-homebrew}
+
+这是我最喜欢的 ngrok 安装方式。如果你已经安装了 Homebrew，只需输入 `homebrew cask install ngrok`。ngrok 会自动为你安装好，并且你可以在任何位置使用它！最棒的是，你无需在终端中每条命令的开头输入 `./ngrok`，只需输入 `ngrok` 即可。你可以 [在此处](https://gist.github.com/wosephjeber/aa174fb851dfe87e644e) 进一步了解此选项。
+
+## 使用 ngrok {#use-ngrok}
+
+设置好 ngrok 后，选择一个端口（例如 `3000`），然后在终端命令行中使用命令 ngrok http `3000` 运行它。你不一定要使用端口 `3000`，但这是设置时常用的端口。
+
+如果你将 ngrok 设置为从特定文件夹运行，则必须位于存放 ngrok 的文件夹中，并使用命令 `./ngrok http 3000`。
+
+启动你的项目服务器，使其监听同一端口，这样你就可以使用 ngrok 提供的公共地址访问你的工作了。
+
+### 排查 ngrok 与 Web 应用的问题：末尾斜杠 {#troubleshooting-ngrok-with-your-web-app-trailing-slash}
+
+使用 ngrok 时你可能会遇到一个问题：为 Web 应用设置 ngrok URL 后，无法连接到你的服务器。这个问题令人沮丧的地方在于，ngrok 不会记录你向它发送了任何内容。你可以打开 localhost:4040 查看情况，但它什么也不会显示。（localhost:4040 由 ngrok 提供，用于监控发往你服务器的所有传入请求。）Ngrok 似乎将地址匹配为 /(.*) 而不是 (/.*)，因此如果你没有在地址末尾加上斜杠，并且在 ngrok 监控工具中看不到任何内容，那是因为 ngrok 无法为你列出的地址找到匹配项。
+
+下面是添加末尾斜杠的示例：`http://something.ngrok.io/`
+
+你也可以将示例应用编写为解析到包含斜杠的端点。只需记住，为了让 Frame.io 应用能够访问你的服务器，如果你的示例应用使用 `/actions` 端点，你需要在 ngrok 地址末尾加上 /actions 端点。例如，如果 ngrok 地址是 `http://something.ngrok.io`，你需要在 Custom Action 设置中将其填写为 `http://something.ngrok.io/actions`。对于其他 Web 应用，情况可能有所不同，因此如果无法立即正常运行，请尝试调整 ngrok 地址的末尾部分。
+
+### 我可以使用 ngrok 以外的工具吗？试试 Glitch！ {#can-i-use-something-besides-ngrok-try-glitch}
+
+Glitch 是 ngrok 的一个很酷的替代方案，而且设置起来更快。Glitch 允许你创建账户，然后使用其服务器构建自己的应用，并获得一个可公开访问的 URL。你可以与他人协作，将代码设为公开或私有，并从多种语言和平台中进行选择。请访问 [https://glitch.com/create](https://glitch.com/create) 查看可用选项。
+
+在 Glitch 上设置项目时，对于某些 Web 应用，同样存在末尾斜杠问题。就 Frame.io 而言，当你在 [developer.frame.io](/cn/platform/v2) 中设置 Custom Action 时，需要在 Glitch 提供的 URL 末尾加上斜杠。你无需添加任何其他内容，即使是 /actions 端点也不需要。
+
+### 有没有已经设置好、可以立即试用的内容？ {#is-there-something-set-up-i-could-try-now}
+
+有。如果你不想使用 ngrok 或创建自己的 Glitch 项目，我们已经设置了一个示例应用供你试用：[https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me)。在 \[/) 的 Custom Actions 区域添加此地址时，请记得加上末尾斜杠。
+
+### 资源 {#resources}
+
+本节列出了文中提到的所有资源：
+
+- **ngrok** [https://ngrok.com/](https://ngrok.com/)
+- **Glitch** [https://glitch.com/](https://glitch.com/)
+- **Glitch 中可用的平台** [https://glitch.com/create](https://glitch.com/create)
+- **JavaScript 版 Custom Action 的 Glitch 示例应用** [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me)
+- **Frame.io 开发者注册与设置** [Frame.io 开发者网站](/cn/platform/v2)
+- **Frame.io Web 应用** [https://app.frame.io/](https://app.frame.io/)

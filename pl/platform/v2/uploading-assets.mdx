@@ -1,0 +1,178 @@
+---
+title: "Przesyłanie zasobów"
+---
+
+# Przegląd {#overview}
+
+Ten samouczek opisuje, jak przesyłać zasoby do Frame.io. Frame.io obsługuje wszystkie typy plików — nie tylko wideo, ale także scenariusze, zdjęcia, mapy i pliki referencyjne. Mówiąc bardziej technicznie, zasób (asset) w Frame.io to rozbudowana reprezentacja pliku w S3 i jego kontekstu w Frame.io, obejmująca transkodowane wersje, kontekst użytkownika/zespołu/projektu oraz metadane. Więcej informacji o zasobach znajdziesz w definicji zasobu.​
+
+## Podstawowe hierarchie {#core-hierarchies}
+
+Warto również wiedzieć, jak Frame.io strukturyzuje swoje podstawowe modele.
+
+**Konta** (Accounts), do których należą **użytkownicy** (Users), mają wiele **projektów** (Projects), a każdy z nich zawiera **zasoby** (Assets). **Zespoły** (Teams) są dostępne wyłącznie dla kont Enterprise i zapewniają dodatkowy poziom logicznego podziału. Zasoby nie „wiedzą”, do którego zespołu należą — tylko do którego projektu i konta — ale projekty należą ściśle do zespołów, a nie do kont, co sprawia, że zespoły są integralną częścią procesu przesyłania zasobów.
+
+## Wymagania wstępne {#prerequisites}
+
+Do tego samouczka potrzebujesz:
+
+- Konta Frame.io z tokenem deweloperskim (tokeny zostały wyjaśnione poniżej)
+- [Frame.io Python SDK](https://github.com/Frameio/python-frameio-client)
+
+## Przesyłanie zasobu {#upload-an-asset}
+
+Ta sekcja przeprowadzi Cię przez kolejne kroki przesyłania zasobu.
+
+1. Utwórz token deweloperski na stronie [developer.frame.io](/pl/platform/v2) z następującymi zakresami:
+
+| Zakres | Powód |
+| --- | --- |
+| **Accounts:** Read | Pobranie listy kont dla użytkownika wysyłającego żądanie. |
+| **Teams:** Read | Pobranie dostępnych zespołów dla wybranego konta. |
+| **Projects:** Read | Pobranie dostępnych projektów dla wybranego zespołu. |
+| **Assets:** Create, Read | Utworzenie nowego rekordu zasobu i pobranie dostępnych zasobów w celu poruszania się po strukturze folderów w projekcie. |
+
+<Info>
+
+**Potrzebujesz pomocy przy tworzeniu tokenu API?**
+
+Zapoznaj się z instrukcjami [**tutaj**](/pl/platform/v2/authentication).
+
+</Info>
+
+2. Znajdź miejsce docelowe dla zasobu. Zasoby muszą znajdować się co najmniej w obrębie **projektu**. Musisz pobrać identyfikator zasobu głównego (`root_asset_id`) projektu lub identyfikator zasobu folderu, aby wskazać miejsce w hierarchii plików, do którego chcesz przesłać plik.
+
+<Warning>
+
+**UWAGA:**
+
+Nie można przesyłać pliku, podając wyłącznie identyfikator projektu.  Aby przesłać plik do katalogu głównego projektu, podaj w żądaniu `root_asset_id`.
+
+</Warning>
+
+Ogólnie musisz pobrać (w podanej kolejności):
+
+- identyfikator(y) konta i wybrać konto
+- identyfikator(y) zespołu i wybrać zespół
+- projekty powiązane z zespołem
+- identyfikator projektu, z którym chcesz pracować
+- identyfikator zasobu głównego lub identyfikator folderu
+
+Możesz przesyłać pliki bezpośrednio do katalogu głównego projektu, używając `root_asset_id`.
+
+### Listowanie zasobów {#list-assets}
+
+Aby wybrać miejsce, do którego chcesz przesłać nowy zasób, możesz za pomocą API wylistować wszystkie zasoby w projekcie lub w folderze w projekcie. Jeśli zasób jest *folderem*, zawiera zasoby podrzędne, którymi również mogą być pliki i foldery. Listując informacje o zasobach, możesz użyć dowolnego identyfikatora zasobu, ale jeśli chcesz przejrzeć wszystko, co jest powiązane z projektem, użyj `root_asset_id`.
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+Z zwróconej listy zasobów możesz użyć identyfikatora dowolnego zasobu będącego folderem lub identyfikatora zasobu głównego. Tego identyfikatora użyjesz do wskazania miejsca, do którego chcesz przesłać nowy zasób.
+
+### Przesyłanie zasobu {#upload-asset}
+
+W tym przykładzie prześlemy nowy plik. Żądanie wysyłasz z następującymi informacjami:
+
+| Parametr | Opis |
+| --- | --- |
+| `filesize` | Podaj rozmiar pliku, który chcesz przesłać |
+| `filetype` | Wybierz typ przesyłanego pliku. Dostępne opcje to m.in. wideo i obraz. Przykłady: `video/mp4`, `image/png`. |
+| `name` | Podaj ciąg znaków reprezentujący nazwę pliku, bez spacji. |
+| `type` | Określa, czy używasz typu `file` czy `folder`. Stos wersji (version stack) powstaje, gdy układasz kilka plików jeden na drugim. |
+
+Jeśli chcesz utworzyć nowy folder, nie musisz dołączać do żądania `filesize` ani `filetype`.
+
+W przypadku żądania `cURL` możesz szybko przesłać zasób do Frame.io, dołączając link do pliku za pomocą parametru `"source": {  "url":"URL_FOR_VIDEO" }`. Link musi być publicznie dostępny. W przeciwnym razie możesz użyć Python SDK, które samo zajmie się podziałem pliku na fragmenty dla każdego linku do przesyłania.
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Adresy URL zasobów wygasają**
+
+Adresy URL zwracane przez wywołanie API tworzące zasób są wstępnie podpisane w celu autoryzacji przesyłania, ale wygasają po 24 godzinach.
+
+</Info>
+
+# Zbuduj własny mechanizm przesyłania plików {#build-your-own-file-uploader}
+
+Jeśli chcesz zbudować własny mechanizm przesyłania, dla najlepszej wydajności zalecamy przesyłanie fragmentów równolegle. Każdy fragment należy przesłać za pomocą `PUT` bezpośrednio na adresy URL Amazon S3 podane w odpowiedzi z API Frame.io.
+
+Fragmenty pliku muszą odpowiadać kolejności podanych `upload_urls`, ponieważ *to one określają sekwencję końcowego, połączonego i transkodowanego zasobu.* Oznacza to, że pierwszy URL przyjmuje pierwszy fragment, drugi URL — drugi fragment i tak dalej.
+
+#### Przykład w pseudokodzie {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+Nagłówki każdego żądania do S3 powinny zawierać `filetype` nowego zasobu dokładnie w takiej postaci, w jakiej został zwrócony w początkowym wywołaniu API Frame.io, a także dodatkowy nagłówek prywatności:
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+Przykład tego, jak wszystko to jest obsługiwane w naszym Python SDK, znajdziesz [tutaj](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py).
+
+<Info>
+
+**Błędy AWS są sformatowane w XML**
+
+Pamiętaj, że wszelkie błędy, które otrzymasz na tym etapie, pochodzą bezpośrednio z AWS, a więc są sformatowane w XML, a nie zgodnie ze standardową obsługą błędów Frame.io w formacie JSON. W przypadku użycia produkcyjnego zalecamy zbudowanie logiki ponawiania wokół tych przesyłań, ponieważ niekompletnie przesłane pliki (tj. pliki z brakującymi fragmentami) nie zostaną poprawnie transkodowane ani wyświetlone w Frame.io
+
+</Info>
+
+To wszystko! Po wykonaniu wywołań `PUT` na adresy `upload_url` w Frame.io pojawi się nowy zasób.

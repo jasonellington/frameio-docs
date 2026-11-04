@@ -1,0 +1,599 @@
+---
+title: "操作指南：上传（高级）"
+sidebarTitle: "上传（高级）"
+---
+
+## 简介 {#introduction}
+
+可靠的资产上传是每个 C2C 集成的核心功能。本指南介绍了一些高级技术和最佳实践，帮助您构建一个稳健、有弹性且高效的上传系统，即使在严苛的环境中也能表现良好。
+
+## 前提条件 {#prerequisites}
+
+如果您尚未阅读，请在继续之前先查看 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要使用在[认证与授权流程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)中获得的 `access_token`。
+
+我们将继续使用[基础上传指南](/cn/camera-to-cloud/how-to-basic-upload)中的[同一个测试资产](https://f.io/Rq1q5CzB)。
+
+## 高级资产参数 {#advanced-asset-parameters}
+
+在 Frame.io 中创建资产时，您可以使用多个高级参数来自定义上传行为。其中，`offset` 参数对于正确集成尤为重要。
+
+### Offset - 处理已暂停的设备 {#offset---handling-paused-devices}
+
+提供准确的 `offset` 值至关重要。该参数指定一段媒体的创建时间，确保您的设备不会上传不应共享的内容。当设备在 Frame.io 中被暂停时，表示用户不希望上传在暂停期间创建的媒体。有关更多详情，请参阅我们的[暂停功能指南](/cn/camera-to-cloud/how-to-heartbeats-connection-info-and-status#managing-the-paused-status)。
+
+### offset 参数的其他优势 {#additional-benefits-of-the-offset-parameter}
+
+`offset` 参数在 Frame.io 中组织媒体方面还具有另一项重要优势。当上传较早日期拍摄的内容时（例如，用户在回放时选择了上周拍摄的一张照片），`offset` 参数可确保该媒体显示在与其原始拍摄日期相对应的文件夹中，而不是当前上传日期的文件夹中。
+
+这种按时间顺序的组织方式可以在 Frame.io 项目结构中保持合理的时间线。如果不使用 `offset` 参数，历史媒体会被错误地与当天的内容归为一组，可能会给剪辑师和其他协作者造成困惑。
+
+您可以考虑在界面中让用户自行选择。如果用户希望无论媒体何时拍摄，都按当前日期组织所有上传内容，您只需省略 `offset` 参数即可，因为未指定时其默认值为 `0`。
+
+我们的 API 设计使您的设备无需跟踪暂停状态。相反，在上传文件时，您只需指明该文件是在多少秒之前创建的。我们的服务器会将其与暂停时间窗口进行比较，如果文件是在暂停期间创建的，则拒绝上传。
+
+要演示此功能，请在 C2C Connections 选项卡中通过三点菜单暂停您的设备。
+
+现在尝试上传一个资产：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 0
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/assets` 的文档可[在此处找到](/cn/camera-to-cloud/api-reference/device-asset-create)。
+
+</Info>
+
+您将收到以下错误：
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+如果您取消暂停设备并使用相同的请求重试，资产将被创建。
+
+但是，如果资产是在暂停时间窗口内创建的，您需要设置 `offset` 以反映其实际创建时间：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 60
+        }
+__JSON__
+} | python -m json.tool
+```
+
+这会告诉 Frame.io 该资产是在 60 秒前（暂停期间）创建的，从而正确触发 `Channel Paused` 错误。
+
+*准确的 `offset` 值至关重要*，可防止违背用户意愿上传敏感内容，包括受保护的知识产权、敏感素材或其他受限材料。
+
+<Danger>
+
+**Offset 与重试**
+
+重试失败的资产创建调用时，请记得更新 `offset` 值。在较长的重试期间，固定不变的 offset 可能会偏离相关的暂停时间窗口，从而可能导致本应被阻止的上传得以进行。
+
+</Danger>
+
+### 上传到指定通道 {#uploading-to-a-specific-channel}
+
+如果您的设备有多个通道，您可以指定要使用的通道：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": -10,
+            "channel": 2
+        }
+__JSON__
+} | python -m json.tool
+```
+
+如果未指定，默认通道为 `0`。大多数集成无需更改此值。
+
+### 请求自定义分块数量 {#requesting-a-custom-chunk-count}
+
+默认情况下，Frame.io 后端会将文件分成约 25MB 的分块。对于高度拥塞的网络，您可能更倾向于使用较小的分块。您可以使用 `parts` 参数请求特定数量的分块：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "name": "C2C_TEST_CLIP.mp4",
+            "filetype": "video/mp4",
+            "filesize": 21136250,
+            "offset": 0,
+            "parts": 4
+        }
+__JSON__
+} | python -m json.tool
+```
+
+响应中将包含四个上传 URL：
+
+```json
+{
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-01-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-02-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-03-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-04-path]"
+    ],
+    ...
+}
+```
+
+分块大小将为：
+
+```python title="Python"
+math.ceiling(float(21136250) / float(4))
+# 5284063 bytes
+```
+
+最后一个分块为 5,284,061 字节（计算方式为 `21136250 - 5284063 * 3`）。
+
+请求自定义分块数量时，请注意 [AWS S3 分段上传的限制](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)：
+
+- 除最后一个分段外，每个分段必须至少为 5 MiB（5,242,880 字节）
+- 分段数量不得超过 10,000 个
+
+如果您的请求违反这些限制，您将收到 `500: INTERNAL SERVER ERROR`：
+
+```
+{
+    "code": 500,
+    "errors": [
+        {
+            "code": 500,
+            "detail": "There was a problem with your request",
+            "status": 500,
+            "title": "Something went wrong"
+        }
+    ],
+    "message": "Something went wrong"
+}
+```
+
+请务必确认您自定义的分段数量符合 S3 的要求。
+
+## 高效上传 {#uploading-efficiently}
+
+C2C 设备经常在严苛的网络环境中运行，因此效率至关重要。以下是一些最大化吞吐量的策略。
+
+### TCP 连接复用/连接池 {#tcp-connection-reuse/pooling}
+
+建立加密连接需要大量的协商开销。为了高效运行，在发出多个请求时应复用 TCP 连接。大多数 HTTP 库都提供了维护持久连接的 `Client` 或 `Session` 抽象。
+
+新建 HTTPS 连接的协商过程包括加密握手和证书验证。通过复用连接，您只需承担一次这种开销，而不是每个请求都要承担。
+
+<Info>
+
+**TCP 握手参考**
+
+有关 TLS 握手过程的技术细节，请参阅 [Cloudflare 的说明](https://www.cloudflare.com/learning/ssl/what-happens-in-a-tls-handshake/)。
+
+</Info>
+
+要使用 `curl` 演示连接复用，请首先按照[基础上传指南](/cn/camera-to-cloud/how-to-basic-upload#step-1-creating-an-asset)中的说明在 Frame.io 中创建一个新资产。
+
+接下来，将文件拆分为单独的分块以进行测试：
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk01"
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk02"
+```
+
+现在使用 curl 的 `--next` 参数，通过单个 TCP 连接上传这两个分块：
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+将其与使用单独连接的方式进行比较：
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+&& curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+<Info>
+
+**复用分块 URL**
+
+您可以多次向同一个分块 URL 上传，因此可以在各个示例之间随意复用 URL。
+
+</Info>
+
+在测试中，对于顺序上传，连接复用通常可将性能提升 15-20%。
+
+### 并行上传 {#parallel-uploads}
+
+为了获得更高的吞吐量，可以同时上传多个分块：
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path]\
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+在带宽充足的情况下，并行上传的完成时间大约等于其中最慢的单个上传所需的时间。
+
+为了实现最佳的并行度，一个不错的经验法则是每个 CPU 核心运行两个并发上传。超过此比例可能会导致资源争用，收益递减。
+
+<Warning>
+
+**并行上传速度**
+
+网络状况对并行上传性能有显著影响。在某些环境中，顺序上传的表现可能优于并行上传。高级实现可以监控吞吐量并动态调整并发数。请始终在实际生产环境中分析性能，而不要依赖示例中的耗时数据。
+
+</Warning>
+
+### 结合两种方法 {#combining-both-approaches}
+
+为了实现最高效率，可以将连接池与并行上传结合使用。创建多个进程，每个进程都使用连接池来处理各自的一系列上传：
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+<Info>
+
+**HTTP 库功能**
+
+大多数 HTTP 库都为连接池和并行请求提供了抽象。请尝试您所用库的各种选项，以确定最适合您环境的配置。
+
+</Info>
+
+## 跟踪上传进度 {#tracking-upload-progress}
+
+您的集成必须向用户提供基本的进度指示。以分块为粒度是可以接受的——对于一个包含三个分块的上传，进度可以随着每个分块完成从 0% → 33% → 66% → 100% 递增。
+
+更细粒度的进度报告取决于您所用 HTTP 库的功能。如果您需要关于实现更详细进度跟踪的指导，请联系我们的团队。
+
+## 可靠上传 {#uploading-reliably}
+
+要实现稳健的错误处理，请查看我们的[错误指南](/cn/camera-to-cloud/how-to-handle-errors)。以下各节假定您已实现其中所述的错误处理策略。
+
+要创建生产级质量的上传器，除了处理单个请求的错误之外，还需要考虑其他因素。
+
+### 创建上传队列 {#creating-an-upload-queue}
+
+在实际场景中，您的设备生成媒体的速度可能快于上传速度，或者可能遇到长时间的连接中断。实现一个队列系统可以将媒体创建与上传管理分离开来。
+
+可以考虑采用双队列架构：
+
+1. 一个**媒体队列**，用于向 Frame.io 注册本地文件
+2. 一个**分块队列**，用于上传单个文件分块
+
+以下是一个简化的实现：
+
+```python title="Python"
+# Where we are going to queue new files.
+FILE_QUEUE = Queue()
+
+# Where we are going to queue new chunks.
+CHUNK_QUEUE = Queue()
+
+# The http session that will handle TCP 
+# connection pooling for us.
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Snaps a picture for the user."""
+
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+    FILE_QUEUE.add(file_path)
+
+def task_register_assets():
+    """
+    Pulls snapped pictures from the FILE_QUEUE, registers
+    with Frame.io, and adds the chunks to the CHUNK_QUEUE.
+    """
+    while True:
+        # Get the latest file added to the queue and register 
+        # a C2C Asset for it.
+        new_file = FILE_QUEUE.get()
+        asset = c2c.crete_asset_for_file(HTTP_SESSION, new_file)
+
+        # Calculate the size for each chunk
+        chunk_size = c2c.calculate_chunk_size(asset, new_file)
+
+        # Create a message for each chunk with it's parameters 
+        # and add it to the 
+        # queue.
+        chunk_start = 0
+        for chunk_url in asset.upload_urls:
+            message = {
+                "file_path": new_file,
+                "chunk_url": chunk_url,
+                "chunk_start": chunk_start,
+                "chunk_size": chunk_size,
+            }
+
+            # Put the message in the queue and 
+            CHUNK_QUEUE.put(message)
+            chunk_start += chunk_size
+
+def task_upload_chunk():
+    """Takes a chunks and uploads them."""
+
+    while True:
+        info = CHUNK_QUEUE.get()
+        c2c.upload_chunk(HTTP_SESSION, info)
+
+def launch_upload_tasks():
+    """Lauches our Frame.io upload tasks."""
+    # Create a list to hold all of our tasks.
+    tasks = list()
+
+    # Create one task for registering assets.
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Create 2 tasks per CPU core for uploading chunks.
+    for _ in range(0, GET_CPU_COUNT() * 2):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run these tasks until shutdown
+    run_forever(tasks)
+```
+
+<Warning>
+
+**错误处理**
+
+在上面的示例中，我们假定为 c2c 调用所使用的函数已按照[错误指南](/cn/camera-to-cloud/how-to-handle-errors)中的说明处理了错误。
+
+</Warning>
+
+### 跨电源重启的持久化队列 {#persistent-queuing-across-power-cycles}
+
+只要设备保持通电，内存队列方法就能很好地工作，但如果在上传完成之前断电会怎样？要创建真正有弹性的集成，我们需要确保设备在重启后能够从中断处继续。
+
+这需要在电源重启之间将队列状态持久化到存储中。[SQLite](https://www.sqlite.org/index.html) 等嵌入式数据库为实现此功能提供了出色的基础。
+
+您的持久化队列实现应支持以下关键操作：
+
+- 将新创建的文件添加到上传队列
+- 跟踪资产何时在 Frame.io 中成功创建
+- 记录资产创建何时因错误而失败
+- 为上传任务存储文件分块信息
+- 获取下一个要上传的分块
+- 将分块标记为已成功上传
+- 记录分块上传失败
+- 提供文件状态信息以供向用户显示
+
+以下是我们如何调整前面的示例以使用持久化存储系统：
+
+```python title="Python"
+# Our persistence layer for queuing uploads, potentially using SQLite 
+# or another embedded database
+C2C_UPLOAD_STORE = NewC2CUploadStore()
+
+# HTTP session for connection pooling
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Captures an image and adds it to the upload queue."""
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+
+    # Register the file with our persistent store
+    C2C_UPLOAD_STORE.add_file(file_path)
+
+def task_register_assets():
+    """
+    Processes files from persistent storage and registers
+    them with Frame.io for upload.
+    """
+    while True:
+        # Get the next available file from our store
+        file_record = C2C_UPLOAD_STORE.get_file()
+
+        try:
+            # Register the asset with Frame.io
+            asset = c2c.create_asset_for_file(HTTP_SESSION, file_record)
+            chunk_size = c2c.calculate_chunk_size(asset, file_record)
+
+            # Create entries for each chunk in our persistent store
+            chunk_start = 0
+            for chunk_url in asset.upload_urls:
+                message = {
+                    "file_path": file_record,
+                    "chunk_url": chunk_url,
+                    "chunk_start": chunk_start,
+                    "chunk_size": chunk_size,
+                }
+                
+                C2C_UPLOAD_STORE.new_chunk(message)
+                chunk_start += chunk_size
+                
+        except BaseException as error:
+            # Record the error in our persistent store
+            C2C_UPLOAD_STORE.file_asset_create_error(file_record, error)
+        else:
+            # Mark the asset as successfully created
+            C2C_UPLOAD_STORE.file_asset_created(file_record)
+
+def task_upload_chunk():
+    """Uploads individual file chunks from the persistent queue."""
+    while True:
+        # Get the next chunk, marking it as "in progress" to prevent 
+        # other tasks from processing it simultaneously
+        chunk_record = C2C_UPLOAD_STORE.get_chunk()
+
+        try:
+            c2c.upload_chunk(HTTP_SESSION, chunk_record)
+        except BaseException as error:
+            # Record the error for potential retry
+            C2C_UPLOAD_STORE.chunk_error(chunk_record, error)
+        else:
+            # Mark successful completion
+            C2C_UPLOAD_STORE.chunk_success(chunk_record)
+
+def launch_upload_tasks():
+    """Launches Frame.io upload processing tasks."""
+    tasks = []
+
+    # Asset registration task
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Multiple parallel chunk upload tasks
+    worker_count = GET_CPU_COUNT() * 2
+    for _ in range(worker_count):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run indefinitely
+    run_forever(tasks)
+```
+
+采用这种持久化存储方法后，您的集成就能抵御电源中断。设备重启时，只需从上次保存的状态继续处理即可。这种架构还为实现更高级的功能（例如错误跟踪和停滞上传检测）奠定了基础。
+
+### 跟踪上传错误 {#tracking-upload-errors}
+
+稳健的上传系统必须仔细跟踪错误。在使用[错误指南](/cn/camera-to-cloud/how-to-handle-errors)中的策略重试某个操作后，请将这些失败记录到您的持久化存储中。这使您的系统能够：
+
+1. 降低问题上传的优先级，防止它们阻塞整个队列
+2. 向用户提供准确的状态信息
+3. 对持续存在的问题进行管理干预
+
+当发生致命错误时，请标记该项目，以避免不必要的重试。
+
+### 管理停滞的上传 {#managing-stalled-uploads}
+
+实施保护措施，防止上传无限期停滞。设置一个最长持续时间（例如 30 分钟），超过该时间后应终止并重启分块上传任务。这可以防止所有上传工作线程都被无响应的操作阻塞。
+
+### 从静默失败中恢复 {#recovering-from-silent-failures}
+
+系统崩溃、断电或进程终止都可能导致无法正常报告错误。从队列中取出项目时，请记录取出时间。如果某个项目处于"进行中"状态的时间超过合理阈值（例如 30 分钟），且未报告成功或失败，则自动将其放回可用池中，由其他工作线程处理。
+
+### 缓解"中毒"上传 {#mitigating-poisoned-uploads}
+
+"中毒"的队列项目会由于数据或环境的固有问题而持续失败。如果这些项目不断重新入队，就可能实际上阻塞整个上传系统。可以考虑以下策略来处理此类情况：
+
+- 多次失败后，降低该项目的优先级，以便较新的内容可以继续处理
+- 同时跟踪显式错误和处理尝试次数
+- 遵循连接和授权的最佳实践，以区分暂时性的环境问题和文件本身的问题
+- 实施逐级递增的重试限制（例如，在 3 次作业尝试中，每次对单个操作重试 10 次，总共 30 次尝试）
+- 提供用户界面，以便在环境问题解决后手动重置有问题的上传
+
+中毒上传可能由以下原因导致：
+
+- 损坏的文件数据导致 I/O 错误
+- 灾难性的进程故障导致无法报告错误
+- 由永久性底层条件触发的通常可重试的错误
+
+### 系统重启后重试 {#retry-after-system-restart}
+
+在永久放弃有问题的上传之前，请将其标记为在下次系统重启后进行最后一次重试。这可以解决由于内存、驱动程序或资源分配等临时系统状态问题而导致的上传失败。如果在干净重启后上传仍然失败，您就可以更有把握地将其标记为永久性问题。
+
+## 清理队列 {#clearing-your-queue}
+
+请记得从队列中删除不可用的文件。当媒体被物理移除或文件被删除时，请从上传队列中清除相应的条目，以防止不必要的错误。
+
+*重要的是，连接到新项目时，您必须清空上传队列。*为某个项目排队的媒体绝不应出现在另一个项目中。当用户将设备与其他项目配对时，请检查项目是否已更改；如果已更改，请彻底清空现有队列。
+
+## 后续步骤 {#next-steps}
+
+如有任何问题，欢迎联系我们的团队，并继续阅读[高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads)。我们期待为您的集成进展提供支持。

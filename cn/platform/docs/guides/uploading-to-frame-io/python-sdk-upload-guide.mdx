@@ -1,0 +1,277 @@
+---
+title: "Frame.io Python SDK — 上传指南"
+sidebarTitle: "Python SDK 上传指南"
+---
+
+本指南介绍如何使用 **Frame.io Python SDK**（`frameio`）将文件上传到 Frame.io。该 SDK 通过预签名 URL 处理到 S3 的分块多部分上传，支持并行工作线程、自动重试以及可选的进度跟踪。
+
+有关通用的上传 API 概念（上传 URL、请求头、分块），请参阅[本地上传与远程上传的工作原理](/cn/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work)。
+
+---
+
+## 前提条件 {#prerequisites}
+
+<Steps>
+
+<Step title="身份验证">
+
+您已拥有一个可正常工作的 `Frameio` 客户端。有关设置方法，请参阅[身份验证指南](/cn/platform/docs/guides/authentication/python-sdk)。
+
+</Step>
+
+<Step title="安装 SDK">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="目标文件夹">
+
+您需要获取要上传文件的 `account_id` 和 `folder_id`。可以使用 SDK 查找它们：
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## 快速入门 {#quick-start}
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+就是这么简单。SDK 会根据 API 返回的上传 URL 将文件拆分为多个分块，并行上传，并自动处理重试。
+
+---
+
+## 工作原理 {#how-it-works}
+
+本地上传分为两个步骤：
+
+<Steps>
+
+<Step title="创建文件资源">
+
+使用文件名和文件大小调用 `client.files.create_local_upload()`。API 会创建一个占位文件，并返回预签名的 S3 PUT URL——每个分块对应一个 URL。URL 的数量（也就是分块的数量）取决于文件大小。
+
+</Step>
+
+<Step title="上传到 S3">
+
+`FrameioUploader` 从响应中读取上传 URL，将您的文件拆分为相应的分块，并使用线程池将每个分块并行 PUT 到其对应的 URL。每个请求都包含必需的 `x-amz-acl: private` 和 `Content-Type` 请求头。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+上传直接从您的应用程序发送到 S3——不会经过 Frame.io API 服务器。YouTube、Vimeo 和 Dropbox 等服务在上传大文件时也采用相同的模式。
+
+</Note>
+
+---
+
+## 使用 `FrameioUploader` {#using-frameiouploader}
+
+`FrameioUploader` 是上传文件的推荐方式。它封装了底层的分块上传器，并处理所有细节——从 API 响应中提取上传 URL、设置必需的请求头、对文件分块以及并行上传。
+
+### 进度跟踪 {#progress-tracking}
+
+使用 `on_progress` 回调跟踪上传进度：
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+每个分块完成后都会调用一次该回调，并传入截至目前已上传的累计字节数和文件总大小。
+
+#### Rich 进度条 {#rich-progress-bar}
+
+如需更精致的终端体验，可以使用 [Rich](https://github.com/Textualize/rich)：
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### 配置 {#configuration}
+
+`FrameioUploader` 接受多个可选参数：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `max_workers` | `5` | 并发上传线程数 |
+| `headers` | `{"x-amz-acl": "private"}` | 每个 S3 PUT 请求都会发送的请求头。自定义请求头会与默认值合并。 |
+| `max_retries` | `3` | 每个分块的重试次数（指数退避：1s、2s、4s……） |
+| `on_progress` | `None` | 每个分块完成后触发的回调 `(bytes_uploaded, total_bytes)` |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### 完整示例 {#full-example}
+
+一个包含身份验证、上传和进度跟踪的完整示例：
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+如果您需要完全控制上传过程——例如手动处理分块、与异步管线集成或自定义重试逻辑——请参阅[本地上传与远程上传的工作原理](/cn/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work)，了解原始 API 流程和一个独立的 Python 脚本示例。
+
+</Tip>
+
+---
+
+## 远程上传 {#remote-upload}
+
+如果您的文件已可通过公共 URL 访问，请改用远程上传。无需分块——Frame.io 会直接获取该文件：
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+远程上传目前有 **50 GB 的文件大小限制**。对于大于 50 GB 的文件，请改用[本地上传](#quick-start)。
+
+</Warning>
+
+---
+
+## 检查上传状态 {#checking-upload-status}
+
+上传完成后，您可以验证文件是否已被接收：
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

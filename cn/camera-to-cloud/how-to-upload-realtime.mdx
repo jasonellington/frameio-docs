@@ -1,0 +1,642 @@
+---
+title: "操作指南：上传（实时）"
+sidebarTitle: "上传（实时）"
+---
+
+## 简介 {#introduction}
+
+在掌握基本上传知识的基础上，我们来探索如何在资产创建过程中实时上传资产。这种方法可以在录制、渲染或流式传输期间、在文件最终大小确定之前就开始上传文件。
+
+实时上传 API 使资产在录制完成后仅几秒钟即可在 Frame.io 中播放，从而显著提高工作流程效率。
+
+## 演示视频 {#demo-video}
+
+如需快速预览此功能，请观看我们的 [视频演示](https://f.io/qjwfGmTa)。该演示展示了从 Adobe Media Encoder 实时上传渲染内容的过程，渲染完成后仅 5 秒，视频即可在 Frame.io 中播放。
+
+## 前提条件 {#prerequisites}
+
+如果您还没有阅读，请先查看 [实施 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要在 [身份验证与授权过程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization) 中获得的 `access_token`。
+
+我们将在示例中使用基本上传指南中的同一个 [测试资产](https://f.io/Rq1q5CzB)。
+
+建议您先熟悉 [基本上传指南](/cn/camera-to-cloud/how-to-basic-upload)，因为本指南将在这些概念的基础上展开。
+
+## 创建实时资产 {#creating-a-real-time-asset}
+
+实时上传从经过修改的资产创建流程开始。创建资产时，请将 `is_realtime_upload` 设置为 `true`，并省略 `filesize` 参数（或将其设置为 `null`），因为在创建时还不知道最终大小：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/assets` 的文档可以 [在这里找到](/cn/camera-to-cloud/api-reference/device-asset-create)。
+
+</Info>
+
+<Warning>
+
+**扩展名与文件名**
+
+实时资产需要文件扩展名。如果创建资产时还不知道文件名，可以改用 `extension` 字段（格式：`'.mp4'`）。如果您计划稍后更新资产名称，建议采用这种方式。
+
+</Warning>
+
+与标准资产创建相比，实时资产的响应更加简洁：
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "C2C_TEST_CLIP.mp4"
+}
+```
+
+请注意，响应中没有 `upload_urls`。对于实时上传，我们会在文件创建过程中按需生成上传 URL。
+
+## 请求上传 URL {#requesting-upload-urls}
+
+我们使用上一个响应中的 `asset_id`，为文件的前半部分（10,568,125 字节）请求一个 URL：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "parts": [
+                {
+                    "number": 1,
+                    "size": 10568125,
+                    "is_final": false
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/devices/assets/{asset_id}/realtime_upload/parts` 的文档可以 [在这里找到](/cn/camera-to-cloud/api-reference/device-create-realtime-upload-parts)。
+
+</Info>
+
+请求参数说明：
+
+- `parts`：需要获取 URL 的上传分块列表。在一次调用中请求多个 URL 可以提高效率。
+
+  - `number`：分块的顺序编号，从 1 开始。编号可以跳过，分块也可以按任意顺序上传，但最终会按顺序组装。不能超过 10,000（AWS 限制）。
+  - `size`：分块大小（字节）。必须符合 [AWS 分段上传限制](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)。
+  - `is_final`：指示这是否是文件的最后一个分块。
+
+响应包含所请求的上传 URL：
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]"
+    ]
+}
+```
+
+`upload_urls` 列表与请求中 `parts` 的顺序一一对应。
+
+现在，按照基本上传指南中的方法上传第一个数据块：
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+接下来，为第二个也是最后一个分块请求 URL：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+请注意以下重要的新增内容：
+
+- 最后一个分块的 `is_final` 设置为 `true`，表示上传将在此数据块之后完成
+- `asset_filesize` 提供文件总大小；只要有任何分块的 `is_final: true`，就必须提供该字段
+
+在响应中收到 URL 后：
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ]
+}
+```
+
+上传最后一个数据块：
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Warning>
+
+**最后分块的处理**
+
+最后一个分块上传后，Frame.io 会开始组装完整文件。此过程包含 60 秒的宽限期，以便其余分块完成上传。我们建议仅在所有其他分块都成功上传后，再上传最后一个分块。
+
+</Warning>
+
+就是这样！前往 Frame.io 即可查看您成功上传的实时资产。🎉
+
+## 管理资产名称 {#managing-asset-names}
+
+如果创建资产时还不知道文件名，可以只使用 `extension` 字段而不提供 `name`：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "extension": ".mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+系统将分配一个默认名称：
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "[new file].mp4"
+}
+```
+
+您可以在请求上传 URL 时加入 `asset_name` 字段来更新此名称：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_name": "C2C_TEST_CLIP.mp4",
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+只有当资产仍使用默认名称时，名称才会更新；如果资产已在 Frame.io UI 中被重命名或之前已更新过，该请求将被忽略。
+
+## 优化 URL 请求 {#optimizing-url-requests}
+
+为了提高效率，请根据当前可用的数据量一次性为尽可能多的分块请求 URL，而不是逐个请求。对于上传速度可能跟不上数据生成速度的大文件，这种方法尤其有价值。
+
+## 处理媒体文件头 {#handling-media-file-headers}
+
+某些媒体格式需要在文件开头写入文件头，而这些文件头要等到整个文件完成后才会写入。当文件头小于 AWS 的最小分块大小 5 MiB（5,242,880 字节）时，这会带来挑战。
+
+我们的建议：
+
+1. 先保留前 5,242,880 字节的媒体数据，暂不上传
+2. 从 `part_number=2` 开始上传分块
+3. 文件完成后，将文件头添加到保留数据的前面
+4. 为 `part_number=1` 请求 URL，并上传这个合并后的数据块
+
+这种方法可确保第一个数据块满足最小大小要求，同时保持正确的文件结构。
+
+## 调整分块大小以获得最佳性能 {#scaling-part-size-for-optimal-performance}
+
+AWS 施加的限制会影响上传策略：
+
+- 最大文件大小：5 TiB（5,497,558,138,880 字节）
+- 最大分块数量：10,000
+- 最小分块大小：5 MiB（5,242,880 字节）
+
+固定的分块大小需要进行权衡：
+
+- 所有 10,000 个分块都使用最小大小（5 MiB）时，文件总大小上限约为 52.4 GB
+- 如果平均分配最大文件大小，每个数据块约需 550 MB，这对于较小文件的高效流式上传来说太大了
+
+我们需要一个能够平衡这些约束的公式：一开始使用较小的分块以实现快速响应的上传，同时确保在需要时能够处理非常大的文件。
+
+### 推荐的分块大小公式 {#recommended-part-size-formula}
+
+以下是我们建议的 Python 实现方法：
+
+```python title="Python"
+import math
+from typing import Callable
+
+# Constants
+MINIMUM_PART_SIZE = 5_242_880
+MAXIMUM_PART_COUNT = 10_000
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# Maximum uniform data rate that allows for 10,000 parts
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def part_size(part_number: int, format_bytes_per_second: int) -> int:
+    """
+    Returns the payload size for a specific part number given the file's
+    expected data rate.
+    """
+    if part_number < 1:
+        raise ValueError("part_number must be greater than 0")
+
+    if part_number > 10_000:
+        raise ValueError("part_number must be less than 10,000")
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    # Calculate a scalar given our data rate. We will explain this step
+    # futher on in the guides.
+    scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+    part_size = math.floor(scalar * pow(part_number, 2)) + data_rate
+
+    return part_size
+```
+
+……其中 `part_number` 介于 `1` 和 `10_000` 之间（含两端），`format_bytes_per_second` 是文件预计每秒平均占用的字节数。我们将在 [后文](/cn/camera-to-cloud/how-to-upload-realtime#showing-our-work) 中介绍这个公式是如何得出的。
+
+<Info>
+
+**标量值**
+
+`scalar` 变量及其计算乍看之下可能有些令人困惑，但它是一种数学工具，可以确保无论 `format_bytes_per_second` 取什么值，只要将从 `1` 到 `10_0000` 的所有允许的 `part_number` 值代入函数，得到的一组值的总和都*恰好*等于 5 TiB 的文件大小上限——或者说尽可能精确地等于。我们会在后文中 [展示推导过程](/cn/camera-to-cloud/how-to-upload-realtime#showing-our-work)，说明这个公式是如何得出的。
+
+</Info>
+
+<Info>
+
+**向下取整**
+
+使用向下取整会损失一些字节，但可以确保在 10,000 个分块上进行常规四舍五入时，不会意外超出允许的最大文件大小。通过这种方式最多损失 10,000 字节（即 10 KB），这是可以接受的权衡。
+
+</Info>
+
+该公式的重要特性如下：
+
+- 上传 10,000 个分块时，上传的数据总量与 5 TiB 文件大小上限的差距在 10 KB 以内。
+- 在开始阶段优先使用较小、更高效的负载，以提高短片段和中等长度片段的响应速度。
+- 对于非常长的片段，从文件写入结束到可在 Frame 中播放之间的响应速度会有所降低。
+
+第二点与第三点之间的权衡可以得到缓解，因为大多数片段都不会达到第三点开始起作用的大小。我们是在用极少数文件响应速度的降低，换取*大多数*文件响应速度的提升。
+
+我们公式的一个更高级、更高效的版本（它会生成一个匿名的 `part_size_calculator` 函数，并预先计算好静态标量和数据速率）可能如下所示：
+
+```python title="Python"
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    static_scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+
+    def part_size_calculator(part_number: int) -> int:
+        """Calculates size in bytes of upload for `part_number`."""
+        if part_number < 1:
+            raise ValueError("part_number must be greater than 0")
+
+        if part_number > 10_000:
+            raise ValueError("part_number must be less than 10,000")
+
+        return math.floor(static_scalar * pow(part_number, 2) + data_rate)
+
+    return part_size_calculator
+```
+
+### 公式的表现 {#how-the-formula-performs}
+
+我们来看看上述公式在几种常见文件类型上的输出特性。
+
+**示例 1**：Web 格式
+
+对于数据速率约为 5.3MB/s 或更低的可在网页上播放的格式（大多数 H.264/H.265/HEVC 文件），我们会得到如下的负载大小变化：
+
+| 分块总数 | 负载字节数 | 负载 MB | 文件总字节数 | 文件总 GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 5,242,896 | 5.2 MB | 5,242,896 | 0.0 GB |
+| 1,000 | 21,575,817 | 21.6 MB | 10,695,361,357 | 10.7 GB |
+| 5,000 | 413,566,329 | 413.6 MB | 706,957,655,928 | 707.0 GB |
+| 10,000 | 1,638,536,679 | 1,638.5 MB | 5,497,558,133,921 | 5,497.6 GB |
+
+**表格列说明**
+
+- `Total Parts`（分块总数）：上传到 AWS 的文件分块总数。
+- `Payload Bytes`（负载字节数）：当 `part_number` 等于 `Total Parts` 时，AWS PUT 负载的大小。
+- `Payload MB`（负载 MB）：与 `Payload Bytes` 相同，但以兆字节为单位。
+- `Total File Bytes`（文件总字节数）：按顺序上传 `Total Parts` 个分块后，该文件已上传的总字节数。
+- `Total File GB`（文件总 GB）：与 `Total File Bytes` 相同，但以 GB 为单位。
+
+这些值非常适合实时上传，尤其是 H.264 等网页播放编解码器的上传；大多数文件都会小于 10.7 GB，因此可以在 1,000 个分块内完成。负载大小永远不会超过 21.6 MB。
+
+即使用掉一半的分块，负载大小也永远不会超过 413.5 MB。上传总量将达到 707 GB，对于绝大多数 Web 文件来说已经绰绰有余。
+
+只有在接近允许的分块数量上限时，文件大小才开始急剧增长。但它永远不会超过 1.7 GB，远低于 AWS 每个分块 5 GiB 的限制。
+
+**示例 2**：Prores 422 LT
+
+Prores 422 LT [的数据速率为 102 Mbps](https://www.wolframalpha.com/input?i=-%282+%28-68%2C719%2C476%2C736+%2B+125+12%2C750%2C000%29%29%2F8%2C334%2C583%2C375)，生成的表格如下：
+
+| 分块总数 | 负载字节数 | 负载 MB | 文件总字节数 | 文件总 GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 12,750,016 | 12.8 MB | 12,750,016 | 0.0 GB |
+| 1,000 | 28,857,758 | 28.9 MB | 18,127,308,783 | 18.1 GB |
+| 5,000 | 415,443,954 | 415.4 MB | 735,107,948,432 | 735.1 GB |
+| 10,000 | 1,623,525,817 | 1,623.5 MB | 5,497,558,133,958 | 5,497.6 GB |
+
+与我们针对 Web 优化的公式相比，此表格显示了一些有用的特性。在前 1,000 个分块内，我们能够多上传 8 GB 的文件。更大的初始负载意味着在开始阶段不需要过于频繁地请求 URL，从而使上传在更高数据速率下更加高效。在上传过程的末尾，负载大小仍然较大。
+
+**示例 2**：Camera Raw
+
+最后，我们来试试数据速率为 280 MB/s 的摄像机 RAW 格式。在数据如此快速地生成时，一开始就以 5 MiB 的数据块上传根本没有意义：
+
+| 分块总数 | 负载字节数 | 负载 MB | 文件总字节数 | 文件总 GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 280,000,008 | 280.0 MB | 280,000,008 | 0.3 GB |
+| 1,000 | 288,091,460 | 288.1 MB | 282,701,200,139 | 282.7 GB |
+| 5,000 | 482,286,516 | 482.3 MB | 1,737,245,341,542 | 1,737.2 GB |
+| 10,000 | 1,089,146,065 | 1,089.1 MB | 5,497,558,133,870 | 5,497.6 GB |
+
+不仅早期负载更加高效，而且在上限端我们节省了超过半个 GB，这将使这些网络调用不那么容易受到不良网络事件的影响。
+
+### 推导过程 {#showing-our-work}
+
+在将所有内容整合到一个上传程序示例之前，我们先来看看这个公式是如何得出的。
+
+我们需要设计一个公式，用允许的分块末尾那些大而重的负载（大多数上传永远不会用到）来换取开头附近轻量、高效的负载（每次上传都能受益）。同时，我们希望确保算法在分块编号*恰好*为 10,000 时，总量接近 5 TiB 的文件大小上限。
+
+是时候用上一些微积分了。
+
+我们希望图形呈指数级增长，因此公式大概应该类似于：
+
+```text
+n^2
+```
+
+……其中 `n` 是分块编号。我们还希望确保每个分块至少等于公式的数据速率，我们称之为 `r`：
+
+```text
+n^2 + r
+```
+
+现在，我们需要找到一个公式，能够告诉我们*这个*公式在前 10,000 个自然数（1、2、3……）上的总和。西格玛符号 `Σ` 表示求和。我们把它加入公式：
+
+```text
+Σxn^2 + r
+```
+
+……并将 `n` 重新定义为 1 到 10,000（含两端）之间的自然数序列。
+
+这个方程目前对我们还不是很有用。它在直观上的形状是对的，但如果按我们的需要设置 `n=10,000` 和 `r=5,242,880`，它只会 [得出一个结果](https://www.wolframalpha.com/input?i=%CE%A3n%5E2+%2B+r+where+n+%3D+1+to+10%2C000+and+r+%3D+5%2C242%2C880)：`385,812,135,000`（385 GB）。这个结果不仅远低于 5 TiB 的文件大小上限，而且也无法通过调整公式来得到想要的结果。
+
+我们给自己加一个可以调节的旋钮：
+
+```text
+Σxn^2 + r
+```
+
+……其中 `x` 是一个标量，我们可以求解它，使结果等于 5 TiB。现在，我们可以让方程等于文件大小上限，并求解 `x`：
+
+```text
+Σxn^2 + r = 5,497,558,138,880
+```
+
+通常，求和需要迭代求解，比如使用 `for` 或 `while` 循环。但事实证明，有一个非常适合我们的公式：一种 [已知的方法](https://www.math-only-math.com/sum-of-the-squares-of-first-n-natural-numbers.html)，可以低成本地计算前 `n` 个自然数的平方和：
+
+```text
+Σn^2 = n(n+1)(2n+1)/6
+```
+
+将其整理成多项式会更直观：
+
+```text
+Σn^2 = (2n^3 + 3n^2 + n)/6
+```
+
+我们可以在两边加入变量 `x` 和 `r`：
+
+```text
+Σxn^2 + r = x(2n^3 + 3n^2 + n)/6 + rn
+```
+
+最后，让新公式等于 5 TiB：
+
+```text
+x(2n^3 + 3n^2 + n)/6 + rn = 5,497,558,138,880
+```
+
+现在，我们只需设置 `n=10,000`（即分块总数）并求解 `x`。这样我们就能针对给定的数据速率计算出一个静态标量。
+
+与其手工计算，不如 [将其输入 Wolfram Alpha](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000)：
+
+```text
+x = -(2 (125 r - 68719476736)) / 8334583375
+```
+
+现在有进展了！如果我们的数据速率等于最小分块大小（5 MiB），[我们会得到](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000+and+r+%3D+5%2C242%2C880) 如下静态标量：
+
+```text
+136,128,233,472 / 8,334,583,375
+```
+
+在计算机中，这表示一个 float64 值 `16.33293799427617`。在这种情况下，用于确定分块大小的公式为：
+
+```text
+s = 16.33293799427617n^2 + 5,242,880
+```
+
+其中 `s` 是分块大小。
+
+我们还有一个问题。在现实中，负载的字节数不可能是非整数。我们需要对每个值进行取整。我们使用 Python 并向下取整：
+
+```python title="Python"
+math.floor(16.33293799427617 * pow(part_number, 2)) + 5_242_880
+```
+
+至此，我们得到了本指南开头给出的原始函数的一个具体示例。
+
+## 构建基本上传程序 {#building-a-basic-uploader}
+
+我们来看一些简单的类 Python 伪代码，它运用了本指南中学到的所有内容，用于上传正在实时渲染的文件：
+
+```python title="Python"
+import math
+from datetime import datetime, timezone
+from typing import Callable
+
+# The minimum size, in bytes, for a single, non-final part upload.
+MINIMUM_PART_SIZE = 5_242_880
+# The maximum filesize in
+MAXIMUM_PART_COUNT = 10_000
+# The maximum size, in bytes, for an AWS upload.
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# The data rate at which every part is an equal size, and could not
+# be any uniformly larger without violating the maximum total file
+# size if 10_000 parts were to be uploaded. it works out to
+# ~549.8 MB per payload. By enforcing this we actually never need
+# to check if a part exceeds the maximum allowed part size, as our
+# parts will never exceed ~549.8 MB.
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+    ...
+
+def upload_render(data_stream: DataStream, channel: int = 0) -> None:
+    """
+    Uploads an asset for data_stream, which is a custom IO class that pulls remaining
+    upload data from an internal buffer or file, depending on how well the upload is
+    keeping pace with the render.
+
+    Uploads to `channel`
+    """
+
+    asset = c2c.asset_create(
+        extension=data_stream.extension, 
+        filetype=data_stream.mimetpye, 
+        channel=channel,
+        offset=datetime.now(timezone.utc) - data_stream.created_at()
+    )
+
+    calculate_part_size = create_part_size_calculator(data_stream.data_rate())
+    next_part_number = 0
+
+    while True:
+        next_payload_size = calculate_part_size(next_part_number)
+
+        # Waits until one or more chunks worth of data is ready for upload. Cache 
+        # whether our data stream has completed writing the file, and the current 
+        # number of bytes we have remaining to upload at this time.
+        available_bytes, stream_complete = data_stream.wait_for_available_data(
+            minimum_bytes=next_payload_size
+        )
+
+        # Build the list of parts to request based on our available data.
+        parts = []
+        while available_bytes > 0:
+            payload_size = calculate_part_size(next_part_number)
+
+            if available_bytes < payload_size and not stream_complete:
+                break
+
+            payload_size = min(payload_size, available_bytes)
+
+            parts.append(
+                c2c.RealtimeUploadPart(
+                    part_number=next_part_number,
+                    part_size=payload_size,
+                    is_final=False
+                )
+            )
+
+            available_bytes -= payload_size
+            next_part_number += 1
+
+        # If our stream is done writing, mark the last part as final.
+        if stream_complete:
+            parts[-1].is_final = True
+
+        # Create the part URLs using the C2C endpoint.
+        response = c2c.create_realtime_parts(
+            asset_id=asset.id,
+            asset_name=None if not stream_complete else data_stream.filename,
+            asset_filesize=None if not stream_complete else data_stream.size(),
+            parts=parts
+        )
+
+        # Upload each part to its URL.
+        for part, part_url in zip(parts, response.upload_urls):
+            part_data = data_stream.read(bytes=part.size)
+            c2c.upload_chunk(part_data, part_url, data_stream.mimetype)
+
+        if stream_complete:
+            break
+```
+
+<Warning>
+
+**高级上传**
+
+上面的代码仅演示了实时上传文件的基本流程。实际上，还需要结合 [错误处理](/cn/camera-to-cloud/how-to-handle-errors) 和 [高级上传](/cn/camera-to-cloud/how-to-advanced-uploads) 技术来增强这一逻辑。
+
+</Warning>
+
+## 下一步 {#next-up}
+
+实时上传可以让您的集成具备尽可能快的响应速度，使资产在录制完成几秒钟后即可在 Frame.io 中播放。[后续指南](/cn/camera-to-cloud/how-to-advanced-uploads) 将介绍高级上传技术和要求。尽管该指南是针对基本上传编写的，但其中大部分内容同样适用于实时上传。
+
+如果您还没有联系我们的团队，我们建议您先与我们联系，然后继续阅读下一篇指南。期待您的来信！

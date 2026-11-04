@@ -1,0 +1,4245 @@
+---
+title: "Python SDK リファレンス"
+---
+
+### インストール {#installation}
+
+```bash
+pip install frameio
+```
+
+---
+
+### 使い方 {#usage}
+
+次のようにクライアントをインスタンス化して使用します。
+
+```python
+from frameio import (
+    Frameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateFieldDefinitionParamsData_Select(
+        field_configuration=SelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Fields definition name",
+    ),
+)
+```
+
+---
+
+### 非同期クライアント {#async-client}
+
+SDK は非同期クライアントもエクスポートしているため、API に対してノンブロッキングな呼び出しを行えます。このクライアントに渡す非同期 httpx クライアントクラスを構築する場合は、httpx.Client() ではなく httpx.AsyncClient() を使用してください(例: このクライアントの httpx_client パラメーター)。
+
+```python
+import asyncio
+
+from frameio import (
+    AsyncFrameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = AsyncFrameio(
+    token="YOUR_TOKEN",
+)
+
+
+async def main() -> None:
+    await client.metadata_fields.metadata_field_definitions_create(
+        account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+        data=CreateFieldDefinitionParamsData_Select(
+            field_configuration=SelectDefinitionParamsFieldConfiguration(
+                enable_add_new=False,
+                options=[
+                    SelectDefinitionParamsFieldConfigurationOptionsItem(
+                        display_name="Option 1",
+                    ),
+                    SelectDefinitionParamsFieldConfigurationOptionsItem(
+                        display_name="Option 2",
+                    ),
+                ],
+            ),
+            name="Fields definition name",
+        ),
+    )
+
+
+asyncio.run(main())
+```
+
+---
+
+### 例外処理 {#exception-handling}
+
+API が成功以外のステータスコード(4xx または 5xx レスポンス)を返すと、次のエラーのサブクラスがスローされます。
+
+```python
+from frameio.core.api_error import ApiError
+
+try:
+    client.metadata_fields.metadata_field_definitions_create(...)
+except ApiError as e:
+    print(e.status_code)
+    print(e.body)
+```
+
+---
+
+### ページネーション {#pagination}
+
+ページネーションされたリクエストは SyncPager または AsyncPager を返します。これらは基になるオブジェクトのジェネレーターとして使用できます。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.project_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+---
+
+### 高度な使い方 {#advanced}
+
+#### 生のレスポンスデータへのアクセス {#access-raw-response-data}
+
+SDK では、.with_raw_response プロパティを通じて、ヘッダーを含む生のレスポンスデータにアクセスできます。.with_raw_response プロパティは「生」のクライアントを返し、これを使用して .headers 属性と .data 属性にアクセスできます。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+)
+response = (
+    client.metadata_fields.with_raw_response.metadata_field_definitions_create(
+        ...
+    )
+)
+print(response.headers)  # access the response headers
+print(response.data)  # access the underlying object
+pager = client.project_permissions.index(...)
+print(pager.response.headers)  # access the response headers for the first page
+for item in pager:
+    print(item)  # access the underlying object(s)
+for page in pager.iter_pages():
+    print(page.response.headers)  # access the response headers for each page
+    for item in page:
+        print(item)  # access the underlying object(s)
+```
+
+---
+
+#### リトライ {#retries}
+
+SDK には、指数バックオフによる自動リトライが組み込まれています。リクエストがリトライ可能と判断され、リトライ回数が設定されたリトライ上限(デフォルト: 2)を超えていない限り、リクエストはリトライされます。<br />
+次のいずれかの HTTP ステータスコードが返された場合、リクエストはリトライ可能と判断されます。
+
+- 408 (タイムアウト)
+- 429 (リクエスト過多)
+- 5XX (内部サーバーエラー)
+
+<br />
+
+この動作を設定するには、`max_retries` リクエストオプションを使用します。
+
+```python
+client.metadata_fields.metadata_field_definitions_create(..., request_options={
+    "max_retries": 1
+})
+```
+
+---
+
+#### タイムアウト {#timeouts}
+
+SDK のデフォルトのタイムアウトは 60 秒です。クライアントレベルまたはリクエストレベルの timeout オプションで設定できます。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+    timeout=20.0,
+)
+
+
+# Override timeout for a specific method
+client.metadata_fields.metadata_field_definitions_create(..., request_options={
+    "timeout_in_seconds": 1
+})
+```
+
+---
+
+#### カスタムクライアント {#custom-client}
+
+httpx クライアントをオーバーライドして、ユースケースに合わせてカスタマイズできます。一般的なユースケースとして、プロキシやトランスポートのサポートがあります。
+
+```python
+import httpx
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+    httpx_client=httpx.Client(
+        proxy="http://my.test.proxy.example.com",
+        transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+    ),
+)
+```
+
+---
+
+### リファレンス {#reference}
+
+#### アカウント権限 {#account-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.account_permissions.index(...) -> AsyncPager[AccountUserRole, AccountUserRolesResponse]">
+
+指定したアカウントのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.account_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`include_deactivated`: typing.Optional\[bool\] — レスポンスに無効化されたユーザーを含めることをサポートします。デフォルトは false です。
+
+`sort`: typing.Optional\[AccountPermissionsIndexRequestSort\] — クエリパラメーターでアカウントユーザーを並べ替えます
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### アカウント {#accounts}
+
+<AccordionGroup>
+
+<Accordion title="client.accounts.index(...) -> AsyncPager[Account, AccountsResponse]">
+
+現在のユーザーのアカウントを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.accounts.index(
+    sort="display_name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`sort`: typing.Optional\[AccountsIndexRequestSort\] — クエリパラメーターでアカウントを並べ替えます
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.accounts.auditlog_index(...) -> AsyncPager[AuditLog, AuditLogsWithIncludesResponse]">
+
+クエリパラメーターによるフィルタリング機能を使用して、監査ログを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.accounts.auditlog_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="user",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+    api_version="4.0",
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`api_version`: `typing.Literal["4.0"]` —
+
+`include`: `typing.Optional[typing.Literal["user"]]` —
+
+`filters`: `typing.Optional[Filters]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 認証 {#auth}
+
+<AccordionGroup>
+
+<Accordion title="frameio.auth.ServerToServerAuth(*, client_id, client_secret, ...)" defaultOpen={true}>
+
+OAuth 2.0 の client_credentials グラントを使用して認証します。このフローにはユーザーが関与せず、リフレッシュトークンも返されません。アクセストークンの有効期限が切れると、SDK はクライアント認証情報を使用して新しいトークンを自動的にリクエストします。非同期で使用する場合は `AsyncServerToServerAuth` を使用してください。
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+
+auth = ServerToServerAuth(client_id="YOUR_CLIENT_ID", client_secret="YOUR_CLIENT_SECRET")
+client = Frameio(token=auth.get_token)
+```
+
+**パラメーター**
+
+`client_id`: `str` — Adobe IMS OAuth クライアント ID。
+
+`client_secret`: `str` — Adobe IMS OAuth クライアントシークレット。
+
+`scopes`: `str` — スペース区切りのスコープ(OAuth 2.0 RFC 6749)。デフォルトは `openid AdobeID frame.s2s.all` です。
+
+`ims_base_url`: `str` — ステージング環境や代替環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`http_client`: `typing.Optional[httpx.Client]` — プロキシ、TLS、またはコネクションプーリング用のオプションの httpx.Client。
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — トークンを取得するたびに呼び出されるオプションのコールバック。
+
+`timeout`: `float` — HTTP リクエストのタイムアウト(秒)。デフォルトは 30 です。
+
+`max_retries`: `int` — 一時的な障害に対するリトライの最大回数。デフォルトは 2 です。
+
+`refresh_buffer`: `int` — 有効期限の何秒前に事前リフレッシュを実行するか。デフォルトは 60 です。
+
+**メソッド**
+
+`get_token() -> str` — 有効なアクセストークンを返します。必要に応じてリフレッシュします。このメソッドの参照(呼び出しではなく)を SDK に渡します: `Frameio(token=auth.get_token)`。
+
+`authenticate() -> dict[str, Any]` — 新しいアクセストークンを明示的に取得します。`access_token`、`expires_in` などを含むトークンレスポンスの dict を返します。
+
+`revoke() -> None` — サーバー側で両方のトークンを失効させ、ローカルの状態をクリアします。
+
+`export_tokens() -> dict[str, Any]` — 永続化のために現在のトークンの状態をエクスポートします。
+
+`import_tokens(data: dict[str, Any]) -> None` — 以前にエクスポートした dict からトークンの状態を復元します。
+
+</Accordion>
+
+<Accordion title="frameio.auth.WebAppAuth(*, client_id, client_secret, redirect_uri, ...)">
+
+OAuth 2.0 の authorization_code グラントを使用して認証します。クライアントシークレットを安全に保存できるサーバーサイドアプリケーションで使用します。非同期で使用する場合は `AsyncWebAppAuth` を使用してください。
+
+```python title="usage"
+
+import secrets
+from frameio import Frameio
+from frameio.auth import WebAppAuth
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://myapp.com/callback",
+)
+url = auth.get_authorization_url(state=secrets.token_urlsafe(32))
+# redirect user to url ...
+auth.exchange_code(code="CODE_FROM_CALLBACK")
+client = Frameio(token=auth.get_token)
+```
+
+**パラメーター**
+
+`client_id`: `str` — Adobe IMS OAuth クライアント ID。
+
+`client_secret`: `str` — Adobe IMS OAuth クライアントシークレット。
+
+`redirect_uri`: `str` — 登録済みのリダイレクト URI。
+
+`scopes`: `str` — スペース区切りのスコープ(OAuth 2.0 RFC 6749)。
+
+`ims_base_url`: `str` — ステージング環境や代替環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`http_client`: `typing.Optional[httpx.Client]` — プロキシ、TLS、またはコネクションプーリング用のオプションの httpx.Client。
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — トークンをリフレッシュするたびに呼び出されるオプションのコールバック。
+
+`timeout`: `float` — HTTP リクエストのタイムアウト(秒)。デフォルトは 30 です。
+
+`max_retries`: `int` — 一時的な障害に対するリトライの最大回数。デフォルトは 2 です。
+
+`refresh_buffer`: `int` — 有効期限の何秒前に事前リフレッシュを実行するか。デフォルトは 60 です。
+
+**メソッド**
+
+`get_token() -> str` — 有効なアクセストークンを返します。必要に応じてリフレッシュします。このメソッドの参照を SDK に渡します: `Frameio(token=auth.get_token)`。
+
+`get_authorization_url(state: str) -> str` — Adobe IMS の認可 URL を構築します。そのまま返される不透明な CSRF/state 値を渡します。
+
+`exchange_code(code: str) -> dict[str, Any]` — 認可コードをアクセストークンとリフレッシュトークンに交換します。
+
+`refresh() -> dict[str, Any]` — トークンのリフレッシュを手動で実行します。
+
+`revoke() -> None` — サーバー側で両方のトークンを失効させ、ローカルの状態をクリアします。
+
+`export_tokens() -> dict[str, Any]` — 永続化のために現在のトークンの状態をエクスポートします。
+
+`import_tokens(data: dict[str, Any]) -> None` — 以前にエクスポートした dict からトークンの状態を復元します。
+
+</Accordion>
+
+<Accordion title="frameio.auth.SPAAuth(*, client_id, redirect_uri, ...)">
+
+authorization_code + PKCE(クライアントシークレットなし)を使用して認証します。クライアントシークレットを安全に保存できないブラウザーベースのアプリやネイティブアプリで使用します。非同期で使用する場合は `AsyncSPAAuth` を使用してください。
+
+```python title="usage"
+
+import secrets
+from frameio import Frameio
+from frameio.auth import SPAAuth
+
+auth = SPAAuth(client_id="YOUR_CLIENT_ID", redirect_uri="https://myapp.com/cb")
+result = auth.get_authorization_url(state=secrets.token_urlsafe(32))
+# redirect user to result.url, store result.code_verifier
+auth.exchange_code(code="CODE_FROM_CALLBACK", code_verifier=result.code_verifier)
+client = Frameio(token=auth.get_token)
+```
+
+**パラメーター**
+
+`client_id`: `str` — Adobe IMS OAuth クライアント ID。
+
+`redirect_uri`: `str` — 登録済みのリダイレクト URI。
+
+`scopes`: `str` — スペース区切りのスコープ(OAuth 2.0 RFC 6749)。
+
+`ims_base_url`: `str` — ステージング環境や代替環境用の IMS ベース URL。デフォルトは本番環境です。
+
+`http_client`: `typing.Optional[httpx.Client]` — プロキシ、TLS、またはコネクションプーリング用のオプションの httpx.Client。
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — トークンをリフレッシュするたびに呼び出されるオプションのコールバック。
+
+`timeout`: `float` — HTTP リクエストのタイムアウト(秒)。デフォルトは 30 です。
+
+`max_retries`: `int` — 一時的な障害に対するリトライの最大回数。デフォルトは 2 です。
+
+`refresh_buffer`: `int` — 有効期限の何秒前に事前リフレッシュを実行するか。デフォルトは 60 です。
+
+**メソッド**
+
+`get_token() -> str` — 有効なアクセストークンを返します。必要に応じてリフレッシュします。このメソッドの参照を SDK に渡します: `Frameio(token=auth.get_token)`。
+
+`get_authorization_url(state: str) -> AuthorizationUrlResult` — PKCE チャレンジ付きの Adobe IMS 認可 URL を構築します。`url` 属性と `code_verifier` 属性を持つ `AuthorizationUrlResult` を返します。
+
+`exchange_code(code: str, code_verifier: str) -> dict[str, Any]` — 認可コードと PKCE ベリファイアをトークンに交換します。
+
+`refresh() -> dict[str, Any]` — トークンのリフレッシュを手動で実行します。
+
+`revoke() -> None` — サーバー側で両方のトークンを失効させ、ローカルの状態をクリアします。
+
+`export_tokens() -> dict[str, Any]` — 永続化のために現在のトークンの状態をエクスポートします。
+
+`import_tokens(data: dict[str, Any]) -> None` — 以前にエクスポートした dict からトークンの状態を復元します。
+
+</Accordion>
+
+<Accordion title="frameio.auth.AuthorizationUrlResult">
+
+`SPAAuth.get_authorization_url()` および `AsyncSPAAuth.get_authorization_url()` が返すイミュータブル(frozen)なデータクラスです。認可 URL と PKCE コードベリファイアを保持します。
+
+**属性**
+
+`url`: `str` — ユーザーのリダイレクト先となる完全な認可 URL。
+
+`code_verifier`: `str` — 保存して `exchange_code()` に渡す PKCE コードベリファイア。
+
+</Accordion>
+
+<Accordion title="frameio.auth.close_clients() / aclose_clients()">
+
+auth モジュールが使用するモジュールレベルの HTTP クライアントを閉じます。アプリケーションのシャットダウン時に、同期コードでは `close_clients()` を、非同期コードでは `await aclose_clients()` を呼び出して接続を解放してください。
+
+```python title="usage"
+
+from frameio.auth import close_clients
+
+# During application shutdown
+close_clients()
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 認証の例外 {#auth-exceptions}
+
+すべての認証例外は `FrameioAuthError` を継承します。
+
+| 例外 | 説明 |
+| --- | --- |
+| `FrameioAuthError` | すべての `frameio.auth` エラーの基底例外です。 |
+| `AuthenticationError` | トークンの交換またはリフレッシュに失敗しました。`error_code` 属性と `error_description` 属性を持ちます。 |
+| `TokenExpiredError` | リフレッシュトークンの有効期限が切れています。再認証が必要です。 |
+| `ConfigurationError` | 必要な設定が欠落しているか、無効です。 |
+| `NetworkError` | ネットワークリクエストに失敗しました(タイムアウト、接続エラーなど)。 |
+| `RateLimitError` | API が 429 を返し、リトライ回数を使い切りました。`retry_after` 属性を持ちます。 |
+| `PKCEError` | PKCE の検証に失敗しました。 |
+
+#### コレクション {#collections}
+
+<AccordionGroup>
+
+<Accordion title="client.collections.index(...) -> AsyncHttpResponse[CollectionsResponse]">
+
+プロジェクトのコレクションを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.collections.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator,project",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`include`: `typing.Optional[CollectionInclude]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.collections.show(...) -> AsyncHttpResponse[CollectionResponse]">
+
+コレクションの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.collections.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    collection_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator,project",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`collection_id`: `Uuid` —
+
+`include`: `typing.Optional[CollectionInclude]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### コメント {#comments}
+
+<AccordionGroup>
+
+<Accordion title="client.comments.show(...) -> AsyncHttpResponse[CommentWithIncludesResponse]">
+
+ファイル上の単一のコメントを表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    include="owner",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`include`: typing.Optional\[CommentsShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.comments.delete(...) -> AsyncHttpResponse[None]">
+
+アセットからコメントを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.comments.update(...) -> AsyncHttpResponse[CommentResponse]">
+
+指定したアセット上のコメントを更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.comments import UpdateCommentParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    data=UpdateCommentParamsData(
+        annotation='[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed=False,
+        page=4,
+        text="This is great!",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`data`: UpdateCommentParamsData
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.comments.index(...) -> AsyncPager[CommentWithIncludes, CommentsWithIncludesResponse]">
+
+指定したアセット上のコメントを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.comments.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    include="owner",
+    sort="owner_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`file_id`: Uuid —
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`include`: typing.Optional\[CommentInclude\] —
+
+`sort`: typing.Optional\[CommentsIndexRequestSort\] — クエリパラメーターでコメントを並べ替えます
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.comments.create(...) -> AsyncHttpResponse[CommentResponse]">
+
+ファイルにコメントを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.comments import CreateCommentParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    data=CreateCommentParamsData(
+        annotation='[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed=False,
+        page=4,
+        text="This is great!",
+        timestamp="00:00:02:12",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`file_id`: Uuid —
+
+`data`: CreateCommentParamsData
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.comments.create_attachment(...) -> AsyncHttpResponse[CommentAttachmentResponse]">
+
+既存のコメントに添付ファイルを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import AttachmentInput, Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.create_attachment(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AttachmentInput(
+        file_size=1024000,
+        media_type="image/png",
+        name="screenshot.png",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`comment_id`: `Uuid` —
+
+`data`: `AttachmentInput`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.comments.delete_attachment(...) -> AsyncHttpResponse[None]">
+
+コメントから添付ファイルを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.delete_attachment(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    attachment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`comment_id`: `Uuid` —
+
+`attachment_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### カスタムアクション {#custom-actions}
+
+<AccordionGroup>
+
+<Accordion title="client.custom_actions.actions_index(...) -> AsyncHttpResponse[ActionsWithIncludesResponse]">
+
+指定したワークスペース内のアクションを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_show(...) -> AsyncHttpResponse[ActionWithIncludesResponse]">
+
+カスタムアクションの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_create(...) -> AsyncHttpResponse[ActionCreateResponse]">
+
+ワークスペースにカスタムアクションを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.custom_actions import ActionCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ActionCreateParamsData(
+        description="customizing our workflow",
+        event="my.event",
+        name="First Custom Action",
+        timeout=7,
+        url="https://example.com/custom-action",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`data`: `ActionCreateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_update(...) -> AsyncHttpResponse[ActionResponse]">
+
+カスタムアクションの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.custom_actions import ActionUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ActionUpdateParamsData(
+        active=True,
+        description="customizing our workflow",
+        event="my.event",
+        multi_asset=True,
+        name="First Custom Action",
+        timeout=7,
+        url="https://example.com/custom-action",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`data`: `ActionUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_delete(...) -> AsyncHttpResponse[None]">
+
+カスタムアクションを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ファイル {#files}
+
+<AccordionGroup>
+
+<Accordion title="client.files.list(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+指定したフォルダー内のファイルを一覧表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`include`: `typing.Optional[FilesListRequestInclude]` —
+
+`sort`: `typing.Optional[FilesListRequestSort]` — クエリパラメーターでファイルを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[AssetRequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.create(...) -> AsyncHttpResponse[FileWithUploadUrlsResponse]">
+
+親フォルダーの下に新しいファイルを作成します。このエンドポイントは `Create file (local upload)` と `Create file (remote upload)` に置き換えられました。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateParamsData(
+        file_size=1137444,
+        media_type="image/png",
+        name="asset.png",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.show(...) -> AsyncHttpResponse[FileWithIncludesResponse]">
+
+ファイルの詳細を表示します。
+include クエリパラメーターを使用すると、レスポンスに追加のプロパティを選択的に含めることができます。
+
+<Note>
+
+`media_links.original` を含め、ユーザーにファイルをダウンロードする権限がない場合、このエンドポイントは `403 Forbidden` エラーを返します。このユーザーにはウォーターマークが必須であり、リクエストされた media_links がそれに対応していないためにコンテンツにアクセスできない場合、リクエストは成功しますが、対応していないメディアリンクは null に設定されます。同様に、リクエストされたトランスコードリンクが特定のファイルに存在しない場合(例: 静止画像ファイルに対して `media_links.video_h264_180` を含める場合)や、トランスコード処理が完了していない場合(つまり、ファイルのステータスが「transcoded」ではなく「uploaded」の場合)も、レスポンスペイロード内のリンクは null に設定されます。つまり、クライアントは null のメディアリンクを適切に処理する必要があります。
+
+</Note>
+
+レート制限: account_user あたり 1 秒ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`include`: `typing.Optional[FilesShowRequestInclude]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.delete(...) -> AsyncHttpResponse[None]">
+
+ID を指定してファイルを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.update(...) -> AsyncHttpResponse[FileResponse]">
+
+ファイルの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileUpdateParamsData(
+        name="asset.png",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`data`: `FileUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.copy(...) -> AsyncHttpResponse[FileCopyResponse]">
+
+ファイルをコピーします。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    copy_comments="none",
+    data=FileCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`copy_metadata`: `typing.Optional[bool]` — ファイルと一緒にメタデータの値をコピーするかどうか
+
+`copy_comments`: `typing.Optional[FilesCopyRequestCopyComments]` — ファイルと一緒にコピーするコメント
+
+`data`: `typing.Optional[FileCopyParamsData]`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.create_remote_upload(...) -> AsyncHttpResponse[FileRemoteUploadResponse]">
+
+リモートアップロードにより、親フォルダーの下に新しいファイルを作成します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateRemoteUploadParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create_remote_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateRemoteUploadParamsData(
+        name="asset.png",
+        source_url="https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.png",
+    ),
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateRemoteUploadParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.move(...) -> AsyncHttpResponse[FileResponse]">
+
+ファイルをフォルダーまたは version_stack に移動します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`data`: `FileMoveParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.create_local_upload(...) -> AsyncHttpResponse[FileWithUploadUrlsResponse]">
+
+ローカルアップロードにより、親フォルダーの下に新しいファイルを作成します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create_local_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateLocalUploadParamsData(
+        file_size=1137444,
+        name="asset.png",
+    ),
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateLocalUploadParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.show_file_upload_status(...) -> AsyncHttpResponse[FileUploadStatusResponse]">
+
+ファイルのアップロードステータスの詳細を表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.show_file_upload_status(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.files.import_file(...) -> AsyncHttpResponse[FileResponse]">
+
+アカウントに設定されたストレージの場所からファイルをインポートします。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileImportParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.import_file(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileImportParamsData(
+        key="uploads/08091b0f-a541-42f5-a059-5e8c4afecc12/original.png",
+        name="asset.png",
+        storage_location="123e4567-e89b-12d3-a456-426614174000",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileImportParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### フォルダー権限 {#folder-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.folder_permissions.folder_user_roles_index(...) -> AsyncHttpResponse[UserRolesResponse]">
+
+指定したフォルダーのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.folder_user_roles_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`include_deactivated`: `typing.Optional[bool]` — レスポンスに無効化されたユーザーを含めることをサポートします。デフォルトは false です。
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folder_permissions.folder_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+ユーザーがすでにフォルダーに追加されている場合は、指定したフォルダーのユーザーロールを更新します。ユーザーがフォルダーに追加されていない場合は、指定したロールでユーザーが追加されます。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.folder_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`data`: `UpdateUserRolesParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folder_permissions.delete(...) -> AsyncHttpResponse[None]">
+
+指定したフォルダーからユーザーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### フォルダー {#folders}
+
+<AccordionGroup>
+
+<Accordion title="client.folders.show(...) -> AsyncHttpResponse[FolderWithIncludesResponse]">
+
+フォルダーの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.delete(...) -> AsyncHttpResponse[None]">
+
+ID を指定してフォルダーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.update(...) -> AsyncHttpResponse[FolderResponse]">
+
+フォルダーの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderUpdateParamsData(
+        name="Folder name",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderUpdateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.index(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+指定したフォルダー内の子要素を一覧表示します。
+include クエリパラメーターを使用すると、レスポンスに追加のプロパティを選択的に含めることができます。
+
+<Note>
+
+`media_links.original` を含め、ユーザーに該当プロジェクト内のファイルをダウンロードする権限がない場合、このエンドポイントは 403 Forbidden エラーを返します。このユーザーにはウォーターマークが必須であり、リクエストされた media_links がそれに対応していないためにコンテンツにアクセスできない場合、リクエストは成功しますが、対応していないメディアリンクは null に設定されます。同様に、リクエストされたトランスコードリンクが特定のファイルに存在しない場合(例: 静止画像ファイルに対して `media_links.video_h264_180` を含める場合)や、トランスコード処理が完了していない場合(つまり、ファイルのステータスが「transcoded」ではなく「uploaded」の場合)も、レスポンスペイロード内のメディアリンクは null に設定されます。つまり、クライアントは null のメディアリンクを適切に処理する必要があります。
+
+</Note>
+
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    type="file,folder,version_stack",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersIndexRequestInclude\] —
+
+`type`: typing.Optional\[ChildrenType\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.copy(...) -> AsyncHttpResponse[FolderCopyResponse]">
+
+フォルダーをコピーします。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    data=FolderCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`copy_metadata`: typing.Optional\[bool\] — フォルダーと一緒にメタデータの値をコピーするかどうか
+
+`data`: typing.Optional\[FolderCopyParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.list(...) -> AsyncHttpResponse[FoldersWithIncludesResponse]">
+
+指定したフォルダー内のフォルダーを一覧表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersListRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.create(...) -> AsyncHttpResponse[FolderResponse]">
+
+folder_id パスパラメーターで指定したフォルダー内に新しいフォルダーを作成します。<br />
+レート制限: account_user あたり 1 秒ごとに 3 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderCreateParamsData(
+        name="Folder name",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.folders.move(...) -> AsyncHttpResponse[FolderResponse]">
+
+フォルダーを別のフォルダーに移動します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderMoveParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### グループ {#groups}
+
+<AccordionGroup>
+
+<Accordion title="client.groups.index(...) -> AsyncHttpResponse[GroupsWithIncludesResponse]">
+
+アカウント内のグループを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="creator_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`sort`: `typing.Optional[GroupsIndexRequestSort]` — クエリパラメーターでグループを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.groups.show(...) -> AsyncHttpResponse[GroupWithIncludesResponse]">
+
+グループの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    group_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`group_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.groups.create(...) -> AsyncHttpResponse[GroupResponse]">
+
+現在のアカウントにグループを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.groups import CreateGroupParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateGroupParamsData(
+        emoji="smile",
+        name="group-1",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`data`: `CreateGroupParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.groups.update(...) -> AsyncHttpResponse[GroupResponse]">
+
+グループの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.groups import UpdateGroupParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    group_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateGroupParamsData(
+        emoji="smile",
+        name="group-1",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`group_id`: `Uuid` —
+
+`data`: `UpdateGroupParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### メタデータ {#metadata}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata.bulk_update(...) -> AsyncHttpResponse[None]" defaultOpen={true}>
+
+複数のファイルにわたってメタデータの値を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.metadata import (
+    BulkUpdateMetadataParamsData,
+    BulkUpdateMetadataParamsDataValuesItem,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata.bulk_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=BulkUpdateMetadataParamsData(
+        file_ids=[
+            "09b31c2a-04de-464a-a593-643a36ef0d98",
+            "b967fc36-4e18-4b48-a3ab-c790100e2baa",
+        ],
+        values=[
+            BulkUpdateMetadataParamsDataValuesItem(
+                field_definition_id="ff41ce50-269b-4624-8306-aac10e28ab94",
+                value=[
+                    {
+                        "id": "e60f47b4-cf8e-4273-96d5-3258a830a0aa",
+                        "type": "user",
+                    },
+                    {
+                        "id": "24eeaf7e-ce27-4555-bc77-cce39900626d",
+                        "type": "account_user_group",
+                    },
+                ],
+            )
+        ],
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`data`: `BulkUpdateMetadataParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.metadata.show(...) -> AsyncHttpResponse[MetadataResponse]">
+
+ファイルのメタデータを表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    show_null=True,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`show_null`: `typing.Optional[bool]` —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### メタデータフィールド {#metadata-fields}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_delete(...) -> AsyncHttpResponse[None]">
+
+アカウントレベルのカスタムフィールド定義を削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    field_definition_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`field_definition_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_update(...) -> AsyncHttpResponse[FieldDefinitionResponse]">
+
+アカウントレベルのカスタムフィールド定義を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import (
+    Frameio,
+    UpdateSelectDefinitionParamsFieldConfiguration,
+    UpdateSelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import UpdateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    field_definition_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateFieldDefinitionParamsData_Select(
+        field_configuration=UpdateSelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                UpdateSelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                UpdateSelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Updated-Field-Name",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`field_definition_id`: Uuid —
+
+`data`: typing.Optional\[UpdateFieldDefinitionParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_index(...) -> AsyncHttpResponse[FieldDefinitionsWithIncludesResponse]">
+
+アカウントレベルのフィールド定義を一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`sort`: typing.Optional\[MetadataFieldDefinitionsIndexRequestSort\] — クエリパラメーターでフィールド定義を並べ替えます
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_create(...) -> AsyncHttpResponse[FieldDefinitionResponse]">
+
+アカウントレベルのフィールド定義を作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import (
+    Frameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateFieldDefinitionParamsData_Select(
+        field_configuration=SelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Fields definition name",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`data`: typing.Optional\[CreateFieldDefinitionParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### プロジェクト権限 {#project-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.project_permissions.index(...) -> AsyncPager[UserRole, UserRolesResponse]">
+
+指定したプロジェクトのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.project_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`include_deactivated`: typing.Optional\[bool\] — レスポンスに無効化されたユーザーを含めることをサポートします。デフォルトは false です。
+
+`sort`: typing.Optional\[ProjectPermissionsIndexRequestSort\] — クエリパラメーターでユーザーを並べ替えます
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+注: この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.project_permissions.delete(...) -> AsyncHttpResponse[None]">
+
+指定したプロジェクトからユーザーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.project_permissions.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`user_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.project_permissions.project_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+ユーザーがすでにプロジェクトに追加されている場合は、指定したプロジェクトのユーザーロールを更新します。ユーザーがプロジェクトに追加されていない場合は、指定したロールでユーザーが追加されます。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.project_permissions.project_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`user_id`: Uuid —
+
+`data`: UpdateUserRolesParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### プロジェクト {#projects}
+
+<AccordionGroup>
+
+<Accordion title="client.projects.show(...) -> AsyncHttpResponse[ProjectWithIncludesResponse]">
+
+プロジェクトの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.projects.delete(...) -> AsyncHttpResponse[None]">
+
+プロジェクトを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.projects.update(...) -> AsyncHttpResponse[ProjectResponse]">
+
+プロジェクトの詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.projects import ProjectUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ProjectUpdateParamsData(
+        name="Project Name",
+        restricted=True,
+        status="active",
+    ),
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`data`: `ProjectUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.projects.index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+指定したワークスペース内のプロジェクトを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[ProjectsIndexRequestSort]` — クエリパラメーターでプロジェクトを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+` `include_total_count`: `typing.Optional\[IncludeTotalCount\]\` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.projects.create(...) -> AsyncHttpResponse[ProjectResponse]">
+
+指定したワークスペースにプロジェクトを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.projects import ProjectParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ProjectParamsData(
+        name="Project Name",
+        restricted=True,
+    ),
+)
+```
+
+**パラメーター**
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`data`: `ProjectParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.projects.account_projects_index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+指定したアカウント内で、認証済みユーザーがアクセスできるすべてのプロジェクトを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.account_projects_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[AccountProjectsIndexRequestSort]` — クエリパラメーターでプロジェクトを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.projects.invited_projects_index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+指定したアカウント内で、現在のユーザーが招待されているものの、ワークスペースレベルのアクセス権を持たないプロジェクトを一覧表示します。これらは、ユーザーがより広範なチーム/ワークスペースの権限を持たず、プロジェクト固有のコラボレーターアクセス権を持つプロジェクトです。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.invited_projects_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[InvitedProjectsIndexRequestSort]` — クエリパラメーターでプロジェクトを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 検索 {#search}
+
+<AccordionGroup>
+
+<Accordion title="client.search.search(...) -> AsyncHttpResponse[SearchResponse]">
+
+アカウント内のアセット、フォルダー、プロジェクトを横断して検索します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.search import SearchParamsFilters
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.search.search(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    engine="nlp",
+    query="red car driving on highway",
+    filters=SearchParamsFilters(
+        files_and_version_stacks=True,
+        folders=False,
+        projects=False,
+    ),
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`engine`: `SearchParamsEngine` — 使用する検索エンジン。使用可能なエンジン: lexical、nlp。
+
+`query`: `str` — 検索クエリのテキスト
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`filters`: `typing.Optional[SearchParamsFilters]` — 返される結果の種類を制御するフィルター
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 共有 {#shares}
+
+<AccordionGroup>
+
+<Accordion title="client.shares.show(...) -> AsyncHttpResponse[ShareResponse]">
+
+単一の共有を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.delete(...) -> AsyncHttpResponse[None]">
+
+共有を削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.update(...) -> AsyncHttpResponse[ShareResponse]">
+
+共有を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+import datetime
+
+from frameio import Frameio
+from frameio.shares import UpdateShareParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateShareParamsData(
+        access="public",
+        description="A descriptive summary of the share",
+        downloading_enabled=True,
+        expiration=datetime.datetime.fromisoformat(
+            "2026-01-22 17:04:53+00:00",
+        ),
+        name="Share Name",
+        passphrase="as!dfj39sd(*",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `UpdateShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.list_reviewers(...) -> AsyncPager[User, ShareReviewersResponse]">
+
+共有のレビュアーを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.shares.list_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`sort`: `typing.Optional[SharesListReviewersRequestSort]` — クエリパラメーターで共有のレビュアーを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.add_reviewers(...) -> AsyncHttpResponse[None]">
+
+3 種類の識別子(`adobe_user_id`、`email`、`user_id`)を使用して、セキュア共有にレビュアーを追加します。
+1 つのリクエストに含めることができる識別子タイプのパラメーターは 1 つだけです。
+共有が属するアカウントの Frame アカウントメンバーではないレビュアーを共有に追加できる識別子は、`email` のみです。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import (
+    AddReviewersToShareParamsData,
+    AddReviewersToShareParamsDataReviewers,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.add_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AddReviewersToShareParamsData(
+        message="Please join my share!",
+        reviewers=AddReviewersToShareParamsDataReviewers(
+            emails=["email1@domain.com", "email2@domain.com"],
+        ),
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `AddReviewersToShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.remove_reviewers(...) -> AsyncHttpResponse[None]">
+
+3 種類の識別子(`adobe_user_id`、`email`、`user_id`)を使用して、セキュア共有からレビュアーを削除します。
+1 つのリクエストに含めることができる識別子タイプのパラメーターは 1 つだけです。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import (
+    RemoveReviewerParamsData,
+    RemoveReviewerParamsDataReviewers,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.remove_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=RemoveReviewerParamsData(
+        reviewers=RemoveReviewerParamsDataReviewers(
+            adobe_user_ids=[
+                "2A3C1A3D66C621B20A494021@176719f5667c82b4499999.e"
+            ],
+        ),
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `RemoveReviewerParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.remove_asset(...) -> AsyncHttpResponse[RemoveAssetResponse]">
+
+現在共有に含まれているアセットを、その共有から削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.remove_asset(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    asset_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`asset_id`: `Uuid`—
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.add_asset(...) -> AsyncHttpResponse[AddAssetResponse]">
+
+共有に新しいアセットを追加します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import AddAssetParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.add_asset(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AddAssetParamsData(
+        asset_id="0cc1cb59-1d7c-4176-8532-afe099897318",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `AddAssetParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.index(...) -> AsyncPager[Share, SharesResponse]">
+
+プロジェクトの共有を一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.shares.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid`—
+
+`sort`: `typing.Optional[SharesIndexRequestSort]` — クエリパラメーターで共有を並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.shares.create(...) -> AsyncHttpResponse[ShareResponse]">
+
+共有を作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+import datetime
+
+from frameio import Frameio, AssetShareParamsSortBy
+from frameio.shares import CreateShareParamsData_Asset
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateShareParamsData_Asset(
+        card_info_enabled=True,
+        enabled=True,
+        access="public",
+        theme="dark",
+        editable_fields_enabled=False,
+        asset_ids=[
+            "12eb1446-5736-4f93-85fc-3b636f156211",
+            "f23a3b3e-7b1f-4655-b91a-acf0566e5bb9",
+        ],
+        card_aspect_ratio="square",
+        commenting_enabled=True,
+        passphrase="as!dfj39sd(*",
+        sort_by=AssetShareParamsSortBy(
+            direction="asc",
+            field_definition_id="c11f3f0a-9744-474d-b6e5-63894c1b5397",
+        ),
+        forensic_watermark_enabled=False,
+        name="Share Name",
+        card_size="medium",
+        drm_enabled=False,
+        captions_enabled=True,
+        transcripts_enabled=True,
+        watermark_enabled=True,
+        featured_field_definition_id="f8db45bb-bf52-446e-8216-7d4efb5ea396",
+        open_in_viewer_enabled=True,
+        downloading_enabled=True,
+        accent_color="#FF6600",
+        layout="grid",
+        show_all_asset_versions=True,
+        thumbnail_scale="fill",
+        title_line_count=1,
+        expiration=datetime.datetime.fromisoformat(
+            "2026-01-22 17:04:53+00:00",
+        ),
+        visible_field_definition_ids=[
+            "c36ec769-8144-48b6-bc8f-da799a849197"
+        ],
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid`—
+
+`data`: `CreateShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### アップロード {#upload}
+
+<AccordionGroup>
+
+<Accordion title="frameio.upload.FrameioUploader(asset, file, ...)" defaultOpen={true}>
+
+`client.files.create_local_upload(...)` が返す署名付き URL を使用して、ローカルファイルを Frame.io にアップロードします。`FrameioUploader` は、`FileWithUploadUrls` レスポンスから `upload_urls`、`file_size`、`media_type` を読み取り、チャンク分割・マルチスレッドによる S3 アップロードを実行する薄いラッパーです。
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.files.create_local_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateLocalUploadParamsData(
+        file_size=1137444,
+        name="asset.png",
+    ),
+)
+with open("asset.png", "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+**パラメーター**
+
+`asset`: `FileWithUploadUrls` — `client.files.create_local_upload(...)` が返す `FileWithUploadUrls` インスタンス。
+
+`file`: `typing.BinaryIO` — バイナリ読み取りモード(`"rb"`)で開いたファイルライクオブジェクト。
+
+`max_workers`: `int` — 基になるアップローダーに渡されるスレッドプールの並列数。デフォルトは 5 です。
+
+`headers`: `typing.Optional[typing.Dict[str, str]]` — すべての S3 PUT リクエストにマージされる追加のヘッダー。Frame.io の要件に従い、デフォルトは `{"x-amz-acl": "private"}` です。
+
+`max_retries`: `int` — チャンクごとのリトライ回数。デフォルトは 3 です。
+
+`on_progress`: `typing.Optional[typing.Callable[[int, int], None]]` — 各チャンクの後に `(bytes_uploaded_so_far, total_bytes)` を引数として呼び出されるオプションのコールバック。
+
+**メソッド**
+
+`upload() -> None` — ファイルをアップロードします。完了するまでブロックし、エラー時には例外を送出します。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ユーザー {#users}
+
+<AccordionGroup>
+
+<Accordion title="client.users.show() -> AsyncHttpResponse[ProfileResponse]">
+
+ベアラートークンに関連付けられたユーザーの詳細を確認します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.users.show()
+```
+
+**パラメーター**
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### バージョンスタック {#version-stacks}
+
+<AccordionGroup>
+
+<Accordion title="client.version_stacks.index(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+指定したバージョンスタック内の子要素(ファイル)を一覧表示します。
+include クエリパラメーターを使用すると、レスポンスに追加のプロパティを選択的に含めることができます。
+
+<Note>
+
+`media_links.original` を含め、ユーザーに該当プロジェクト内のファイルをダウンロードする権限がない場合、このエンドポイントは `403 Forbidden` エラーを返します。このユーザーにはウォーターマークが必須であり、リクエストされた media_links がそれに対応していないためにコンテンツにアクセスできない場合、リクエストは成功しますが、対応していないメディアリンクは null に設定されます。同様に、リクエストされたトランスコードリンクが特定のファイルに存在しない場合(例: 静止画像ファイルに対して `media_links.video_h264_180` を含める場合)や、トランスコード処理が完了していない場合(つまり、ファイルのステータスが「transcoded」ではなく「uploaded」の場合)も、レスポンスペイロード内のメディアリンクは null に設定されます。つまり、クライアントは null のメディアリンクを適切に処理する必要があります。
+
+</Note>
+
+.
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksIndexRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.show(...) -> AsyncHttpResponse[VersionStackWithIncludesResponse]">
+
+バージョンスタックの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.copy(...) -> AsyncHttpResponse[VersionStackCopyResponse]">
+
+バージョンスタックをコピーします。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+現在、Adobe ストレージをバックエンドとするプロジェクト間でのバージョンスタックのコピーはサポートされていません。これらのプロジェクトでバージョンスタックをコピーするには、現時点では、バージョンスタック内の個々のファイルをコピーしてから再スタックする方法がサポートされています。
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    data=VersionStackCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`copy_metadata`: typing.Optional\[bool\] — バージョンスタックと一緒にメタデータの値をコピーするかどうか
+
+`data`: typing.Optional\[VersionStackCopyParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.list(...) -> AsyncHttpResponse[VersionStacksWithIncludesResponse]">
+
+指定したフォルダー内のバージョンスタックを一覧表示します。<br />
+レート制限: account_user あたり 1 秒ごとに 5 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksListRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.create(...) -> AsyncHttpResponse[VersionStackWithIncludesResponse]">
+
+親フォルダーの下に新しいバージョンスタックを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=VersionStackCreateParamsData(
+        file_ids=[
+            "dd2a3cdd-fc90-41bd-a7b8-8a0447aec6d4",
+            "79fed48a-8372-496e-8dcb-5e959b9b9fcf",
+        ],
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: VersionStackCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.move(...) -> AsyncHttpResponse[VersionStackResponse]">
+
+バージョンスタックをフォルダーに移動します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=VersionStackMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`data`: VersionStackMoveParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Webhook {#webhooks}
+
+<AccordionGroup>
+
+<Accordion title="client.webhooks.index(...) -> AsyncPager[WebhookWithIncludes, WebhooksWithIncludesResponse]">
+
+指定したワークスペースの Webhook を一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.webhooks.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.webhooks.create(...) -> AsyncHttpResponse[WebhookCreateResponse]">
+
+シークレット付きの Webhook を 1 つ作成します。
+
+有効なイベント:
+
+`file.created`,<br />
+`file.deleted`,<br />
+`file.ready`,
+`file.updated`,
+`file.upload.completed`,
+`file.versioned`,
+`file.copied`,
+`folder.created`,
+`folder.deleted`,
+`folder.updated`,
+`folder.copied`,
+`comment.completed`,
+`comment.created`,
+`comment.deleted`,
+`comment.uncompleted`,
+`comment.updated`,
+`customfield.created`,
+`customfield.updated`,
+`customfield.deleted`,
+`metadata.value.updated`,
+`project.created`,
+`project.deleted`,
+`project.updated`,
+`collection.created`,
+`collection.updated`,
+`collection.deleted`,
+`share.created`,
+`share.updated`,
+`share.deleted`,
+`share.viewed`.
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.webhooks import WebhookCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WebhookCreateParamsData(
+        events=[
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name="New Webhook",
+        url="https://url.example.com",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`data`: WebhookCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.webhooks.show(...) -> AsyncHttpResponse[WebhookWithIncludesResponse]">
+
+Webhook の詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.webhooks.delete(...) -> AsyncHttpResponse[None]">
+
+Webhook を削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.webhooks.update(...) -> AsyncHttpResponse[WebhookResponse]">
+
+Webhook の詳細を更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.webhooks import WebhookUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WebhookUpdateParamsData(
+        active=True,
+        events=[
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name="Updated Webhook",
+        url="https://url.example.com",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`data`: WebhookUpdateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ワークスペース権限 {#workspace-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.workspace_permissions.index(...) -> AsyncPager[UserRole, UserRolesResponse]">
+
+指定したワークスペースのユーザーロールを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.workspace_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include_deactivated`: `typing.Optional[bool]` — レスポンスに無効化されたユーザーを含めることをサポートします。デフォルトは false です。
+
+`sort`: `typing.Optional[WorkspacePermissionsIndexRequestSort]` — クエリパラメーターでユーザーを並べ替えます
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.workspace_permissions.workspace_user_roles_delete(...) -> AsyncHttpResponse[None]">
+
+指定したワークスペースからユーザーを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspace_permissions.workspace_user_roles_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.workspace_permissions.workspace_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+ユーザーがすでにワークスペースに追加されている場合は、指定したワークスペースのユーザーロールを更新します。ユーザーがワークスペースに追加されていない場合は、指定したロールでユーザーが追加されます。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspace_permissions.workspace_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid`—
+
+`user_id`: `Uuid` —
+
+`data`: `UpdateUserRolesParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### ワークスペース {#workspaces}
+
+<AccordionGroup>
+
+<Accordion title="client.workspaces.show(...) -> AsyncHttpResponse[WorkspaceWithIncludesResponse]">
+
+ワークスペースの詳細を表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.workspaces.delete(...) -> AsyncHttpResponse[None]">
+
+アカウントからワークスペースを削除します。<br />
+レート制限: account_user あたり 1.00 分ごとに 60 回
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.workspaces.update(...) -> AsyncHttpResponse[WorkspaceResponse]">
+
+ワークスペースを更新します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+
+from frameio import Frameio, WorkspaceParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WorkspaceParamsData(
+        name="My Workspace",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`data`: WorkspaceParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.workspaces.index(...) -> AsyncPager[WorkspaceWithIncludes, WorkspacesWithIncludesResponse]">
+
+指定したアカウントのワークスペースを一覧表示します。<br />
+レート制限: account_user あたり 1.00 分ごとに 100 回
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.workspaces.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“owner”\]\] —
+
+`sort`: typing.Optional\[WorkspacesIndexRequestSort\] — クエリパラメーターでワークスペースを並べ替えます
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+ページネーションされた結果を返すリクエスト用の不透明なカーソルのクエリパラメーター。
+
+<Tip>
+
+この値は自動生成され、前のレスポンスのリンクの一部として含まれます。人間が読むことを想定したものではありません。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+<Accordion title="client.workspaces.create(...) -> AsyncHttpResponse[WorkspaceResponse]">
+
+アカウントにワークスペースを作成します。<br />
+レート制限: account_user あたり 1.00 分ごとに 10 回
+
+```python title="usage"
+from frameio import Frameio, WorkspaceParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WorkspaceParamsData(
+        name="My Workspace",
+    ),
+)
+```
+
+**パラメーター**
+
+`account_id`: Uuid —
+
+`data`: WorkspaceParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — リクエスト固有の設定。
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+### PyPI {#pypi}
+
+<Info>
+
+[PyPI](https://pypi.org/project/frameio/) で表示
+
+</Info>
+
+---

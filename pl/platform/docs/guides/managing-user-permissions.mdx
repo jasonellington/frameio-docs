@@ -1,0 +1,385 @@
+---
+title: "Zarządzanie uprawnieniami użytkowników"
+---
+
+Ten przewodnik wyjaśnia, jak zarządzać uprawnieniami użytkowników za pomocą Frame.io V4 API. Opisuje, jak działają uprawnienia na poziomie konta (Account), Workspace i projektu (Project), a także których endpointów używać na każdym z tych poziomów.
+
+---
+
+## Poziomy uprawnień {#permission-levels}
+
+Uprawnieniami we Frame.io zarządza się na poziomie konta, Workspace i projektu. Każdy poziom ma własny zestaw ról:
+
+```
+Account 
+│
+├── (admin)  - full access to all Workspaces, Projects, and Restricted Projects
+│
+└── (member)
+        │
+        ├── Workspace - (full_access | editor | edit_only | commenter | viewer)
+        │       │
+        │       └── Project - (full_access | editor | edit_only | commenter | viewer)
+        │
+        └── Restricted Project - (members require direct invite)
+```
+
+Każdy użytkownik ma rolę w koncie. Za pomocą API możesz ustawić rolę użytkownika na <Tooltip tip="W odpowiedziach API mogą pojawiać się role Owner i Reviewer, ale nie można ich konfigurować za pomocą API. Więcej szczegółów znajdziesz w sekcji Uprawnienia na poziomie konta.">`admin` lub `member`.</Tooltip>
+Account Admins mają pełny dostęp do wszystkich Workspaces i projektów. Account Members mogą być selektywnie dodawani do potrzebnych im Workspaces i projektów.
+
+Gdy dodajesz Account Member do Workspace, przypisany poziom uprawnień (`full_access`, `editor`, `edit_only`, `commenter` lub `viewer`) obowiązuje we wszystkich istniejących i przyszłych projektach w tym Workspace. Na przykład jeśli dodasz Account Member jako `viewer`, będzie on miał uprawnienia `viewer` za każdym razem, gdy uzyska dostęp do dowolnego projektu w tym Workspace.
+
+Tego samego Account Member można dodać do konkretnego projektu w tym Workspace jako `editor`. W rezultacie za każdym razem, gdy uzyska dostęp do tego projektu, będzie miał uprawnienia `editor`. Jego uprawnienia `viewer` nadal obowiązują we wszystkich pozostałych projektach w tym Workspace.
+
+Ponieważ przypisania do projektów są niezależne od przypisań do Workspace, jeśli usuniesz tego Account Member z Workspace, zachowa on uprawnienia `editor` do tego jednego projektu.
+
+Wyjątkiem są Restricted Projects. Account Members zawsze potrzebują bezpośredniego zaproszenia. Więcej informacji znajdziesz w sekcji Uprawnienia na poziomie projektu poniżej.
+
+## Uprawnienia na poziomie konta {#account-level-permissions}
+
+Każdy użytkownik w Twoim koncie ma rolę:
+
+| Rola | Uprawnienia | Konfigurowalna przez API | Endpoint |
+| --- | --- | --- | --- |
+| Owner | Pełny dostęp do wszystkich Workspaces i projektów. Jeden na konto | Nie | — |
+| <Tooltip tip="W interfejsie oznaczona jako 'Content Admin'">`admin`</Tooltip> | Pełny dostęp do wszystkich Workspaces i projektów | Tak | `PATCH /accounts/:account_id/users/:user_id` |
+| `member` | Uprawnienia ustawiane na poziomie Workspace i/lub projektu | Tak | `PATCH /accounts/:account_id/users/:user_id` |
+| Reviewer | Dostęp wyłącznie przez linki udostępniania. Tworzony, gdy użytkownik zostanie dodany do bezpiecznego udostępnienia (secure share) | <Tooltip tip="Reviewerzy pojawiają się na listach użytkowników konta, ponieważ uwierzytelniają się we Frame.io, ale istnieją poza systemem uprawnień Workspace i projektów. Uzyskują dostęp do treści wyłącznie przez bezpieczne linki udostępniania.">Nie</Tooltip> | — |
+
+---
+
+Account Admins mają pełny dostęp wszędzie. Aby ograniczyć dostęp administratora do określonych zasobów, najpierw zmień jego rolę w koncie na Member, a następnie dodaj go do potrzebnych mu Workspaces lub projektów.
+
+Na przykład:
+
+<Steps>
+
+<Step title="Wyświetl listę ról użytkowników konta, aby znaleźć ID użytkownika i potwierdzić jego bieżącą rolę:">
+
+```bash
+
+curl https://api.frame.io/v4/accounts/:account_id/users \
+     -H "Authorization: Bearer <token>"
+```
+
+</Step>
+
+<Step title="Zmień rolę w koncie na Member:">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/users/:user_id \
+ -H "Authorization: Bearer <token>" \
+ -H "Content-Type: application/json" \
+ -d '{
+"data": {
+"role": "member"
+}
+}'
+```
+
+</Step>
+
+<Step title="Dodaj użytkownika do projektu:">
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+"data": {
+ "role": "edit_only"
+}
+}'
+```
+
+</Step>
+
+</Steps>
+
+### Endpointy uprawnień konta {#account-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="Lista ról użytkowników konta">
+
+<CardGroup cols={2}>
+
+<Card title="Lista ról użytkowników konta" icon="list" iconType="solid">
+
+<br />
+
+Wyświetla listę użytkowników danego konta wraz z ich danymi (ID, imię i nazwisko, e-mail) oraz rolą w koncie.
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/users`
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/account-permissions/account-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Aktualizacja roli użytkownika">
+
+<CardGroup cols={2}>
+
+<Card title="Aktualizacja roli użytkownika" icon="pen-to-square" iconType="solid">
+
+<br />
+
+Aktualizuje rolę użytkownika w koncie. Jest to obecnie endpoint eksperymentalny.
+
+<br /><br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/users/:user_id`
+
+<br />
+
+[Dokumentacja](https://developer.frame.io/platform/v4-experimental/api-reference/account-permissions/developer-api-web-experimental-account-user-roles-controller-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Uprawnienia na poziomie Workspace {#workspace-level-permissions}
+
+Gdy dodajesz Account Member do Workspace, otrzymuje on dany poziom uprawnień we wszystkich projektach w tym Workspace. Do Workspaces można dołączyć wyłącznie na zaproszenie, więc Account Members widzą tylko te Workspaces, do których zostali dodani.
+
+<br />
+
+| Rola | Uprawnienia |
+| --- | --- |
+| `full_access` | Przesyłanie, zarządzanie, udostępnianie, komentowanie, wyświetlanie, pobieranie, zarządzanie ustawieniami i zapraszanie użytkowników |
+| `editor` | Przesyłanie, zarządzanie, udostępnianie, komentowanie, wyświetlanie, pobieranie |
+| `edit_only` | Przesyłanie, zarządzanie, komentowanie, wyświetlanie. Brak możliwości udostępniania i pobierania |
+| `commenter` | Wyświetlanie i komentowanie |
+| `viewer` | Tylko wyświetlanie |
+
+<br />
+
+### Endpointy uprawnień Workspace {#workspace-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="Lista ról użytkowników Workspace">
+
+<CardGroup cols={2}>
+
+<Card title="Lista użytkowników" icon="list" iconType="solid">
+
+<br />
+
+Wyświetla listę użytkowników mających dostęp do danego Workspace wraz z ich danymi (ID, imię i nazwisko, e-mail) oraz rolą.
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users`
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/workspace-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Aktualizacja ról użytkowników">
+
+<CardGroup cols={2}>
+
+<Card title="Aktualizacja roli użytkownika" icon="pen-to-square" iconType="solid">
+
+<br />
+
+Modyfikuje rolę użytkownika w danym Workspace. Jeśli użytkownik został już dodany do Workspace, jego rola zostanie zaktualizowana; w przeciwnym razie zostanie on dodany z podaną rolą.
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/workspace-permissions/workspace-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Usuwanie użytkownika">
+
+<CardGroup cols={2}>
+
+<Card title="Usuwanie użytkownika" icon="xmark" iconType="solid">
+
+<br />
+
+Usuwa użytkownika z danego Workspace
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/workspaces/:workspace_id/users/:user_id`
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/workspace-permissions/workspace-user-roles-delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Uprawnienia na poziomie projektu {#project-level-permissions}
+
+Projekty korzystają z tych samych poziomów uprawnień co Workspaces. Dodaj użytkownika bezpośrednio do projektu, gdy potrzebuje dostępu tylko do tego konkretnego projektu lub gdy potrzebuje innego poziomu uprawnień niż wynikający z przypisania do Workspace. Użytkownicy nie potrzebują dostępu do Workspace, aby zostać dodanymi do projektu.
+
+<br />
+
+| Rola | Uprawnienia |
+| --- | --- |
+| `full_access` | Przesyłanie, zarządzanie, udostępnianie, komentowanie, wyświetlanie, pobieranie, zarządzanie ustawieniami i zapraszanie użytkowników |
+| `editor` | Przesyłanie, zarządzanie, udostępnianie, komentowanie, wyświetlanie, pobieranie |
+| `edit_only` | Przesyłanie, zarządzanie, komentowanie, wyświetlanie. Brak możliwości udostępniania i pobierania |
+| `commenter` | Wyświetlanie i komentowanie |
+| `viewer` | Tylko wyświetlanie |
+
+<br />
+
+**Przykład: dodawanie użytkownika do projektu**
+
+```bash
+
+curl -X PATCH https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+  "data": {
+    "role": "full_access"
+  }
+}'
+```
+
+---
+
+### Restricted Projects {#restricted-projects}
+
+Restricted Projects wymagają bezpośredniego zaproszenia. Dostęp do Workspace nie jest przenoszony,
+więc użytkownicy mogą uzyskać dostęp do Restricted Project tylko wtedy, gdy zostali do niego dodani bezpośrednio.
+
+Aby przyznać dostęp członkowi (Member), dodaj go do projektu z odpowiednim poziomem uprawnień.
+
+<Note>
+
+Wyjątkiem są Account Admins i Owners, którzy mają dostęp do wszystkich
+Restricted Projects.
+
+</Note>
+
+### Endpointy uprawnień projektu {#project-permissions-endpoints}
+
+<Tabs>
+
+<Tab title="Lista ról użytkowników projektu">
+
+<CardGroup cols={2}>
+
+<Card title="Lista ról użytkowników projektu" icon="list" iconType="solid">
+
+<br />
+
+Wyświetla listę użytkowników mających dostęp do danego projektu wraz z ich danymi (ID, imię i nazwisko, e-mail) oraz rolą.
+
+<br />
+
+`GET` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users`
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/project-permissions/index)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Aktualizacja ról użytkowników">
+
+<CardGroup cols={2}>
+
+<Card title="Aktualizacja ról użytkowników" icon="pen-to-square" iconType="solid">
+
+<br />
+
+Modyfikuje rolę użytkownika w danym projekcie. Jeśli użytkownik został już dodany do projektu, jego rola zostanie zaktualizowana; w przeciwnym razie zostanie on dodany z podaną rolą.
+
+<br />
+
+`PATCH` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id `
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/project-permissions/project-user-roles-update)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+<Tab title="Usuwanie użytkownika">
+
+<CardGroup cols={2}>
+
+<Card title="Usuwanie użytkownika" icon="xmark" iconType="solid">
+
+<br />
+
+Usuwa użytkownika z danego projektu
+
+<br />
+
+`DEL` `https://api.frame.io/v4/accounts/:account_id/projects/:project_id/users/:user_id`
+
+<br />
+
+[Dokumentacja](/pl/platform/api-reference/project-permissions/delete)
+
+</Card>
+
+</CardGroup>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Zasoby {#resources}
+
+Dodatkowe materiały, które mogą okazać się pomocne:
+
+- [Forum deweloperów](https://forum.frame.io/) Frame.io to miejsce, w którym programiści mogą zadawać pytania, dzielić się opiniami i rozmawiać o tym, co tworzą
+- [Artykuł w Centrum pomocy](https://help.frame.io/en/articles/9875389-user-roles-and-permissions) na temat ról i uprawnień użytkowników
+- [Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html#prefer-attribute-and-relationship-based-access-control-over-rbac) OWASP, zawierający dodatkowe informacje o kontroli dostępu opartej na relacjach i atrybutach

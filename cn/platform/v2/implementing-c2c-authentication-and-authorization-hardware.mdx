@@ -1,0 +1,286 @@
+---
+title: "操作指南：授权（硬件）"
+sidebarTitle: "操作指南 - 授权（硬件）"
+---
+
+## 简介 {#introduction}
+
+在本指南中，我们将学习如何在 [Frame.io](http://frame.io/) 项目上对 Camera to Cloud（C2C）硬件设备进行身份验证和授权。我们将介绍使用手动输入代码的传统配对方法，以及可提升用户体验的全新二维码配对方法。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果你还没有阅读"开始实施之前"指南，请在继续之前快速浏览一下！
+
+此外，你应该已经从我们团队收到一个 `client_secret`，用于标识你的集成。如果你还没有收到 `client_secret`，请查看这篇 C2C 生态系统简介，并联系我们的团队。
+
+### 二维码配对的前提条件 {#prerequisites-for-qr-code-pairing}
+
+开始使用二维码配对之前，请确保满足以下前提条件：
+
+- **功能标志激活**：你的 [Frame.io](http://frame.io/) 账户中必须启用特定的功能标志（`v4.c2c_qr_code_activate`）。此功能标志将允许使用基于二维码的配对方法。你指定的 [Frame.io](http://frame.io/) 联系人可以协助你为所选账户开启此功能。
+- **相机兼容性**：确保你的相机硬件已更新，能够在设备配对过程中支持生成二维码。
+
+## 演练硬件身份验证流程 {#walking-through-the-hardware-auth-flow}
+
+首先，让我们从宏观上了解一下要实现的授权流程所预期的用户体验。请查看以下资源，从用户的角度了解这一流程：
+
+- 关于如何添加新硬件设备的支持文章。
+- 关于如何授权 Teradek Cube 的培训视频。
+
+硬件授权流程的设计目标是尽可能减轻实施者的负担，从而简化设备 UI。使用此流程，你无需操心：
+
+- 重定向到 Web 浏览器。
+- 处理 [Frame.io](http://frame.io/) 用户登录/身份验证。
+- 列出/选择要连接的账户和项目。
+- 除基本信息显示之外的任何 UI 元素。
+
+### 通过二维码配对提升用户体验 {#enhancing-the-user-experience-with-qr-code-pairing}
+
+随着人们对效率和易用性的需求不断增长，用户越来越期望与设备进行无缝交互。目前将相机与 Frame.io C2C 服务配对的流程需要多个步骤，其中包括手动输入配对码。这一流程虽然可行，但仍有简化空间。
+
+借助二维码（类似于 Netflix 或 Disney+ 等流媒体服务中的设备配对体验），我们可以简化流程，消除手动输入导致的错误，并缩短配对相机所需的时间。
+
+## 设备标识（client_id） {#device-identification-client_id}
+
+连接到 Camera to Cloud 时，每台物理硬件设备都需要唯一地标识自己，以便我们在用户的项目中列出设备连接。
+
+对于硬件设备，我们将其称为设备的 `client_id`，具体取决于你选择使用的授权模式。在设置你的实现时，你应该考虑好如何生成它。你可以使用硬件设备的序列号、UUID 或某个唯一标识字符串。
+
+注意不要泄露个人身份信息。例如，用户的电子邮件地址不能用作 `client_id`。
+
+同样，请确保该唯一标识符归你所有。例如，如果你以软件设备的形式实现 C2C API，请不要使用设备的 MAC 地址。MAC 地址并不归你的软件所有，而且也可能被视为个人身份信息。
+
+如果你不确定要使用什么值，我们可以一起讨论这个选择，确保选定一个合适的值，让集成尽可能简单。
+
+## 第 1 步：请求设备代码 {#step-1-requesting-a-device-code}
+
+我们开始实施吧。首先需要请求一个设备代码，以便为设备提供给用户。我们通过调用 `/v2/auth/device/code` 端点来完成此操作：
+
+### 传统配对方法 {#traditional-pairing-method}
+
+```
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'scope=asset_create offline' \
+    | python -m json.tool
+```
+
+### 启用二维码配对 {#enabling-qr-code-pairing}
+
+要启用基于二维码的配对，需要对 API 调用稍作修改。具体来说，需要在设备代码请求中添加两个新的标头。这使设备能够直接链接到配对页面，从而简化配对流程。
+
+```
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --header "x-client-version: 2.0.0" \
+    --header "x-client-platypus-enabled: true" \  # New header to enable QR code
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'scope=asset_create offline' \
+    | python -m json.tool
+```
+
+**注意：** 这里我们使用的是表单数据而不是 JSON 数据。C2C 身份验证端点仅接受表单数据。完成身份验证后，其他端点会接受 JSON payload，但如果向身份验证端点发送 JSON payload，它们将返回错误。
+
+#### Payload 参数 {#payload-parameters}
+
+- **client_id**：物理硬件设备的唯一标识符。必须保证此值对该设备是唯一的。它可以是序列号或随机生成的 UUID。
+- **client_secret**：由 [Frame.io](http://frame.io/) 支持团队签发给你，用于标识你的设备型号。此值应对用户保密，并应加密存储。
+- **scope**：我们请求的权限，以空格分隔。硬件设备只能请求以下两个 scope：
+- `asset_create`：允许设备创建和上传 Asset。
+- `offline`：允许设备使用刷新令牌自行刷新授权。授权令牌会在 8 小时后过期，因此如果没有此 scope，用户每 8 小时就需要重新授权一次设备。
+
+实际上，设备几乎总是需要同时请求这两个 scope。
+
+### 了解 API 响应 {#understanding-the-api-response}
+
+发出请求后，我们会收到类似以下的响应：
+
+#### 传统配对响应 {#traditional-pairing-response}
+
+```
+{
+  "device_code": "[device_code]",
+  "expires_in": 120,
+  "interval": 5,
+  "name": "MyDevice-[client_id]",
+  "user_code": "573131"
+}
+```
+
+#### 二维码配对响应 {#qr-code-pairing-response}
+
+```
+{
+  "device_code": "[device_code]",
+  "expires_in": 120,
+  "interval": 5,
+  "name": "MyDevice-[client_id]",
+  "user_code": "573131",
+  "verification_uri": "https://next.frame.io/pair",
+  "verification_uri_complete": "https://next.frame.io/pair/573131"
+}
+```
+
+#### 响应详解 {#response-breakdown}
+
+- **device_code**：设备代码应对用户隐藏，用于在轮询用户是否已成功输入代码时标识此授权请求。
+- **expires_in**：距离此代码过期的秒数。
+- **interval**：两次轮询请求（检查用户是否已输入代码）之间应等待的时长。
+- **name**：我们尝试连接的设备名称。
+- **user_code**：用户将在 [Frame.io](http://frame.io/) 中输入的六位数代码，用于将设备与项目配对。
+- **verification_uri**：在未扫描二维码的情况下，用户需手动输入的 URL。它应简洁且易于记忆。
+- **verification_uri_complete**：此 URL 包含配对码，用于非文本形式的传递（例如二维码）。扫描后，它会自动将用户引导至配对界面，以选择要将设备连接到的账户和项目。
+
+### 向用户显示二维码 {#displaying-the-qr-code-to-the-user}
+
+现在我们有了 `verification_uri_complete`，就可以根据此 URL 生成二维码，并在设备屏幕上显示给用户。这样用户只需用移动设备或相机扫描二维码即可，从而简化配对流程。
+
+#### 示例：显示二维码的相机屏幕 {#example-camera-screen-with-qr-code-displayed}
+
+*在此插入显示二维码的相机屏幕图片或插图。*
+
+如果用户由于任何原因无法扫描二维码，你还必须显示 `user_code` 和 `verification_uri`，以便用户作为备用方案手动输入配对码。或者，你也可以将 `verification_uri` 显示为静态二维码，供用户使用移动设备扫描。
+
+如果你的集成是移动设备上的应用，则必须将 `verification_uri_complete` 显示为可供用户点击的超链接，以便轻松连接，因为用户无法用运行该应用的设备扫描二维码。
+
+## 第 2 步：轮询用户授权 {#step-2-polling-for-user-authorization}
+
+将配对码交给用户或向用户显示二维码后，我们需要检查用户是否已输入代码。为此，我们可以发起以下请求：
+
+```
+curl -X POST https://api.frame.io/v2/auth/token \
+    --form 'client_id=[client_id]' \
+    --form 'device_code=[device_code]' \
+    --form 'grant_type=urn:ietf:params:oauth:grant-type:device_code' \
+    | python -m json.tool
+```
+
+### Payload 参数 {#payload-parameters-1}
+
+- **client_id**：与第 1 步中发送的 `client_id` 相同。
+- **device_code**：`/v2/auth/device/code` 返回的 `device_code`。
+- **grant_type**：我们的 OAuth 系统所签发的授权许可类型。此值始终为 `urn:ietf:params:oauth:grant-type:device_code`。
+
+前几次发起此请求时，我们很可能会收到如下响应：
+
+```
+{
+  "error": "authorization_pending"
+}
+```
+
+不过别担心！这并不是致命错误，只是说明用户尚未在 Frame.io 的 UI 中输入用户代码。我们只需继续轮询，直到用户输入为止。
+
+如果我们收到的是如下错误：
+
+```
+{
+  "error": "expired_token"
+}
+```
+
+这说明代码在用户输入之前就已过期。在这种情况下，我们应按照第 1 步生成新的配对码或二维码，将其显示给用户，然后继续轮询。
+
+最终，我们应该会收到类似以下的响应：
+
+```
+{
+  "access_token": "[access_token]",
+  "expires_in": 28800,
+  "refresh_token": "[refresh_token]",
+  "token_type": "bearer"
+}
+```
+
+如果你的响应 payload 看起来像上面这样：恭喜！你已经授权了你的第一台 Camera to Cloud 设备。花点时间庆祝一下吧！
+
+庆祝完毕后，我们来看看这个响应 payload，确保理解其内容：
+
+- **access_token**：这是你访问 [Frame.io](http://frame.io/) 后端其余部分的密钥。在这些教程中，我们需要将其添加到后续所有请求的标头中。
+- **expires_in**：距离 `access_token` 过期的秒数。令牌到期后需要刷新，我们将在后续教程中介绍。
+- **refresh_token**：可用于管理 `access_token` 的令牌。它最常用于刷新授权，但也可用于撤销授权。
+- **token_type**：对于 C2C API 始终为 `bearer`，无需处理。
+
+## 整合所有步骤 {#putting-the-steps-together}
+
+现在我们已经知道需要进行哪些调用，接下来将它们整合到一段类似 Python 的伪代码中。请记住，设备代码有可能过期，因此在设计逻辑时需要处理这种情况：
+
+```python title="Python"
+def authorize_with_frame():
+    """
+    Handles authorizing our device with Frame.io.
+    """
+
+    # Our client ID can be a serial number, UUID, or some other unique string.
+    client_id = THIS_DEVICE.get_serial_number()
+
+    while True:
+        # Make the call to Frame.io to get our device codes.
+        pairing_codes = c2c.get_device_codes(client_id)
+
+        # We need to keep track of how long we have been polling for
+        polling_started = datetime.now()
+
+        # Now we are going to poll for authorization until the user enters the code.
+        while True:
+
+            # Re-write this output each time we poll. Note: This message will only update once
+            # per `interval` (e.g., 5 seconds), so if a smooth countdown is desired, that will
+            # need a different implementation.
+            print(
+                f"\rPAIRING CODE: {pairing_codes.user_code}, "
+                f"EXPIRES IN: {pairing_codes.expires_in - (datetime.now() - polling_started).seconds} seconds"
+            )
+
+            # Wait for `interval` before polling each time.
+            sleep(pairing_codes.interval)
+
+            # Make a call to Frame.io to see if the user has entered the code and authorized
+            # the device.
+            authorization, error = c2c.poll_for_authorization(
+                client_id, pairing_codes.device_code
+            )
+
+            if error and error.message == "authorization_pending":
+                # If the authorization is pending, try again.
+                continue
+            elif error and error.message == "expired_token":
+                # If the pairing codes have expired, break to generate new codes.
+                break
+            elif error:
+                # If we get another error, we should raise it. (advanced error handling will
+                # be covered in another tutorial)
+                raise Exception(error.message)
+
+            return authorization
+```
+
+**注意：** 在这段伪代码中，我们添加了一个外层循环，用于处理配对码过期、需要请求新配对码的情况。
+
+最后，我们应从 [Frame.io](http://frame.io/) 获取所连接项目的信息并显示给用户，作为额外一层确认，以确保设备已配对到预期的项目。我们将在下一篇教程中演示这一点。
+
+## 故障排除 {#troubleshooting}
+
+如果你来到了这里，说明出了点问题！与第三方集成怎么可能不遇到错误呢？本节列出了一些常见问题，并将引导你完成最有可能解决这些问题的步骤。请浏览以下列表，看看是否有与你遇到的问题相符的情况。
+
+如果你在这里没有找到解决方案，我们很希望了解你遇到的问题，以便将其补充到这里。
+
+- **我看不到"Connect Device"按钮**：如果你进入 C2C 管理面板后没有看到"Connect Device"按钮，可能是以下两种情况之一：
+- ~~**你的账户未启用 C2C**：如果屏幕为空白，并显示一条有关你的账户无法使用 C2C 的消息，则需要账户管理员在账户设置中为你的项目启用该功能。~~
+- **你不是设备管理员**：如果屏幕为空白，并显示一条有关没有权限的消息，则需要账户管理员更改允许连接 C2C 设备的权限设置，或将你添加到具有这些权限的角色中。
+- **你已经连接了一台设备**：连接第一台设备后，蓝色的大"Add New Device"按钮会消失，你需要改为前往 C2C Connections 面板右上角的三点菜单。
+- **Invalid Client 错误**：当你向我们提供的设备信息与我们登记在案的任何信息都不匹配时，会返回 `invalid_client`。这很可能意味着你的 `client_secret` 不正确。
+- **Bad Request 错误**：当请求数据格式有误时，会返回 `bad_request`。请仔细检查是否拼错了字段名，或遗漏了必填字段。
+
+## 下一步 {#next-up}
+
+如果你还没有联系我们的团队，我们建议你先与我们联系，然后继续阅读下一篇指南：LINK。我们期待你的来信！
+
+---
+
+## 待办事项 {#parking-lot}
+
+待办
+为无法生成动态二维码的合作伙伴添加应急方案
+即让他们显示"前往 `**verification_uri**` 输入此代码"作为备用方案

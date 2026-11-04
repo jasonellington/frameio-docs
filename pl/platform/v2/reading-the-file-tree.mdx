@@ -1,0 +1,185 @@
+---
+title: "Odczytywanie drzewa plików"
+---
+
+## Przegląd {#overview}
+
+Niezależnie od tego, czy ostatecznym celem jest publikacja, edycja czy przeprowadzanie zasobów (Assets) przez kolejne etapy przepływu pracy, wiele głębszych integracji z Frame.io wymaga wylistowania kontekstu użytkownika, a ostatecznie — widoku katalogów.
+
+Oto podstawowa hierarchia zasobów (lub plików) w Frame.io:
+
+#### Account > Team > Project > Assets {#account->-team->-project->-assets}
+
+W tym artykule wyjaśniono, jak pracować z drzewem plików, wykonując kolejne wywołania API.  Typowa strategia pracy z plikami polega na tym, aby najpierw uzyskać dostęp do projektu (Project), wylistować foldery, a następnie pracować z zawartymi w nich zasobami i stosami wersji (Version Stacks).
+
+## Ważne pojęcia {#important-concepts}
+
+### Każdy projekt ma unikalny zasób główny {#every-project-has-a-unique-root-asset}
+
+Interfejsy API typu RESTful zazwyczaj opisują zasoby za pomocą unikalnych identyfikatorów; `root_asset_id` to unikalny identyfikator drzewa zasobów projektu. Traktuj go jako specjalną konstrukcję pełniącą rolę węzła głównego projektu: pozostałe zasoby układają się pod nim w drzewo skierowane w dół.
+![root-asset-id](/images/platform/v2/reading-the-file-tree/ea24ed6ff53d93cf1dab9e154c289f816238abca823e8127f367cdee1eb2a8cc.webp)
+W typowych przepływach pracy użytkownicy API muszą schodzić w dół drzewa, aby pracować z zasobami położonymi głębiej w hierarchii plików.
+
+### Współpracownicy i udostępnione projekty {#collaborators-and-shared-projects}
+
+**Współpracownik** (Collaborator) to jedna z kluczowych ról użytkowników w Frame.io: tacy użytkownicy mają dostęp do obszaru roboczego projektu, ale mogą nie należeć do nadrzędnego konta (Account) tego projektu.
+
+Pomijając odrębne uprawnienia [współpracowników i członków zespołu](https://support.frame.io/en/articles/6067-difference-between-team-members-vs-collaborators), główna różnica polega na tym, że *członkostwo współpracownika dotyczy wyłącznie projektu i może nie mieć żadnego związku z zespołem*.
+
+Powoduje to pewną komplikację w przepływach pracy, w których kluczowe znaczenie ma listowanie katalogów.  Choć powyższa podstawowa hierarchia (Account > Team > Project > Assets) sprawdzi się w większości przypadków, nie obejmie projektów, w których uwierzytelniony użytkownik jest współpracownikiem, ale nie członkiem zespołu (Team Member).  Aby obejść ten problem podczas listowania katalogów, możesz:
+
+- Pobrać udostępnione projekty użytkownika, rozpakować hierarchię zespołów i kont i połączyć wszystko razem, lub
+- Pobrać udostępnione projekty użytkownika i wylistować je razem jako osobny kontekst.
+
+Obie metody są w porządku; druga jest nieco łatwiejsza, ale pierwsza jest bliższa temu, jak podobne informacje prezentuje aplikacja webowa Frame.io. W każdym razie metody opisane w tym przewodniku mają zastosowanie w obu przypadkach.
+
+## Listowanie katalogu {#listing-a-directory}
+
+### 1. Pobierz konta użytkownika {#1-fetch-the-user’s-accounts}
+
+`GET https://api.frame.io/v2/accounts`
+
+Wykonaj powyższe wywołanie z prawidłowym tokenem typu bearer, aby pobrać konta użytkownika.  Otrzymasz każde konto, na którym użytkownik ma status Team Member, Team Manager lub Admin.  Możesz także otrzymać zespoły, do których użytkownik ma uprawnienia rozliczeniowe/administracyjne, ale nie ma dostępu do zespołu — zdarza się to jednak rzadko i zostanie odfiltrowane w następnym kroku.
+
+Ładunek odpowiedzi na żądanie dotyczące kont jest dość obszerny, oto podsumowanie ważnych danych, które warto z niego pobrać:
+
+- `id`
+- `display_name`
+- `owner` (`email`, `name`)
+- (opcjonalnie) `image`
+
+<Info>
+
+**Obrazy kont to tymczasowe adresy URL**
+
+*Uwaga:* obraz konta zwracany przez nasze API jest wstępnie podpisanym kluczem S3, więc zwrócony adres URL „wygaśnie” po mniej więcej jednym dniu. Aby to obejść, pobieraj obraz ponownie przy każdym uruchomieniu usługi lub — najlepiej — przechowuj go lokalnie.
+
+</Info>
+
+Pamiętaj, że `id` i `owner.email` to jedyne wymagane pola konta użytkownika.  Jeśli wyświetlasz użytkowników w innej aplikacji, rozważ napisanie logiki warunkowej do prezentowania kont użytkowników. Zalecamy sprawdzenie i, jeśli wartość nie jest *null*, wyświetlenie konta w następującej kolejności preferencji:
+
+1. „`display_name`”
+2. „Konto `owner.name`”
+3. „Konto `owner.email`”
+
+Gdy użytkownik wybierze konto, zapewne zechcesz wyświetlić zespoły, co wymaga dodatkowego żądania API.
+
+### 2. Pobierz zespoły w ramach konta {#2-fetch-teams-within-the-account}
+
+`GET https://api.frame.io/v2/accounts/{{account_id}}/teams`
+
+Zespoły w Frame.io mogą być „publiczne” (tj. widoczne dla każdego członka zespołu na koncie) lub „prywatne” (widoczne tylko dla określonych członków zespołu).  API obsłuży ten kontekst za Ciebie, więc wystarczy wykonać prawidłowe wywołanie, podając `account_id` w powyższym żądaniu.
+
+<Info>
+
+**Nie zapomnij o paginacji**
+
+Choć mało prawdopodobne jest, by użytkownik należał do więcej niż kilku kont, liczba zespołów może szybko rosnąć. Limity liczby żądań API Frame.io są dość wysokie, ale zawsze warto sprawdzać nagłówki odpowiedzi i w razie potrzeby stosować paginację.
+
+</Info>
+
+Więcej informacji o paginacji znajdziesz w artykule [Paginacja i błędy](https://developer.frame.io/docs/troubleshooting/troubleshooting).
+
+**Z każdego zespołu pobierz następujące atrybuty:**
+
+- `id`
+- `name`
+- (opcjonalnie) `team_image`
+
+Po wybraniu zespołu zechcesz wyświetlić należące do niego projekty.
+
+**Uwaga**: jeśli chcesz, możesz również wykonać `GET https://api.frame.io/v2/teams` dla użytkownika, a nasze API zwróci każdy zespół, do którego należy użytkownik, niezależnie od kontekstu konta. Choć technicznie to działa, ryzykujesz utratę kontekstu, chyba że wykonasz dodatkowy krok polegający na:
+
+1. Przywróceniu kontekstu poprzez wyświetlanie nazwy konta obok każdego zespołu
+2. Umożliwieniu użytkownikowi przeszukiwania tekstu listy
+
+Jeśli listujesz udostępnione projekty od poziomu konta w dół, wykonaj dodatkowe wywołanie `GET https://api.frame.io/v2/projects/shared`. Każdy projekt zwrócony w odpowiedzi będzie zawierał następujące atrybuty, które możesz przenosić dalej podczas budowania struktury katalogów:
+
+- `id` (samego projektu)
+- `team_id`
+- `team.account_id`
+
+Alternatywnie możesz udostępnić „Shared Projects”, po prostu dodając je jako „zespół” w dowolnym wybranym kontekście konta. Jeśli się na to zdecydujesz, warto dla wygody użytkownika końcowego wizualnie oddzielić udostępnione projekty od projektów faktycznie przypisanych do zespołu, ponieważ pojedyncza lista udostępnionych projektów może w rzeczywistości obejmować wiele różnych kontekstów kont i zespołów.
+
+### 3. Pobierz projekty zespołu {#3-fetch-the-team’s-projects}
+
+`GET https://api.frame.io/v2/teams/{{team_id}}/projects`
+
+Następnie wykonaj powyższe wywołanie i pobierz wszystkie projekty w zespole.
+
+**Z każdego projektu warto pobrać:**
+
+- `id`
+- `name`
+- `root_asset_id`
+- (opcjonalnie) `private`, jeśli chcesz rozróżniać projekty dla użytkownika w interfejsie
+
+Jak wyjaśniono na początku artykułu, `root_asset_id` jest ważnym elementem architektury zasobów Frame.io, ponieważ pozwala poruszać się po strukturze plików i folderów w projekcie.
+
+<Info>
+
+**Listowanie folderów i zasobów**
+
+Podsumujmy szybko, co zrobiliśmy do tej pory: ustaliliśmy połączony kontekst obejmujący:
+
+</Info>
+
+| \* Konto (Account)
+| \* Zespół (Team)
+| \* Projekty zespołu (i root_asset_ids)
+| \* Udostępnione projekty (i root_asset_ids)
+| I to wszystko, czego potrzebujemy, aby tworzyć lub pobierać zasoby.
+
+## Listowanie folderów i zasobów {#listing-folders-and-assets}
+
+### 4. Zbuduj początkową strukturę folderów {#4-build-the-initial-folder-structure}
+
+`GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+To wywołanie wylistuje wszystkie foldery w projekcie, zaczynając od `root_asset_id`.  Jeśli nie ma folderów, otrzymasz pustą listę. Jeśli chcesz uwzględnić zarówno pliki, jak i foldery (np. jeśli następnym krokiem będzie pobranie zasobu z Frame.io za pomocą `GET`), po prostu pomiń parametr ciągu zapytania.
+
+Pozostałe dwie opcje filtrowania dostępne dla parametru type to file i version_stack. Wszystkie trzy filtry wzajemnie się wykluczają, a wywołanie bez filtra zwróci wszystkie trzy typy razem.
+
+### 5. Przeszukaj drzewo katalogów {#5-dig-through-the-directory-tree}
+
+**Dla każdego zwróconego folderu musisz zapisać:**
+
+- `id`
+- `name`
+
+Ponieważ każdy folder jest zasobem, przepływ pracy przy zagłębianiu się w strukturę folderów będzie wyglądał tak:
+
+1. `GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+   1. Wyświetl nazwy folderów na liście
+   2. Gdy użytkownik kliknie folder, przekaż id folderu do następującego zapytania:
+
+2. `GET https://api.frame.io/v2/assets/{{folder_id}}/children?type=folder`
+
+### 6. Utwórz i prześlij {#6-create-and-upload}
+
+**Do folderu:**
+`POST https://api.frame.io/v2/{{folder_id}}/children`
+
+Gdy masz już id folderu, do którego chcesz przesłać plik, po prostu wykonaj `POST` do jego elementów podrzędnych, zgodnie z dokumentacją zasobu i przewodnikiem. Spowoduje to utworzenie zasobu zastępczego i (w zależności od wybranej metody) zwrócenie:
+
+- `uuid` przeznaczonego do celów śledzenia
+- Listy upload_urls, których możesz użyć, aby za pomocą PUT przesłać plik bezpośrednio do magazynu danych backendu Frame.io.
+
+**Do stosu wersji:**
+Stosy wersji wymagają podobnego przepływu pracy z jednym dodatkowym krokiem opisanym w [tym przewodniku](/pl/platform/v2/manage-version-stacks) i podsumowanym poniżej. Kluczowe jest, aby pamiętać, że stos wersji to kontener, który wygląda jak zasób, ale zachowuje się jak folder, oraz że najpierw należy przesłać zasób, a następnie dodać go do stosu wersji — jako osobne operacje.
+
+W związku z tym, **jeśli chcesz przesłać zasób do stosu wersji, potrzebujesz:**
+
+- `id` stosu wersji
+- `parent_id` stosu wersji (np. folderu, w którym się znajduje, lub katalogu głównego projektu)
+
+Najpierw wykonaj `POST https://api.frame.io/v2/assets/{{parent_id}}/children`, aby utworzyć nowy zasób. Zapisz nowe `id` z odpowiedzi.
+
+Teraz możesz użyć id nowego zasobu i wykonać `POST https://api.frame.io/v2/assets/{{version_stack_id}}/version` z następującym ładunkiem w treści:
+
+```json
+{
+  "next_asset_id": "<new-asset-id>"
+}
+```

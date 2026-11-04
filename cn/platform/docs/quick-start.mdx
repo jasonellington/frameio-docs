@@ -1,0 +1,131 @@
+---
+title: "快速入门"
+---
+
+本指南介绍完成首次成功 Frame.io V4 API 调用的最快路径。您将在 Adobe Developer Console 中创建项目、生成凭据，并发出您的第一个 API 请求。
+
+---
+
+## 第 1 步：在 Adobe Developer Console 中创建项目并添加 Frame.io V4 API {#step-1-create-a-project-in-your-adobe-developer-console-+-add-the-frame-io-v4-api}
+
+在 [Adobe Developer Console](https://developer.adobe.com/developer-console/) 中创建一个新项目，并添加 Frame.io V4 API。
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-1.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+<Tip>
+
+本指南使用 OAuth 2.0 Web App 进行身份验证。有关其他身份验证方式的信息，请参阅 **[身份验证指南](/cn/platform/docs/guides/authentication/overview)**
+
+</Tip>
+
+## 第 2 步：配置您的应用程序 {#step-2-configure-your-application}
+
+选择 OAuth Web App 作为应用程序类型，并设置重定向字段。
+
+| **Redirect URI** | 您应用程序中用于接收来自 Adobe IMS 的 OAuth 响应的路由。用户登录并批准访问后，Adobe IMS 会将其重定向到此 URL，并在查询字符串中附带授权码，您的应用随后用该授权码换取访问令牌 |
+| --- | --- |
+| **Redirect URI pattern** | 用于匹配默认重定向 URI 之外其他重定向 URL 的模式。如果您的应用在多个环境中运行或使用动态路由，此项会很有用。多个模式应以逗号分隔的列表形式提供 |
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-2.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+## 第 3 步：身份验证 {#step-3-authentication}
+
+将用户重定向到 Adobe IMS 授权端点以启动 OAuth 流程：
+
+```
+  https://ims-na1.adobelogin.com/ims/authorize/v2
+  ?client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}
+  &scope=offline_access,openid,email,profile,additional_info.roles
+  &response_type=code
+```
+
+用户登录并批准访问后，Adobe IMS 会将其重定向回您配置的重定向 URI，并在查询字符串中附带授权码。向 IMS 令牌端点发送 POST 请求，用该授权码换取访问令牌。
+
+<br />
+
+以下是参数定义列表，以及示例请求和响应：
+
+| 参数 | 是否必需 | 说明 |
+| --- | --- | --- |
+| **code** | 是 | 用户通过您的应用程序进行身份验证时，返回到您的 `redirect_uri` 的 code 查询字符串的值 |
+| **grant_type** | 是 | 值应始终为 `authorization_code` |
+| **authorization** | 机密客户端必需 | `Basic` 认证标头字符串。它由字面单词 `Basic` 加上 `clientID:clientSecret` 的 Base64 编码字符串组成 |
+
+**示例请求**
+
+```
+curl -X POST 'https://ims-na1.adobelogin.com/ims/token/v3' \
+  -H 'Authorization: Basic {AUTHORIZATION}' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'code={CODE}&grant_type=authorization_code'
+```
+
+**示例响应**
+
+```
+{
+    "access_token": "{ACCESS_TOKEN}",
+    "refresh_token": "{REFRESH_TOKEN}",
+    "sub": "B0DC108C5CD449CA0A494133@c62f24cc5b5b7e0e0a494004",
+    "id_token": "{ID_TOKEN}",
+    "token_type": "bearer",
+    "expires_in": 86399
+}
+```
+
+<Tip>
+
+**SDK 支持**
+
+Python 和 TypeScript SDK 都包含身份验证模块，可处理 OAuth 握手、令牌交换和令牌自动刷新。您可以在此处了解各 SDK 的更多信息：
+[**Python**](/cn/platform/docs/sdk-reference/python-sdk-reference)  | [**TypeScript**](/cn/platform/docs/sdk-reference/type-script-sdk-reference)
+
+</Tip>
+
+---
+
+## 第 4 步：发出您的第一个 API 请求 {#step-4-make-your-first-api-requests}
+
+获得访问令牌后，首先调用 [`/v4/me`](/cn/platform/api-reference/users/show) 端点：
+
+```
+curl https://api.frame.io/v4/me \
+-H "Authorization: Bearer <token>"
+```
+
+此请求会调用 <Tooltip tip="有关 Adobe IMS 的更多信息，请参阅 **[API 参考](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#request-2)**">**Adobe IMS API**</Tooltip> 来验证您的令牌和用户信息。
+
+请求成功后会返回已验证用户的详细信息，包括 `user_id`、姓名和电子邮件。您可以借此确认身份验证流程是否按预期工作。
+
+大多数 V4 API 端点都需要 `account_id`，而 `/v4/me` 不会返回该值。要获取您的 `account_id`，请向 [`/v4/accounts`](/cn/platform/api-reference/accounts/index) 发出请求：
+
+```
+curl https://api.frame.io/v4/accounts \
+-H "Authorization: Bearer <token>"
+```
+
+这将返回已验证用户可用的账户列表。在后续 API 请求中使用此响应中的 `account_id`。
+
+<Tip>
+
+**User ID 与 Account ID**
+
+您的 **`user_id`** 用于标识您个人，而您的 **`account_id`** 代表您所属的组织。大多数 V4 端点都在账户级别运行。
+
+</Tip>
+
+---
+
+## 后续步骤 {#next-steps}
+
+完成身份验证并获得 `account_id` 后，您就可以开始使用 Frame.io API 了。以下资源可以帮助您入门：
+
+- [身份验证指南](/cn/platform/docs/guides/authentication/overview)
+- [账户、项目和工作区](/cn/platform/docs/guides/accounts-projects-and-workspaces)
+- [API 参考](/cn/platform/api-reference/account-permissions/account-user-roles-update)
+- [Postman 集合](/cn/platform/docs/guides/postman-collection)

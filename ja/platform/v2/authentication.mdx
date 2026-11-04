@@ -1,0 +1,91 @@
+---
+title: "認証"
+---
+
+## 概要 {#overview}
+
+Frame.io API で API 呼び出しを行うには、認証が必要です。Frame.io API では、次の 2 種類の認証方法を選択できます。
+
+- **Developer tokens**：生成した個々のユーザーと同じアクセス権と権限を持つ、永続的なベアラートークンです。
+- **OAuth 2 認可コードフロー**：Frame.io ユーザーが自分の認証情報でサインインし、外部アプリケーションに自分の代わりに操作する権限を付与できるようにします。
+
+API を使用するすべての操作は、どちらの認証方法で行われた場合でも、最終的にはベアラートークンヘッダーを使用し、スコープによって制御されます。
+
+### 自分のプロジェクトに最適な認証方法は？ {#which-authentication-type-is-best-for-my-project}
+
+始めるにあたっては、プロジェクトで [Developer Token](https://developer.frame.io/authentication/developer-tokens) を使用することをお勧めします。
+
+**Developer Tokens** は個々のユーザーのアカウントに関連付けられ、作成したユーザーと同じアクセス権限を持ち、スコープによって制限されます。
+
+これらは次のような用途に最適です。
+
+- 試行錯誤（すばやく作成、破棄できるため）
+- すべての操作を単一のアカウント/ユーザーのコンテキストで実行できるインテグレーションシナリオ
+
+**OAuth コードフロー**は、複数の異なるユーザーに代わって操作する必要がある、外部でホストされるアプリケーションに適しています。OAuth でベアラートークンを管理するにはやや手間がかかるため、まず Developer Token で試してから、後で OAuth アプリにリファクタリングすることも珍しくありません。
+
+<Info>
+
+続行するには、Frame.io アカウントが必要です。Frame.io アカウントをお持ちでない場合は、[Frame.io](https://frame.io) にアクセスして [**Sign Up Free**](https://accounts.frame.io/welcome) をクリックすると、すばやく簡単に登録できます。
+
+</Info>
+
+## Developer tokens {#developer-tokens}
+
+1. Frame.io のユーザー認証情報を使用して、Frame.io の [Developer Portal](/ja/platform/v2) にサインインします。
+2. Welcome 画面が表示されます。新しい Developer Token を作成するには、**Create a Token** ボタンをクリックします。
+3. Tokens 画面が表示されます。**New** をクリックします。
+4. 新しいトークンの画面で、トークンの説明とスコープを指定する必要があります。**DESCRIPTION** には、トークンの用途を思い出しやすい内容を入力することをお勧めします。**SCOPES** では、このトークンに付与する具体的なアクセススコープを選択できます。このチュートリアルでは、**Select all scopes** をクリックするだけで構いません。必要に応じて、後からより具体的な権限や特権を持つトークンを作成できます（詳しくは [Scopes](/ja/platform/v2/key-concepts#scopes) を参照してください）。
+5. 下にスクロールして **Create** ボタンをクリックします。成功すると、トークンに関する情報の概要ページが表示されます。
+6. **Token** フィールドに表示された文字列をコピーします。**これが新しいトークンです**。安全な場所に保管してください。このトークンはアカウントへのアクセス権を表しており、このページから移動すると二度と表示できなくなります。
+   この時点で、選択したスコープでトークンを作成したことを確認するメールが届きます。
+
+<Warning>
+
+Frame.io のトークンは、最初の作成時にのみ表示されます。トークンを紛失した場合はいつでも新しいトークンを作成できますが、古いトークンについては説明とスコープ以外を確認することはできません。
+
+</Warning>
+
+### 新しいトークンをテストする {#testing-your-new-token}
+
+トークンを取得したので、ベアラー認証を使用してリクエストを試してみましょう。自分自身に関する情報を取得する基本的なリクエストを行います。
+
+<CodeGroup>
+
+```bash title="cURL"
+curl -H "Authorization: Bearer <YOUR_TOKEN>" https://api.frame.io/v2/me
+```
+
+```python title="Python"
+import requests
+
+url = "https://api.frame.io/v2/me"
+headers = {
+ "Authorization": "Bearer <YOUR_TOKEN>"
+}
+
+requests.GET(url,headers=headers)
+```
+
+</CodeGroup>
+
+レスポンスとして、ユーザーレコードの JSON 表現が表示されます。
+
+おめでとうございます！これで Frame.io API の最初の呼び出しが完了しました。🎉
+
+## OAuth 2 とは？ {#what-is-oauth-2}
+
+OAuth 2.0 は、ユーザーが認証情報を直接共有することなく、あるアプリケーションが別のアプリケーションと限定的に連携することを許可できる、一般的な認証プロトコルです。このプロセスは通常、専用のログイン画面を通じてユーザーが「認証情報を付与する」と表現されます。
+
+### OAuth 2 認可コードフロー {#oauth-2-authorization-code-flow}
+
+OAuth 2 認可コードフローを使用すると、ユーザーは外部アプリケーションに限定的なアクセス権を付与できます。アプリケーションは、初期設定に基づいて特定の権限をリクエストします。Frame.io の場合、この設定はアプリを [Developer Portal に登録](https://developer.frame.io/app/oauth_apps)するときに行います。ユーザーがリクエストを承認すると、外部アプリはそのユーザーに代わって操作できるようになります。
+
+OAuth 2 認可コードフローの始め方については、こちらをご覧ください：[OAuth 2 認可コードフローを設定する](/ja/platform/v2/oauth-2-code-authorization-flow)
+
+### OAuth 2 の詳細 {#more-about-oauth-2}
+
+OAuth 2 について詳しく知りたい場合は、次のリソースが役立ちます。
+
+- [OAuth2](https://oauth.net/2/)
+- [The Authorization Code Flow](https://developer.okta.com/blog/2018/04/10/oauth-authorization-code-grant-type)

@@ -1,0 +1,185 @@
+---
+title: "读取文件树"
+---
+
+## 概述 {#overview}
+
+无论最终目标是发布、编辑，还是将 Assets 推进到某个工作流阶段，许多与 Frame.io 的深度集成都需要列出用户上下文，并最终呈现目录视图。
+
+以下是 Frame.io 中资源（或文件）的基本层级结构：
+
+#### Account > Team > Project > Assets {#account->-team->-project->-assets}
+
+本文介绍如何通过依次发出 API 调用与文件树进行交互。处理文件的常见策略是：首先访问某个 Project，列出 Folders，然后处理其中包含的 Assets 和 Version Stacks。
+
+## 重要概念 {#important-concepts}
+
+### 每个 Project 都有唯一的根 Asset {#every-project-has-a-unique-root-asset}
+
+RESTful API 通常使用唯一标识符来描述资源；`root_asset_id` 是您 Project 的 Asset 树的唯一标识符。可以将其视为充当 Project 根节点的特殊结构：其余 assets 以向下延伸的树状结构位于根节点之下。
+![root-asset-id](/images/platform/v2/reading-the-file-tree/ea24ed6ff53d93cf1dab9e154c289f816238abca823e8127f367cdee1eb2a8cc.webp)
+在常见工作流中，API 用户需要沿树向下逐级访问，以便与文件层级中更深处的 Assets 进行交互。
+
+### Collaborators 与共享项目 {#collaborators-and-shared-projects}
+
+**Collaborator** 是 Frame.io 中的一种关键用户角色：此类用户可以访问某个 Project 工作区，但可能不属于该 Project 的上层 Account。
+
+撇开 [Collaborators 与 Team Members](https://support.frame.io/en/articles/6067-difference-between-team-members-vs-collaborators) 各自不同的权限不谈，二者的主要区别在于：*Collaborator 的成员资格严格限定于某个 Project，可能与任何 Team 都没有关系*。
+
+这给以目录列表为核心的工作流带来了一点小麻烦。虽然上述基本层级结构（Account > Team > Project > Assets）适用于大多数用例，但它无法描述已认证用户是 Collaborator 而非 Team Member 的那些 Projects。要在列出目录时解决这个问题，您可以：
+
+- 获取 User 的共享项目，拆解出 Team 和 Account 层级，然后将它们全部组合在一起，或者
+- 获取 User 的共享项目，并将它们作为一个单独的上下文统一列出。
+
+两种方法都可以；后者稍微简单一些，但前者更接近 Frame.io Web 应用呈现类似信息的方式。无论哪种情况，本指南中介绍的方法都同样适用。
+
+## 列出目录 {#listing-a-directory}
+
+### 1. 获取 User 的 Accounts {#1-fetch-the-user’s-accounts}
+
+`GET https://api.frame.io/v2/accounts`
+
+使用有效的 bearer token 发出上述调用，即可获取 User 的 Accounts。您将获得该用户拥有 Team Member、Team Manager 或 Admin 身份的每个 Account。您也可能会获得用户拥有计费/Admin 权限但没有 Team 访问权限的 Teams，但这种情况很少见，并会在下一步中被过滤掉。
+
+Accounts 请求的 payload 相当冗长，以下是您可能需要从响应中获取的重要数据摘要：
+
+- `id`
+- `display_name`
+- `owner`（`email`、`name`）
+- （可选）`image`
+
+<Info>
+
+**Account 图片是临时 URL**
+
+*注意：* 我们的 API 返回的 Account 图片是预签名的 S3 key，因此返回的 URL 大约一天后就会“失效”。为解决这个问题，您应该在每次加载服务时重新获取图片，或者最好将其存储在本地。
+
+</Info>
+
+请注意，`id` 和 `owner.email` 是用户账户上仅有的必填字段。如果您要在其他应用中显示用户，请考虑为呈现用户 Accounts 编写条件逻辑。我们建议按以下优先顺序进行检查，如果不为 *null*，则据此显示 Account：
+
+1. “`display_name`”
+2. “`owner.name` 的 Account”
+3. “`owner.email` 的 Account”
+
+在用户选择 Account 后，您可能需要呈现 Teams，这需要再发出一个 API 请求。
+
+### 2. 获取 Account 中的 Teams {#2-fetch-teams-within-the-account}
+
+`GET https://api.frame.io/v2/accounts/{{account_id}}/teams`
+
+Frame.io 中的 Teams 可以是“公开”的（即 Account 中的任何 Team Member 都可以发现），也可以是“私有”的（仅特定 Team Members 可以发现）。API 会为您处理上下文，因此您只需在上述请求中指定 `account_id` 发出有效调用即可。
+
+<Info>
+
+**别忘了分页**
+
+虽然一个用户不太可能存在于多个 Accounts 中，但 Teams 是一种可能迅速膨胀的资源。Frame.io 的 API 速率限制相当高，但检查响应 header 并在必要时进行分页始终是个好习惯。
+
+</Info>
+
+您可以阅读[分页与错误](https://developer.frame.io/docs/troubleshooting/troubleshooting)，了解有关分页的更多信息。
+
+**从每个 Team 中获取以下属性：**
+
+- `id`
+- `name`
+- （可选）`team_image`
+
+选中某个 Team 后，您需要显示其包含的 Projects。
+
+**注意**：如果您愿意，也可以为用户调用 `GET https://api.frame.io/v2/teams`，我们的 API 将返回该用户所属的每个 Team，而不考虑 Account 上下文。虽然这在技术上可行，但除非您采取额外步骤，否则可能会丢失上下文：
+
+1. 通过在每个 Team 旁边显示 Account 名称来重新建立上下文
+2. 允许用户搜索列表中的文本
+
+如果您要从 Account 级别向下列出共享 Projects，则需要额外调用 `GET https://api.frame.io/v2/projects/shared`。响应中返回的每个 Project 都包含以下属性，您可以在构建目录时沿用这些属性：
+
+- `id`（Project 本身的）
+- `team_id`
+- `team.account_id`
+
+或者，您也可以简单地将“Shared Projects”作为任意选定 Account 上下文中的一个“Team”来提供。如果您选择这样做，最好在视觉上将 Shared Projects 与真正的 Team 范围 Projects 区分开来，这对最终用户很有帮助，因为单个 Shared Projects 列表在底层可能包含许多不同的真实 Account 和 Team 上下文。
+
+### 3. 获取 Team 的 Projects {#3-fetch-the-team’s-projects}
+
+`GET https://api.frame.io/v2/teams/{{team_id}}/projects`
+
+接下来，发出上述调用，获取 Team 中的所有 Projects。
+
+**对于每个 Project，您需要获取：**
+
+- `id`
+- `name`
+- `root_asset_id`
+- （可选）`private`，以便在 UI 中为用户加以区分
+
+正如本文开头所述，`root_asset_id` 是 Frame.io 资源架构中的重要组成部分，它让您可以浏览 Project 中的文件和文件夹目录。
+
+<Info>
+
+**列出文件夹和 assets**
+
+让我们快速回顾一下目前为止所做的工作：我们已经建立了以下组合上下文：
+
+</Info>
+
+| \* Account
+| \* Team
+| \* Team Projects（及 root_asset_ids）
+| \* Shared Projects（及 root_asset_ids）
+| 这就是创建或获取 Assets 所需的全部内容。
+
+## 列出文件夹和 assets {#listing-folders-and-assets}
+
+### 4. 构建初始文件夹结构 {#4-build-the-initial-folder-structure}
+
+`GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+这将从 `root_asset_id` 开始，列出项目中的所有文件夹。如果没有文件夹，您将得到一个空列表。如果您希望同时包含文件和文件夹（例如，如果您的下一步是从 Frame.io `GET` 某个 Asset），只需省略查询字符串参数即可。
+
+type 参数可用的另外两个筛选选项是 file 和 version_stack。这三个筛选条件互斥，未经筛选的调用将返回混合在一起的全部三种类型。
+
+### 5. 深入浏览目录树 {#5-dig-through-the-directory-tree}
+
+**对于返回的每个文件夹，您需要获取：**
+
+- `id`
+- `name`
+
+由于每个文件夹都是一个 Asset，您逐层深入文件夹结构的工作流如下：
+
+1. `GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+   1. 以列表形式呈现文件夹名称
+   2. 当用户点击某个文件夹时，将该文件夹的 id 传入以下查询：
+
+2. `GET https://api.frame.io/v2/assets/{{folder_id}}/children?type=folder`
+
+### 6. 创建并上传 {#6-create-and-upload}
+
+**上传到文件夹：**
+`POST https://api.frame.io/v2/{{folder_id}}/children`
+
+获得要上传到的文件夹的 id 后，只需按照资源文档和指南，向其 children 发出 `POST` 请求即可。这将创建一个占位 Asset，并（根据您选择的方法）返回：
+
+- 用于跟踪用途的 `uuid`
+- 一个 upload_urls 列表，可用于将您的文件直接 PUT 到 Frame.io 的后端数据存储中。
+
+**上传到 Version Stack：**
+Version Stacks 的工作流与此类似，只是多了一个步骤，该步骤在[本指南](/cn/platform/v2/manage-version-stacks)中有介绍，下面是概要。关键在于记住：Version Stack 是一个看起来像 Asset、但行为类似文件夹的容器；并且您必须先上传 Asset，然后再将其堆叠到 Version Stack 中，这是两个独立的操作。
+
+因此，**如果您想将 Asset 上传到 Version Stack，您需要：**
+
+- Version Stack 的 `id`
+- Version Stack 的 `parent_id`（例如其所在的文件夹或 Project 根目录）
+
+首先，调用 `POST https://api.frame.io/v2/assets/{{parent_id}}/children` 创建新的 Asset。从响应中获取新的 `id`。
+
+现在，您可以使用新 Asset 的 id 调用 `POST https://api.frame.io/v2/assets/{{version_stack_id}}/version`，正文 payload 如下：
+
+```json
+{
+  "next_asset_id": "<new-asset-id>"
+}
+```

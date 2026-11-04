@@ -1,0 +1,37 @@
+---
+title: "API-Fehlercodes"
+---
+
+Die Frame.io API kann die folgenden häufigen Fehler zurückgeben:
+
+| Code | Details | Grund/Gründe |
+| --- | --- | --- |
+| `401` | **Unauthorized** – Ungültiger API-Token. Stellen Sie sicher, dass Sie die Bearer-Token-Authentifizierung verwenden und Ihren Token über den Authorization-Header übergeben. |  |
+| `402` | **Usage exceeded** – Sie haben die Limits Ihres Frame.io-Tarifs überschritten. |  |
+| `403` | **Forbidden** – Sie haben keinen Zugriff auf diese Ressource. Wird sowohl bei fehlendem Benutzerzugriff als auch bei unzureichendem Token-Scope zurückgegeben. |  |
+| `404` | **Not Found** – Ressource nicht gefunden. | Die Ressource wurde verschoben oder gelöscht. |
+| `422` | **Invalid arguments** – Mindestens einer der übergebenen Parameter war ungültig. |  |
+| `429` | **Rate Limited** – Sie haben das Rate Limit der API erreicht. |  |
+| `500` | **Server Error** – Unser Server kann Ihre Anfrage nicht interpretieren oder konnte sie nicht innerhalb des verfügbaren Zeitrahmens (30 Sekunden) abschließen. | Fehlerhafte Anfrage-URL oder fehlerhafter Body bzw. Abschluss aus einem anderen Grund nicht möglich. |
+
+# Fehlerbehebung bei häufigen Fehlern {#troubleshooting-common-errors}
+
+Wenn Sie mit einem gültigen API-Token gängige Aufgaben ausführen, sind `403`, `404` und `500` die häufigsten Fehler.
+
+Ein **403**-Fehler weist in der Regel auf eines von drei Szenarien hin:
+
+1. Der in der Anfrage verwendete Token und/oder der Benutzer, dem der Token gehört, hat keinen ausreichenden Zugriff auf den Bereich des Frame.io-Accounts, in dem sich die angeforderte Ressource befindet.
+2. Der Token verfügt nicht über ausreichende Scopes für die angeforderte Ressource. Beispiel: Aufruf von `GET /comments/` ohne den Scope `comments.read`.
+3. Ein Problem mit dem Netzwerkverkehr verhindert, dass die Frame.io API die Anfrage verarbeitet.  *Wenn Sie vermuten, dass Ihre Anfragen durch ein Problem mit dem Netzwerkverkehr blockiert werden, wenden Sie sich bitte an den Kundensupport.*
+
+Ein **404**-Fehler weist in der Regel darauf hin, dass eine Ressource nicht mehr existiert – sie wurde verschoben oder gelöscht.
+
+Ein **500**-Fehler weist in der Regel auf eine fehlerhafte Anfrage-URL oder einen fehlerhaften Body hin, kann aber auch auftreten, wenn wir die Anfrage nicht innerhalb des verfügbaren Zeitrahmens (30 s) abschließen können.
+
+# Rate Limiting {#rate-limiting}
+
+Die Frame.io API wendet Rate Limits pro Token an. Das Standardlimit für einen Token beträgt 50 Aufrufe pro Sekunde. Einige Methoden haben niedrigere Limits (z. B. ist POST `/assets/:id/children` auf 5 Assets pro Sekunde begrenzt).
+
+Alle Limits können sich ändern und geben bei Erreichen einen HTTP-Fehler 429 zurück. Wir empfehlen, beim Umgang mit Rate Limiting einen exponentiellen Back-off-Ansatz zu verwenden.
+
+Weitere Informationen finden Sie in [unserem Leitfaden](/de/platform/v2/rate-limits) zu Rate Limits.

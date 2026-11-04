@@ -1,0 +1,138 @@
+---
+title: "构建 OAuth 2 应用"
+sidebarTitle: "构建 OAuth2 应用"
+---
+
+<Warning>
+
+**本指南假定您已注册 OAuth 2 应用**
+
+如果尚未注册，请参阅 [OAuth 2 授权码流程](/cn/platform/v2/oauth-2-code-authorization-flow)来配置您的应用程序。
+
+</Warning>
+
+## 应用程序基础 {#application-basics}
+
+**注意**：您应安全地存储 `client_id` 和（如果不使用 PKCE）`client_secret`，并通过环境变量访问它们。以下示例假定存在一个包含 `CLIENT_ID` 和 `CLIENT_SECRET` 变量的 **.env** 文件。
+
+```python title="Python"
+import urllib, requests, requests.auth
+import os
+
+CLIENT_ID = os.environ.get('CLIENT_ID')
+CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
+
+AUTHORIZE_URL = "https://applications.frame.io/oauth2/auth"
+TOKEN_URL = "https://applications.frame.io/oauth2/token"
+# The scopes you've chosen for your app, space-delimited
+SCOPE = "offline account.read asset.read" 
+# The callback URI for your app
+REDIRECT_URI = "https://yourapp.domain/callback"
+```
+
+## 调用授权服务器 {#invoking-the-auth-server}
+
+首先，您的应用程序需要调用 Frame.io 授权服务器，随后该服务器会将用户重定向到登录页面。
+
+```python title="Python"
+import uuid
+from urllib.parse import urlencode
+
+def create_auth_url():
+ credentials = {
+  'response_type': 'code',
+  'redirect_uri': REDIRECT_URI,
+  'client_id': CLIENT_ID,
+  'scope': SCOPE,
+  'state': str(uuid.uuid4())
+ }
+ url = (AUTHORIZE_URL + "?" + urlencode(credentials))
+ return url
+```
+
+## 回调 {#the-callback}
+
+然后，授权服务器会向您的 `REDIRECT_URI` 发出 `GET` 请求，而该地址又需要调用 `TOKEN_URL`。根据您的应用程序是否配置为使用 PKCE，此回调会略有不同。
+
+### 不使用 PKCE {#without-pkce}
+
+如果您不使用 PKCE，回调必须包含一个含有 `CLIENT_ID` 和 `CLIENT_SECRET` 的 `Authorization` 标头。
+
+```python title="Python"
+def callback():
+   state = request.args.get('state')
+   scope = request.args.get('scope')
+   code = request.args.get('code')
+   error = request.args.get('error')
+
+   if error:
+     return "Error: " + error
+
+   # Set up for client authorization and set up the data you need to send.
+   client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET)
+
+   post_data = {
+     "grant_type": "authorization_code",
+     "code": code,
+     "redirect_uri": REDIRECT_URI,
+     "state": state,
+     "scope": SCOPE
+   }
+
+# Send a POST request with the data you need to receive an access token. 
+# If everything goes well, it will be returned to you and you can use it with
+# Frame.io.
+
+   response = requests.post(TOKEN_URL, auth=client_auth, data=post_data)    
+   return response.text
+```
+
+### 使用 PKCE {#with-pkce}
+
+如果您使用 PKCE，回调*不得*包含 `Authorization` 标头，但在回调 `TOKEN_URL` 时，*必须*在其 `POST` 请求体中包含您的 `CLIENT_ID`。
+
+```python title="Python"
+def callback():
+   state = request.args.get('state')
+   scope = request.args.get('scope')
+   code = request.args.get('code')
+   error = request.args.get('error')
+
+   if error:
+     return "Error: " + error
+
+# If using PKCE, you must include the CLIENT_ID in your request body  
+   post_data = {
+     "grant_type": "authorization_code",
+     "code": code,
+     "redirect_uri": REDIRECT_URI,
+     "state": state,
+     "scope": SCOPE
+     "client_id": CLIENT_ID 
+   }
+
+# Send a POST request with the data you need to receive an access token. 
+# If everything goes well, it will be returned to you and you can use it with
+# Frame.io
+
+  # If using PKCE, use the below request with no auth
+  response = requests.post(TOKEN_URL, data=post_data) 
+
+   return response.text
+```
+
+## 成功响应 {#successful-response}
+
+如果回调成功，您将收到如下所示的 JSON 响应：
+
+```json
+{
+  "access_token":"BEARER_TOKEN",
+  "expires_in":3600,
+  "refresh_token":"REFRESH_TOKEN",
+  "scope":"account.read offline",
+  "token_type":"bearer"
+}
+```
+
+现在，您可以使用 `access_token` 代表已登录用户调用 Frame.io API，并在该令牌过期后使用 `refresh_token` 请求新的 `access_token`。

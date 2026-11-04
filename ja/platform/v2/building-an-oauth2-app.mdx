@@ -1,0 +1,138 @@
+---
+title: "OAuth 2 アプリの構築"
+sidebarTitle: "OAuth2 アプリの構築"
+---
+
+<Warning>
+
+**このガイドは、OAuth 2 アプリをすでに登録済みであることを前提としています**
+
+まだ登録していない場合は、[OAuth 2 コードフロー](/ja/platform/v2/oauth-2-code-authorization-flow)を参照してアプリケーションを設定してください。
+
+</Warning>
+
+## アプリケーションの基本 {#application-basics}
+
+**注意**：`client_id` と（PKCE を使用しない場合は）`client_secret` は安全に保管し、環境変数経由でアクセスする必要があります。以下の例では、変数 `CLIENT_ID` と `CLIENT_SECRET` を含む **.env** ファイルが存在することを前提としています。
+
+```python title="Python"
+import urllib, requests, requests.auth
+import os
+
+CLIENT_ID = os.environ.get('CLIENT_ID')
+CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
+
+AUTHORIZE_URL = "https://applications.frame.io/oauth2/auth"
+TOKEN_URL = "https://applications.frame.io/oauth2/token"
+# The scopes you've chosen for your app, space-delimited
+SCOPE = "offline account.read asset.read" 
+# The callback URI for your app
+REDIRECT_URI = "https://yourapp.domain/callback"
+```
+
+## 認証サーバーの呼び出し {#invoking-the-auth-server}
+
+まず、アプリケーションは Frame.io の認証サーバーを呼び出す必要があります。認証サーバーは、その後ユーザーをログインページにリダイレクトします。
+
+```python title="Python"
+import uuid
+from urllib.parse import urlencode
+
+def create_auth_url():
+ credentials = {
+  'response_type': 'code',
+  'redirect_uri': REDIRECT_URI,
+  'client_id': CLIENT_ID,
+  'scope': SCOPE,
+  'state': str(uuid.uuid4())
+ }
+ url = (AUTHORIZE_URL + "?" + urlencode(credentials))
+ return url
+```
+
+## コールバック {#the-callback}
+
+次に、認証サーバーは `REDIRECT_URI` に `GET` リクエストを送信し、`REDIRECT_URI` 側では `TOKEN_URL` を呼び出す必要があります。このコールバックは、アプリケーションが PKCE を使用するように設定されているかどうかによって若干異なります。
+
+### PKCE を使用しない場合 {#without-pkce}
+
+PKCE を使用しない場合、コールバックには `CLIENT_ID` と `CLIENT_SECRET` を含む `Authorization` ヘッダーを含める必要があります。
+
+```python title="Python"
+def callback():
+   state = request.args.get('state')
+   scope = request.args.get('scope')
+   code = request.args.get('code')
+   error = request.args.get('error')
+
+   if error:
+     return "Error: " + error
+
+   # Set up for client authorization and set up the data you need to send.
+   client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET)
+
+   post_data = {
+     "grant_type": "authorization_code",
+     "code": code,
+     "redirect_uri": REDIRECT_URI,
+     "state": state,
+     "scope": SCOPE
+   }
+
+# Send a POST request with the data you need to receive an access token. 
+# If everything goes well, it will be returned to you and you can use it with
+# Frame.io.
+
+   response = requests.post(TOKEN_URL, auth=client_auth, data=post_data)    
+   return response.text
+```
+
+### PKCE を使用する場合 {#with-pkce}
+
+PKCE を使用する場合、コールバックには `Authorization` ヘッダーを含めては*いけません*。ただし、`TOKEN_URL` を呼び出す際の `POST` リクエストボディには、`CLIENT_ID` を*必ず*含める必要があります。
+
+```python title="Python"
+def callback():
+   state = request.args.get('state')
+   scope = request.args.get('scope')
+   code = request.args.get('code')
+   error = request.args.get('error')
+
+   if error:
+     return "Error: " + error
+
+# If using PKCE, you must include the CLIENT_ID in your request body  
+   post_data = {
+     "grant_type": "authorization_code",
+     "code": code,
+     "redirect_uri": REDIRECT_URI,
+     "state": state,
+     "scope": SCOPE
+     "client_id": CLIENT_ID 
+   }
+
+# Send a POST request with the data you need to receive an access token. 
+# If everything goes well, it will be returned to you and you can use it with
+# Frame.io
+
+  # If using PKCE, use the below request with no auth
+  response = requests.post(TOKEN_URL, data=post_data) 
+
+   return response.text
+```
+
+## 成功時のレスポンス {#successful-response}
+
+コールバックが成功すると、次のような JSON レスポンスを受け取ります。
+
+```json
+{
+  "access_token":"BEARER_TOKEN",
+  "expires_in":3600,
+  "refresh_token":"REFRESH_TOKEN",
+  "scope":"account.read offline",
+  "token_type":"bearer"
+}
+```
+
+これで、`access_token` を使用してログインユーザーに代わって Frame.io への API 呼び出しを行えるようになります。また、このトークンの有効期限が切れた後は、`refresh_token` を使用して新しい `access_token` をリクエストできます。

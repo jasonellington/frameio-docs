@@ -1,0 +1,156 @@
+---
+title: "Alle Kommentare eines Projekts sammeln"
+sidebarTitle: "Alle Kommentare eines Projekts sammeln"
+---
+
+## Überblick {#overview}
+
+Der Comment Scraper ruft alle Assets in einem Project ab, extrahiert die Comments und gibt sie in einer .csv-Datei aus. Diese Anleitung verwendet die folgenden Ressourcen:
+
+- [Python SDK](https://github.com/Frameio/python-frameio-client) – Das SDK übernimmt die Paginierung für Sie und richtet einen Client ein, den Sie mit Entwickler-Tokens (Bearer-Authentifizierung) verwenden können.
+- [Comment Scraper in Python](https://github.com/Frameio/comment-scraper-python) – Hier finden Sie das verwendete Codebeispiel.
+
+### Auf Glitch ausprobieren {#try-it-on-glitch}
+
+Glitch ist ein einfaches Tool, mit dem Sie eigene Anwendungen einrichten und auf deren Servern testen und ausführen können. Wenn Sie mit Glitch nicht vertraut sind, lesen Sie unseren Leitfaden [Glitch verwenden](/de/platform/v2/using-glitch).
+
+Wenn Sie den Comment Scraper auf einem Server in Aktion sehen möchten, haben wir auf [Glitch](https://glitch.com) eine Flask-App eingerichtet: [Frame.io Comment Scraper in Python](https://glitch.com/~frameio-comment-scraper).
+
+### Erforderliche Scopes {#required-scopes}
+
+Bevor Sie mit diesem Leitfaden beginnen, müssen Sie sicherstellen, dass Sie über ein Token verfügen, das mindestens die folgenden Scopes enthält:
+
+| Scope | Grund |
+| --- | --- |
+| **Projects:** Read | Nicht unbedingt erforderlich, aber notwendig, um die `root_asset_id` eines Project abzurufen. |
+| **Assets:** Read | Notwendig, um per API durch `asset_ids` zu navigieren |
+| **Comments:** Read | Notwendig, um die Comments selbst abzurufen. |
+
+### 1. Ihre App vorbereiten {#1-prepare-your-app}
+
+Dieser Leitfaden folgt einem ähnlichen Muster wie [Den Dateibaum lesen](/de/platform/v2/reading-the-file-tree) – für den Einstieg benötigen Sie daher:
+
+- Die `root_asset_id` des Project, das Sie durchsuchen
+- Ihr [Entwickler-Token](https://developer.frame.io/authentication/developer-tokens)
+
+Außerdem sollten Sie den `FrameioClient` sowie einige zusätzliche Hilfsbibliotheken in Ihre Python-App importieren:
+
+```python title="Python"
+from frameioclient import FrameioClient
+import requests, json, csv, itertools
+
+ROOT_ASSET_ID = "<ROOT_ASSET_ID>"
+TOKEN = "<DEV_TOKEN>"
+```
+
+### 2. Das Project durchsuchen {#2-crawl-the-project}
+
+Nun müssen Sie rekursiv alle Assets abrufen, sie auf Comments prüfen und alle kommentierten Assets in einer Liste ablegen, aus der Sie Ihre .csv-Datei erstellen können.
+
+Während Sie Ihr Project durchsuchen, müssen Sie bei jedem Asset die folgenden Prüfungen durchführen:
+
+- Ist das Asset eine Datei? (`"_type": "file"`).
+
+  - Wenn es eine Datei ist: Hat sie Comments?
+
+    - **Falls ja, rufen Sie sie ab und fügen Sie sie Ihrer Liste hinzu.**
+
+- Ist das Asset ein Ordner? (`"_type": "folder"`)
+
+  - **Wenn es ein Ordner ist, verarbeiten Sie rekursiv seine untergeordneten Elemente.**
+
+- Ist das Asset ein Version Stack? (`"_type": "version_stack"`)
+
+  - **Wenn es ein Version Stack ist, rufen Sie alle untergeordneten Elemente ab und prüfen Sie sie auf Comments.**
+
+```python title="Python"
+def all_comments(client, asset_id, comment_list):
+    files = client.get_asset_children(asset_id)
+
+    for asset in files:
+        if asset['type'] == "file":
+            if asset['comment_count'] > 0:
+                asset_parent_id = asset['parent_id']
+                asset_name = asset['name']
+                comments = client.get_comments(asset['id'])
+                my_comment_list = [comment for comment in comments.results]
+                for object in my_comment_list:
+                    object.update({'parent_id':asset_parent_id})
+                    object.update({'name':asset_name})
+                comment_list.append(my_comment_list)
+
+        if asset['type'] == "folder":
+            if asset['item_count'] > 0:
+                all_comments(client, asset['id'], comment_list)
+
+        if asset['type'] == "version_stack":
+            asset_name = asset['name']
+            parent_id = asset['parent_id']
+            vfiles = client.get_asset_children(asset['id'])
+
+            for asset in vfiles.results:
+                asset_name = asset['name']
+                parent_id = asset['parent_id']
+                if asset['type'] == "file":
+                    if asset['comment_count'] > 0:
+                        comments = client.get_comments(asset['id'])
+                        my_comment_list = [comment for comment in comments.results]
+                        for object in my_comment_list:
+                            object.update({'parent_id':parent_id})
+                            object.update({'name':asset_name})
+                        comment_list.append(my_comment_list)
+
+def get_all_project_comments(root_asset_id, token):
+    comment_list = []
+    client = FrameioClient(token)
+
+    all_comments(client, root_asset_id, comment_list)
+
+    return comment_list
+```
+
+<Info>
+
+**Vergessen Sie die Paginierung nicht**
+
+Das obige Beispiel ignoriert die Paginierung – aber wenn Sie durch große Sammlungen navigieren, sollten Sie das nicht tun! Weitere Informationen finden Sie in unserem Leitfaden [Grundlegende Konzepte](/de/platform/v2/key-concepts#pagination).
+
+</Info>
+
+### 3. Ihre Comments-Liste abflachen {#3-flatten-your-comments-list}
+
+Sofern Sie dies nicht bereits beim Durchsuchen erledigt haben, sollten Sie Ihre Liste zur einfacheren Verarbeitung abflachen.
+
+```python title="Python"
+# The response list comes back as a list of lists.
+# Flatten out responses to a single list so you can build your .csv file.
+
+flat_response_list = list(itertools.chain.from_iterable(responses))
+```
+
+### 4. Die Liste filtern und Ihre .csv erstellen {#4-cull-the-list-and-create-your-csv}
+
+Wenn Ihre Liste flach ist, können Sie mit einer List Comprehension die Elemente aus jedem Kommentar auswählen, die Sie für nützlich halten, und sie dann in eine .csv-Datei ausgeben. Wir empfehlen mindestens:
+
+- Comment - `text`
+- Parent ID - `parent_id`
+- Asset ID - `asset_id`
+- Asset Name `name`
+- Owner ID - `owner_id`
+- Owner Email - `owner.email`
+- Timestamp - `timestamp`
+- Updated At - `updated_at`
+
+Wenn Sie eine neue Liste mit den gewünschten Ausgabedaten pro Asset für Ihre endgültige Ausgabe erstellt haben, ist es an der Zeit, Ihre .csv-Datei zu schreiben.
+
+```python title="Python"
+list_for_csv = [[o['text'], o['parent_id'], o['asset_id'], o['name'], o['owner_id'], o['owner']['email'], o['timestamp'], o['updated_at']] for o in flat_response_list]
+
+# Let's write our new list out to a .csv file. We'll add a heading.
+with open("output.csv", 'w') as myfile:
+     wr = csv.writer(myfile, dialect='excel')
+     wr.writerow(['Comment', 'Parent ID', 'Asset ID', 'Asset Name', 'Owner ID', 'Email', 'Timestamp', 'Updated At'])
+     wr.writerows(list_for_csv)
+```
+
+Das war's! Sie haben jetzt eine .csv-Datei mit den abgeflachten Comments aus einem gesamten Frame.io-Project.

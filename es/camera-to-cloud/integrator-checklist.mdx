@@ -1,0 +1,287 @@
+---
+title: "Lista de verificación del integrador"
+---
+
+## Requisitos de integración C2C {#c2c-integration-requirements}
+
+Esta lista de verificación describe las prácticas recomendadas y los requisitos para unirse al ecosistema C2C. Aunque no todos los elementos se aplican a todos los dispositivos o aplicaciones C2C, el equipo de C2C Partnerships trabajará contigo para definir los requisitos específicos durante el programa de certificación C2C.
+
+## Requisitos básicos de integración {#basic-integration-requirements}
+
+Todas las integraciones deben incluir:
+
+<CardGroup cols={2}>
+
+<Card title="Código de usuario" icon="keyboard" iconType="solid">
+
+Muestra un código de 6 dígitos al usuario. En interfaces web o dispositivos capaces de mostrar códigos QR, usa `verification_url_complete` para ofrecer a los usuarios la opción de un hipervínculo para iniciar sesión y seleccionar el proyecto al que conectarse.
+
+</Card>
+
+<Card title="Visualización del proyecto" icon="folder" iconType="solid">
+
+Muestra el nombre del proyecto conectado para que los usuarios puedan verificar rápidamente su conexión sin tener que buscar en la interfaz de [Frame.io](http://frame.io/)
+
+</Card>
+
+<Card title="Estado de la subida" icon="upload" iconType="solid">
+
+Indicadores claros de:
+
+- Número de archivos restantes
+- Tamaño total de los archivos restantes
+- Progreso de la subida del archivo actual
+- Estado de las subidas completadas, en cola y fallidas
+
+</Card>
+
+<Card title="Estado de la red" icon="network-wired" iconType="solid">
+
+Visualización del estado de la conexión de red y renovación automática del access token tras 8 horas, sin interacción ni alertas para el usuario (a menos que se produzca un error de renovación)
+
+</Card>
+
+</CardGroup>
+
+Requisitos adicionales:
+
+- Flujo de autorización que se pueda cancelar en cada paso
+- Estado del socket para la comunicación en tiempo real
+- Cabecera de versión de firmware en todas las llamadas a endpoints HTTPS
+
+## Requisitos de seguridad {#security-requirements}
+
+En [Frame.io](http://frame.io/), la seguridad es primordial. Nuestros requisitos incluyen:
+
+<CardGroup cols={2}>
+
+<Card title="HTTPS y conexión directa" icon="shield-halved" iconType="solid">
+
+- Solicitudes exclusivamente HTTPS (las solicitudes HTTP se rechazan)
+- Conexión directa del dispositivo/aplicación con [Frame.io](http://frame.io/) (sin servicios intermediarios)
+
+</Card>
+
+<Card title="Protección de credenciales" icon="lock" iconType="solid">
+
+- `client_secret` y `client_id` protegidos (no accesibles para el usuario)
+- Credenciales `access_token` y `refresh_token` protegidas
+- Almacenamiento cifrado de secretos y tokens (opcional, pero recomendado)
+
+</Card>
+
+</CardGroup>
+
+## Requisitos del programa de subida {#uploader-requirements}
+
+Una subida de medios fiable es crucial, especialmente en condiciones difíciles. Las integraciones deben:
+
+<CardGroup cols={2}>
+
+<Card title="Funciones de subida" icon="upload" iconType="solid">
+
+- Admitir subidas automáticas, ya sea en tiempo real durante la grabación (preferible) o al completarse el archivo
+- Mostrar un estado de subida claro, incluidos la cola y los resultados
+- Escribir los archivos en un almacenamiento local accesible para el usuario
+
+</Card>
+
+<Card title="Gestión de la cola" icon="list" iconType="solid">
+
+Mantener una cola de subida robusta que gestione:
+
+- Subidas simultáneas
+- Interrupciones de red
+- Ciclos de apagado y encendido
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Gestión de errores" icon="triangle-exclamation" iconType="solid">
+
+Implementar reintentos automáticos ante:
+
+- Problemas de red
+- Cortes de alimentación
+- Errores no fatales (tiempos de espera agotados, errores de red, tokens caducados)
+
+</Card>
+
+<Card title="Control de la subida" icon="play" iconType="solid">
+
+- Reanudar las subidas desde el último fragmento correcto
+- Respetar el estado **PAUSED**
+- Gestionar los errores no fatales de AWS
+- Gestionar los medios dañados sin bloquear otras subidas
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Opciones de subida" icon="sliders" iconType="solid">
+
+Ofrecer opciones de subida flexibles:
+
+- Alternar entre subidas automáticas y manuales
+- Selección de archivos individual o en bloque
+- Priorización por tipo de archivo (opcional)
+- Priorización de la cola (opcional)
+- Subidas en paralelo (opcional)
+- Permitir cancelar subidas individuales o todas ellas
+
+</Card>
+
+</CardGroup>
+
+## Requisitos de red {#networking-requirements}
+
+Las integraciones deben:
+
+<CardGroup cols={2}>
+
+<Card title="Velocidad y seguridad" icon="gauge-high" iconType="solid">
+
+- Alcanzar velocidades de subida mínimas de 50 Mbps (si las condiciones de red lo permiten)
+- Admitir la seguridad WiFi WPA2 (Ethernet opcional, pero recomendado)
+
+</Card>
+
+<Card title="Gestión de la red" icon="network-wired" iconType="solid">
+
+- Gestionar DHCP e IP estática
+- Mostrar un estado de red claro (tipo de conexión, velocidad, estado)
+- Cambiar de red sin volver a emparejar el proyecto
+- Guardar las redes WiFi conocidas
+
+</Card>
+
+</CardGroup>
+
+## Requisitos de pruebas {#testing-requirements}
+
+C2C está diseñado para condiciones difíciles, lo que requiere pruebas exhaustivas en:
+
+<CardGroup cols={2}>
+
+<Card title="Configuraciones de red" icon="network-wired" iconType="solid">
+
+Prueba todos los tipos de conexión aplicables:
+
+- Router comercial con:
+
+  - WAN por cable
+  - Módem celular agregado (bonded)
+  - Módem celular comercial
+  - Módem tipo hotspot
+
+- Configuraciones de router en malla (incluido el protocolo 802.11r FT)
+
+- Conexiones directas a distintos tipos de módem
+
+</Card>
+
+<Card title="Pruebas de resiliencia" icon="bolt" iconType="solid">
+
+- Cortes de alimentación inesperados
+- Desconexiones de red
+- Problemas del proveedor de internet
+- Gestión de medios dañados
+- Creación de assets sin conexión y reconexión
+
+</Card>
+
+</CardGroup>
+
+## Requisitos del flujo de trabajo {#workflow-requirements}
+
+C2C es un ecosistema, no solo una función. Los requisitos específicos de cada dispositivo/aplicación incluyen:
+
+<CardGroup cols={2}>
+
+<Card title="Grabación SDI/HDMI" icon="video" iconType="solid">
+
+- Activación automática de la grabación desde la cámara
+- Opciones de cámara flexibles
+- Ajuste del offset de timecode
+- Capacidad de grabación manual
+- Gestión coherente de los nombres de archivo
+- Sincronización precisa del timecode
+
+</Card>
+
+<Card title="Archivos proxy" icon="file-video" iconType="solid">
+
+- Nombre de archivo/timecode/metadatos coincidentes con el archivo hero/OCF
+- Optimizados para LTE (bitrate de 1-12 Mbps)
+- Compatibilidad con códecs estándar para vídeo y audio
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Requisitos generales" icon="list-check" iconType="solid">
+
+- Flujos de timecode para vídeo/audio
+- Compatibilidad con la subida de varios formatos (Proxy, OCF, LUT, WAV, RAW, JPG, HEIF, TIFF)
+- Gestión de los cambios de nombre del proyecto (usa `project_id` en lugar de cadenas con el nombre)
+
+</Card>
+
+</CardGroup>
+
+## Control de calidad {#quality-assurance}
+
+En [Frame.io](http://frame.io/), la calidad es esencial. Las áreas de prueba clave incluyen:
+
+<CardGroup cols={2}>
+
+<Card title="Funcionalidad básica" icon="check" iconType="solid">
+
+- Inicio y funcionamiento estables
+- Conexión al proyecto
+- Generación de códigos en el hardware
+- Capacidad de iniciar y cerrar sesión
+- Visualización de la información del proyecto/usuario
+- Gestión de dispositivos
+- Subida de assets
+- Compatibilidad de formatos
+
+</Card>
+
+<Card title="Requisitos técnicos" icon="gear" iconType="solid">
+
+- Reanudación de la subida tras interrupciones
+- Visualización del progreso
+- Indicación del estado de la red
+- Persistencia de la conexión durante 8 horas
+- Autorización cancelable
+- Conexión directa con Frame.io
+- Seguridad de las credenciales
+- Optimización de la velocidad de red
+
+</Card>
+
+</CardGroup>
+
+## Mejoras futuras {#future-improvements}
+
+La API de Camera to Cloud de [Frame.io](http://frame.io/) evoluciona continuamente. Aunque mantenemos la compatibilidad con versiones anteriores, agradecemos un diálogo continuo sobre los desarrollos futuros para mantener nuestra API alineada con el uso real.
+
+## ¡Eso es todo, amigos! {#that’s-all-folks}
+
+¡Enhorabuena por completar la UC2CIG (University of C2C Integration Guides)! Esperamos que esta guía te haya resultado útil.
+
+Comparte con nosotros cualquier comentario sobre información poco clara o que falte, o ponte en contacto con nosotros si tienes preguntas relacionadas con C2C. ¡Estamos aquí para ayudarte!
+
+Si aún no lo has hecho, revisa la guía [Implementar C2C: configuración](/es/camera-to-cloud/implementing-c2c-setting-up) antes de continuar.
+
+Necesitarás el `access_token` obtenido durante el [proceso de autenticación y autorización](/es/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Esta lista de verificación se basa en la [guía de subida básica](/es/camera-to-cloud/how-to-basic-upload) y en la [guía de subidas avanzadas](/es/camera-to-cloud/how-to-advanced-uploads).
