@@ -1,0 +1,277 @@
+---
+title: "SDK de Python de Frame.io — Guía de carga"
+sidebarTitle: "Guía de carga con el SDK de Python"
+---
+
+Esta guía explica cómo subir archivos a Frame.io con el **SDK de Python de Frame.io** (`frameio`). El SDK gestiona cargas fragmentadas en varias partes a S3 mediante URL prefirmadas, con workers en paralelo, reintentos automáticos y seguimiento opcional del progreso.
+
+Para conocer los conceptos generales de la API de carga (URL de carga, encabezados, fragmentación), consulta [Cómo funcionan las cargas locales y remotas](/es/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work).
+
+---
+
+## Requisitos previos {#prerequisites}
+
+<Steps>
+
+<Step title="Autenticación">
+
+Tienes un cliente `Frameio` que funciona. Consulta la [guía de autenticación](/es/platform/docs/guides/authentication/python-sdk) para configurarlo.
+
+</Step>
+
+<Step title="Instala el SDK">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="Carpeta de destino">
+
+Necesitas el `account_id` y el `folder_id` de la carpeta a la que se debe subir el archivo. Usa el SDK para encontrarlos:
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## Inicio rápido {#quick-start}
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+Eso es todo. El SDK divide el archivo en fragmentos según las URL de carga que devuelve la API, los sube en paralelo y gestiona los reintentos automáticamente.
+
+---
+
+## Cómo funciona {#how-it-works}
+
+La carga local es un proceso de dos pasos:
+
+<Steps>
+
+<Step title="Crea el recurso de archivo">
+
+Llama a `client.files.create_local_upload()` con el nombre y el tamaño del archivo. La API crea un archivo provisional y devuelve URL PUT de S3 prefirmadas, una por fragmento. El número de URL (y, por tanto, de fragmentos) depende del tamaño del archivo.
+
+</Step>
+
+<Step title="Sube a S3">
+
+`FrameioUploader` lee las URL de carga de la respuesta, divide tu archivo en los fragmentos correspondientes y envía cada fragmento mediante PUT a su URL en paralelo usando un pool de hilos. Cada solicitud incluye los encabezados obligatorios `x-amz-acl: private` y `Content-Type`.
+
+</Step>
+
+</Steps>
+
+<Note>
+
+La carga va directamente de tu aplicación a S3; no pasa por los servidores de la API de Frame.io. Es el mismo patrón que usan servicios como YouTube, Vimeo y Dropbox para cargas de archivos grandes.
+
+</Note>
+
+---
+
+## Usar `FrameioUploader` {#using-frameiouploader}
+
+`FrameioUploader` es la forma recomendada de subir archivos. Envuelve el cargador fragmentado de nivel inferior y se encarga de todos los detalles: extraer las URL de carga de la respuesta de la API, establecer los encabezados obligatorios, fragmentar el archivo y subirlo en paralelo.
+
+### Seguimiento del progreso {#progress-tracking}
+
+Usa el callback `on_progress` para hacer un seguimiento del progreso de la carga:
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+El callback se invoca una vez después de que se completa cada fragmento, con los bytes acumulados subidos hasta el momento y el tamaño total del archivo.
+
+#### Barra de progreso con Rich {#rich-progress-bar}
+
+Para una experiencia de terminal más pulida, usa [Rich](https://github.com/Textualize/rich):
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### Configuración {#configuration}
+
+`FrameioUploader` acepta varios parámetros opcionales:
+
+| Parámetro | Valor predeterminado | Descripción |
+| --- | --- | --- |
+| `max_workers` | `5` | Número de hilos de carga simultáneos |
+| `headers` | `{"x-amz-acl": "private"}` | Encabezados enviados con cada solicitud PUT a S3. Los encabezados personalizados se combinan con los predeterminados. |
+| `max_retries` | `3` | Intentos de reintento por fragmento (backoff exponencial: 1 s, 2 s, 4 s, …) |
+| `on_progress` | `None` | Callback `(bytes_uploaded, total_bytes)` que se ejecuta después de cada fragmento |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### Ejemplo completo {#full-example}
+
+Un ejemplo completo con autenticación, carga y seguimiento del progreso:
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+Si necesitas un control total del proceso de carga —por ejemplo, para gestionar la fragmentación manualmente, integrarla en un pipeline asíncrono o personalizar la lógica de reintentos—, consulta [Cómo funcionan las cargas locales y remotas](/es/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work) para ver el flujo de la API sin procesar y un ejemplo de script de Python independiente.
+
+</Tip>
+
+---
+
+## Carga remota {#remote-upload}
+
+Si tu archivo ya es accesible mediante una URL pública, usa la carga remota en su lugar. No es necesario fragmentarlo: Frame.io obtiene el archivo directamente:
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+Actualmente, la carga remota tiene un **límite de tamaño de archivo de 50 GB**. Para archivos de más de 50 GB, usa la [carga local](#quick-start) en su lugar.
+
+</Warning>
+
+---
+
+## Comprobar el estado de la carga {#checking-upload-status}
+
+Después de la carga, puedes verificar que se ha recibido el archivo:
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

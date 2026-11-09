@@ -1,0 +1,185 @@
+---
+title: "Lire l'arborescence des fichiers"
+---
+
+## Vue d'ensemble {#overview}
+
+Que l'objectif final soit de publier, de modifier ou de faire passer des Assets par une étape d'un workflow, de nombreuses intégrations approfondies avec Frame.io impliquent de lister le contexte de l'utilisateur et, en fin de compte, d'afficher une vue de l'arborescence.
+
+Voici la hiérarchie de base des ressources (ou fichiers) dans Frame.io :
+
+#### Account > Team > Project > Assets {#account->-team->-project->-assets}
+
+Cet article explique comment interagir avec l'arborescence des fichiers en effectuant des appels d'API successifs.  Une stratégie courante pour travailler avec des fichiers consiste à accéder d'abord à un Project, à lister ses dossiers, puis à travailler avec les Assets et les Version Stacks qu'ils contiennent.
+
+## Concepts importants {#important-concepts}
+
+### Chaque Project possède un Asset racine unique {#every-project-has-a-unique-root-asset}
+
+Les API RESTful décrivent généralement les ressources à l'aide d'identifiants uniques ; le `root_asset_id` est l'identifiant unique de l'arborescence d'Assets de votre Project. Considérez-le comme une construction spéciale servant de nœud racine à un Project : les autres assets s'empilent sous la racine dans une arborescence descendante.
+![root-asset-id](/images/platform/v2/reading-the-file-tree/ea24ed6ff53d93cf1dab9e154c289f816238abca823e8127f367cdee1eb2a8cc.webp)
+Dans les workflows courants, les utilisateurs de l'API doivent descendre dans l'arborescence pour interagir avec des Assets situés plus profondément dans la hiérarchie des fichiers.
+
+### Collaborateurs et projets partagés {#collaborators-and-shared-projects}
+
+Un **Collaborator** (collaborateur) est l'un des rôles utilisateur clés de Frame.io : ces utilisateurs ont accès à l'espace de travail d'un Project, mais n'appartiennent pas nécessairement à l'Account dont dépend ce Project.
+
+Mises à part les permissions distinctes des [Collaborators et des Team Members](https://support.frame.io/en/articles/6067-difference-between-team-members-vs-collaborators), la principale différence est que *l'appartenance d'un Collaborator est strictement liée à un Project, et peut n'avoir aucun lien avec une Team*.
+
+Cela crée une petite complication pour les workflows où le listage des répertoires est primordial.  Si la hiérarchie de base ci-dessus (Account > Team > Project > Assets) convient à la majorité des cas d'usage, elle ne décrit pas les Projects dans lesquels l'utilisateur authentifié est Collaborator sans être Team Member.  Pour contourner ce problème lors du listage des répertoires, vous pouvez :
+
+- Récupérer les projets partagés d'un User, décomposer la hiérarchie Team et Account, puis tout regrouper, ou
+- Récupérer les projets partagés d'un User et les lister ensemble dans un contexte distinct.
+
+Les deux méthodes conviennent ; la seconde est un peu plus simple, mais la première est plus proche de la façon dont l'application web de Frame.io présente des informations similaires. Dans tous les cas, les méthodes présentées dans ce guide s'appliquent aux deux.
+
+## Lister un répertoire {#listing-a-directory}
+
+### 1. Récupérer les Accounts du User {#1-fetch-the-user’s-accounts}
+
+`GET https://api.frame.io/v2/accounts`
+
+Effectuez l'appel ci-dessus avec un bearer token valide pour obtenir les Accounts d'un User.  Vous recevrez tous les Accounts sur lesquels l'utilisateur a le statut de Team Member, Team Manager ou Admin.  Vous pourriez également recevoir des Teams pour lesquelles l'utilisateur dispose de droits de facturation/Admin sans avoir accès à la Team, mais c'est rare, et ces cas seront éliminés à l'étape suivante.
+
+Le payload de la requête Accounts est assez verbeux ; voici un résumé des données importantes que vous voudrez peut-être extraire de la réponse :
+
+- `id`
+- `display_name`
+- `owner` (`email`, `name`)
+- (facultatif) `image`
+
+<Info>
+
+**Les images des Accounts sont des URL temporaires**
+
+*Remarque :* l'image de l'Account renvoyée par notre API est une clé S3 pré-signée ; l'URL renvoyée « expire » donc au bout d'environ une journée. Pour contourner ce problème, vous devez soit récupérer à nouveau l'image à chaque chargement de votre service, soit, idéalement, la stocker localement.
+
+</Info>
+
+Notez que `id` et `owner.email` sont les seuls champs obligatoires d'un compte utilisateur.  Si vous affichez des utilisateurs dans une autre application, envisagez d'écrire une logique conditionnelle pour présenter les Accounts des utilisateurs. Nous vous recommandons de vérifier les valeurs suivantes et, si elles ne sont pas *null*, d'afficher l'Account selon cet ordre de préférence :
+
+1. « `display_name` »
+2. « Account de `owner.name` »
+3. « Account de `owner.email` »
+
+Une fois que votre utilisateur a choisi un Account, vous voudrez probablement présenter les Teams, ce qui nécessite une requête d'API supplémentaire.
+
+### 2. Récupérer les Teams de l'Account {#2-fetch-teams-within-the-account}
+
+`GET https://api.frame.io/v2/accounts/{{account_id}}/teams`
+
+Les Teams dans Frame.io peuvent être « publiques » (c'est-à-dire visibles par tout Team Member de l'Account) ou « privées » (visibles uniquement par certains Team Members).  L'API gère ce contexte pour vous ; il vous suffit d'effectuer un appel valide en indiquant l'`account_id` dans la requête ci-dessus.
+
+<Info>
+
+**N'oubliez pas la pagination**
+
+S'il est peu probable qu'un utilisateur appartienne à plus de quelques Accounts, les Teams sont une ressource dont le nombre peut rapidement exploser. Les limites de débit de l'API Frame.io sont assez élevées, mais il est toujours bon de vérifier les en-têtes de réponse et, si nécessaire, de paginer.
+
+</Info>
+
+Vous trouverez plus d'informations sur la pagination en lisant [Pagination and Errors](https://developer.frame.io/docs/troubleshooting/troubleshooting).
+
+**Pour chaque Team, récupérez les attributs suivants :**
+
+- `id`
+- `name`
+- (facultatif) `team_image`
+
+Lorsqu'une Team est sélectionnée, vous voudrez afficher les Projects qui la composent.
+
+**Remarque** : si vous le souhaitez, vous pouvez également effectuer un `GET https://api.frame.io/v2/teams` pour un utilisateur ; notre API renverra alors toutes les Teams auxquelles il appartient, quel que soit le contexte d'Account. Bien que cela fonctionne techniquement, vous risquez de perdre le contexte, à moins de prendre une mesure supplémentaire pour :
+
+1. Rétablir le contexte en affichant le nom de l'Account à côté de chaque Team
+2. Permettre à votre utilisateur de rechercher dans le texte de la liste
+
+Si vous listez les Projects partagés à partir du niveau de l'Account, vous devrez effectuer un appel supplémentaire à `GET https://api.frame.io/v2/projects/shared`. Chaque Project renvoyé dans la réponse contiendra les attributs suivants, que vous pourrez réutiliser lors de la construction de votre arborescence :
+
+- `id` (du Project lui-même)
+- `team_id`
+- `team.account_id`
+
+Vous pouvez aussi prévoir une entrée « Shared Projects » en l'ajoutant simplement comme une « Team » dans n'importe quel contexte d'Account choisi. Si vous optez pour cette solution, il est utile pour l'utilisateur final de séparer visuellement les Shared Projects des véritables Projects rattachés à une Team, car la liste unique des Shared Projects peut regrouper en coulisses de nombreux contextes d'Account et de Team différents.
+
+### 3. Récupérer les Projects de la Team {#3-fetch-the-team’s-projects}
+
+`GET https://api.frame.io/v2/teams/{{team_id}}/projects`
+
+Ensuite, effectuez l'appel ci-dessus pour récupérer tous les Projects de la Team.
+
+**Pour chaque Project, vous voudrez récupérer :**
+
+- `id`
+- `name`
+- `root_asset_id`
+- (facultatif) `private`, si vous souhaitez faire la distinction pour l'utilisateur dans votre interface
+
+Comme expliqué au début de l'article, le `root_asset_id` est un élément important de l'architecture des ressources de Frame.io, car il vous permet de naviguer dans l'arborescence des fichiers et dossiers d'un Project.
+
+<Info>
+
+**Lister les dossiers et les assets**
+
+Récapitulons rapidement ce que nous avons fait jusqu'ici : nous avons établi le contexte combiné suivant :
+
+</Info>
+
+| \* Account
+| \* Team
+| \* Team Projects (et root_asset_ids)
+| \* Shared Projects (et root_asset_ids)
+| Et c'est tout ce dont nous avons besoin pour créer ou récupérer des Assets.
+
+## Lister les dossiers et les assets {#listing-folders-and-assets}
+
+### 4. Construire la structure initiale des dossiers {#4-build-the-initial-folder-structure}
+
+`GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+Cet appel liste tous les dossiers d'un projet, à partir du `root_asset_id`.  S'il n'y a aucun dossier, vous obtiendrez une liste vide. Si vous souhaitez inclure à la fois les fichiers et les dossiers (par exemple si votre étape suivante consiste à effectuer un `GET` sur un Asset de Frame.io), omettez simplement le paramètre de chaîne de requête.
+
+Les deux autres options de filtre disponibles pour le paramètre type sont file et version_stack. Les trois filtres s'excluent mutuellement, et un appel sans filtre renvoie les trois types mélangés.
+
+### 5. Parcourir l'arborescence des répertoires {#5-dig-through-the-directory-tree}
+
+**Pour chaque dossier renvoyé, vous devrez récupérer :**
+
+- `id`
+- `name`
+
+Chaque dossier étant un Asset, votre workflow pour parcourir une structure de dossiers ressemblera à ceci :
+
+1. `GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+   1. Affichez les noms des dossiers dans une liste
+   2. Lorsqu'un utilisateur clique sur un dossier, transmettez l'id du dossier dans la requête suivante :
+
+2. `GET https://api.frame.io/v2/assets/{{folder_id}}/children?type=folder`
+
+### 6. Créer et téléverser {#6-create-and-upload}
+
+**Dans un dossier :**
+`POST https://api.frame.io/v2/{{folder_id}}/children`
+
+Une fois que vous disposez de l'id du dossier dans lequel vous souhaitez téléverser, effectuez simplement un `POST` sur ses enfants, conformément à la documentation de la ressource et au guide. Cela crée un Asset provisoire et renvoie (selon la méthode choisie) :
+
+- Un `uuid` destiné aux cas d'usage de suivi
+- Une liste d'upload_urls que vous pouvez utiliser pour envoyer votre fichier par PUT directement vers le stockage de données backend de Frame.io.
+
+**Dans une Version Stack :**
+Les Version Stacks suivent un workflow similaire, avec une étape supplémentaire décrite dans [ce guide](/fr/platform/v2/manage-version-stacks) et résumée ci-dessous. L'essentiel est de se rappeler qu'une Version Stack est un conteneur qui ressemble à un Asset mais se comporte comme un dossier, et que vous devez d'abord téléverser votre Asset, puis l'empiler dans votre Version Stack, sous forme d'actions distinctes.
+
+Par conséquent, **si vous souhaitez téléverser un Asset dans une Version Stack, vous aurez besoin de :**
+
+- L'`id` de la Version Stack
+- Le `parent_id` de la Version Stack (par exemple, le dossier qui la contient ou la racine du Project)
+
+Commencez par effectuer un `POST https://api.frame.io/v2/assets/{{parent_id}}/children` pour créer votre nouvel Asset. Récupérez le nouvel `id` dans la réponse.
+
+Vous pouvez maintenant utiliser l'id de votre nouvel Asset et effectuer un `POST https://api.frame.io/v2/assets/{{version_stack_id}}/version`, avec le payload suivant dans le corps :
+
+```json
+{
+  "next_asset_id": "<new-asset-id>"
+}
+```

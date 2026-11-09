@@ -1,0 +1,164 @@
+---
+title: "Instrukcja: zarządzanie autoryzacją"
+sidebarTitle: "Zarządzanie autoryzacją"
+---
+
+## Przegląd {#overview}
+
+Ten przewodnik opisuje procedury zarządzania tokenami autoryzacyjnymi urządzeń w Frame.io, w tym odświeżanie i unieważnianie tokenów oraz praktyki bezpiecznego ich przechowywania.
+
+## Wymagania wstępne {#prerequisites}
+
+Zapoznaj się z przewodnikiem [Implementing C2C: Setting Up](/pl/camera-to-cloud/implementing-c2c-setting-up), aby zapewnić prawidłową konfigurację.
+
+Wymagane niezbędne elementy:
+
+- Prawidłowy `client_secret` wydany przez Frame.io
+- Przypisany Ci `client_id` zgodnie z opisem w [przewodniku po uwierzytelnianiu i autoryzacji](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization)
+- Prawidłowe poświadczenia `access_token` i `refresh_token`
+
+## Tokeny autoryzacyjne {#understanding-authorization-tokens}
+
+Nasz poprzedni przewodnik po [uwierzytelnianiu urządzeń](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization) opisywał proces uzyskiwania początkowych tokenów autoryzacyjnych poprzez uwierzytelnienie użytkownika.
+
+Tokeny dostępu zachowują ważność przez około 8 godzin. Aby wyeliminować konieczność częstego ponownego parowania urządzenia, używamy zakresu `offline`, który pozwala uzyskać wraz z autoryzacją token odświeżania (refresh token). Ten token odświeżania umożliwia generowanie nowych tokenów dostępu po wygaśnięciu poprzednich.
+
+Tokeny odświeżania zachowują ważność przez 14 dni. To celowe ograniczenie czasu ważności tokenów dostępu zwiększa bezpieczeństwo, minimalizując potencjalne zagrożenia wynikające z przejęcia tokenów. Pamiętaj, że jeśli autoryzacja nie zostanie odnowiona przed wygaśnięciem tokenu odświeżania, konieczne będzie ponowne uwierzytelnienie użytkownika.
+
+## Proces odnawiania tokenu dostępu {#access-token-renewal-process}
+
+Po wygaśnięciu tokenu dostępu żądania API otrzymają następującą odpowiedź:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+Wykonaj poniższe polecenie, aby uzyskać nowy token:
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Specyfikacja endpointu API**
+
+Szczegółowa dokumentacja endpointu `/v2/auth/token` jest dostępna [tutaj](/pl/camera-to-cloud/api-reference/authentication/auth-device-token)
+
+</Info>
+
+Ta implementacja wymaga wielu czynników uwierzytelniania w celu zwiększenia bezpieczeństwa. Osoba nieuprawniona musiałaby zdobyć zarówno `refresh_token`, jak i `client_secret`, aby skutecznie podszyć się pod Twoją integrację.
+
+Pomyślne odnowienie generuje następującą odpowiedź:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+Po pomyślnym odświeżeniu tokenu poprzednie poświadczenia tracą ważność. Zadbaj o prawidłowe zapisanie nowych tokenów autoryzacyjnych.
+
+Próba ponownego użycia wygasłego tokenu odświeżania kończy się następującym wynikiem:
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+Oznacza to, że token został już wcześniej wykorzystany i nie jest już ważny.
+
+<Danger>
+
+**Otrzymanie błędu 401 podczas odświeżania**
+
+Otrzymanie odpowiedzi `401 Not Authorized` podczas odświeżania tokenu oznacza unieważnienie poświadczeń i wymaga przeprowadzenia nowego procesu autoryzacji.
+
+</Danger>
+
+## Obsługa nieudanych odpowiedzi odświeżania {#handling-failed-refresh-responses}
+
+Ponieważ wartości `refresh_token` są jednorazowe, nieodebranie odpowiedzi na żądanie odświeżenia — czy to z powodu przerwy w sieci, czy wyłączenia systemu — wymusza ponowne rozpoczęcie całej sekwencji uwierzytelniania i autoryzacji.
+
+Ten protokół bezpieczeństwa, choć bywa niewygodny, jest niezbędny do zachowania integralności systemu.
+
+## Proces unieważniania tokenów {#token-revocation-process}
+
+W pewnych okolicznościach może być konieczne zakończenie dostępu do Frame.io, na przykład po ukończeniu projektu lub zresetowaniu aplikacji. Przy rezygnacji z bieżącej autoryzacji stosuj prawidłowe procedury unieważniania.
+
+Wykonaj poniższe polecenie, aby unieważnić autoryzację:
+
+<Info>
+
+**Ponowna autoryzacja**
+
+Po unieważnieniu musisz ponownie przeprowadzić proces uwierzytelniania i autoryzacji opisany w [przewodniku po uwierzytelnianiu i autoryzacji](/pl/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]'
+```
+
+<Info>
+
+**Specyfikacja endpointu API**
+
+Pełna dokumentacja endpointu `/v2/auth/revoke` jest dostępna [tutaj](/pl/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)
+
+</Info>
+
+System zwraca nagłówki bez ładunku. O powodzeniu świadczy kod statusu `200`:
+
+```text
+HTTP/2 200
+...
+```
+
+Po unieważnieniu operacje Frame.io wymagające uwierzytelnienia tokenem `access_token` będą zwracać `Not Authorized`. Przywrócenie dostępu wymaga ponownego sparowania urządzenia z projektem.
+
+## Implementacja przechowywania tokenów {#token-storage-implementation}
+
+Utrzymanie trwałej autoryzacji między restartami systemu wymaga bezpiecznego przechowywania tokenów. Przestrzegaj następujących podstawowych wytycznych:
+
+**Wdróż kontrolę dostępu użytkowników:** ogranicz widoczność tokenów i dostęp do nich wyłącznie do procesów aplikacji.
+
+**Włącz szyfrowanie pamięci:** szyfruj przechowywane tokeny, w tym `client_secret` i poświadczenia autoryzacyjne. Nigdy nie przechowuj kluczy autoryzacyjnych w postaci zwykłego tekstu.
+
+**Rozdzielaj poświadczenia:** choć nasza demonstracyjna aplikacja w Pythonie przechowuje wszystko w jednym miejscu, w środowiskach produkcyjnych tokeny autoryzacyjne należy przechowywać oddzielnie od `client_secret`. Weź pod uwagę następujące czynniki:
+
+- `client_secret` i `client_id` to stałe poświadczenia urządzenia — ich utrata oznacza trwałą awarię urządzenia
+- Tokeny autoryzacyjne są regularnie aktualizowane podczas działania urządzenia
+- Oddzielne przechowywanie sprawia, że uszkodzenie magazynu tokenów wymaga jedynie ponownego sparowania urządzenia, a nie pełnego resetu uwierzytelniania
+
+Choć SQLite zapewnia optymalne możliwości przechowywania tokenów, jako absolutne minimum przechowuj dane autoryzacyjne oddzielnie od podstawowych poświadczeń.
+
+## Następne kroki {#next-steps}
+
+Gratulujemy postępów i zapraszamy do przejścia do [przewodnika po stanie połączenia i sygnałach heartbeat](/pl/camera-to-cloud/how-to-heartbeats-connection-info-and-status). W razie pytań lub wątpliwości skontaktuj się z naszym zespołem.

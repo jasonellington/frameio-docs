@@ -1,0 +1,178 @@
+---
+title: "Enviar Assets"
+---
+
+# Visão geral {#overview}
+
+Este tutorial explica como enviar assets para o Frame.io. O Frame.io aceita todos os tipos de arquivo, não apenas vídeos, mas também roteiros, imagens, mapas e arquivos de referência. Em termos mais técnicos, um asset no Frame.io é uma representação robusta de um arquivo no S3 e do seu contexto no Frame.io, incluindo transcodificações, contexto de usuário/team/projeto e metadados. Para mais informações sobre assets, consulte a definição do recurso.​
+
+## Hierarquias principais {#core-hierarchies}
+
+Também é útil saber como o Frame.io estrutura seus modelos principais.
+
+**Accounts**, às quais os **Users** pertencem, têm muitos **Projects**, e todos eles contêm **Assets**. Os **Teams** estão disponíveis apenas para contas Enterprise e oferecem um nível adicional de separação lógica. Os Assets não "sabem" a qual Team pertencem — apenas a qual Project e Account —, mas os Projects pertencem estritamente a Teams, e não a Accounts, o que torna os Teams parte integrante do processo de envio de Assets.
+
+## Pré-requisitos {#prerequisites}
+
+Para este tutorial, você precisará de:
+
+- Uma conta do Frame.io com um token de desenvolvedor (os tokens são explicados abaixo)
+- [SDK Python do Frame.io](https://github.com/Frameio/python-frameio-client)
+
+## Enviar um Asset {#upload-an-asset}
+
+Esta seção mostra as etapas para enviar um asset.
+
+1. Crie um token de desenvolvedor em [developer.frame.io](/pt-BR/platform/v2) com os seguintes scopes:
+
+| Scope | Motivo |
+| --- | --- |
+| **Accounts:** Read | Buscar a lista de Accounts do User solicitante. |
+| **Teams:** Read | Buscar os Teams disponíveis na Account desejada. |
+| **Projects:** Read | Buscar os Projects disponíveis no Team desejado. |
+| **Assets:** Create, Read | Criar o novo registro de Asset e buscar os Assets disponíveis para percorrer a estrutura de pastas dentro do Project. |
+
+<Info>
+
+**Precisa de ajuda para criar um token de API?**
+
+Consulte as instruções [**aqui**](/pt-BR/platform/v2/authentication).
+
+</Info>
+
+2. Localize um destino para o seu asset. No mínimo, os Assets precisam ser colocados dentro de um **Project**. Você precisará obter o ID do asset raiz (`root_asset_id`) de um projeto ou o ID de asset de uma pasta para especificar o local na hierarquia de arquivos para onde deseja enviar.
+
+<Warning>
+
+**OBSERVAÇÃO:**
+
+Não é possível enviar usando apenas o ID do projeto.  Para enviar para a raiz do seu projeto, especifique o `root_asset_id` na sua solicitação.
+
+</Warning>
+
+Em geral, você precisa obter (na ordem indicada):
+
+- os IDs de conta e escolher uma conta
+- os IDs de team e escolher um team
+- os projetos associados a um team
+- o ID do projeto com o qual deseja trabalhar
+- o ID do asset raiz ou o ID de uma pasta
+
+Você pode enviar diretamente para a raiz de um projeto usando o `root_asset_id`.
+
+### Listar Assets {#list-assets}
+
+Para escolher para onde deseja enviar seu novo asset, você pode usar a API para listar todos os assets de um projeto ou de uma pasta dentro de um projeto. Se um asset for uma *pasta*, ele conterá assets filhos, que também podem ser arquivos e pastas. Ao listar informações de assets, você pode usar qualquer ID de asset, mas, se quiser revisar tudo o que está associado a um projeto, use o `root_asset_id`.
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+Na lista de assets retornada, você pode usar o ID de qualquer asset que seja uma pasta, ou o ID do asset raiz. Você usará esse ID para indicar para onde deseja enviar seu novo asset.
+
+### Enviar o Asset {#upload-asset}
+
+Neste exemplo, vamos enviar um novo arquivo. Você envia sua solicitação com as seguintes informações:
+
+| Parâmetro | Descrição |
+| --- | --- |
+| `filesize` | Informe o tamanho do arquivo que deseja enviar |
+| `filetype` | Escolha o tipo de arquivo que está enviando. As opções incluem vídeo e imagem. Exemplos: `video/mp4`, `image/png`. |
+| `name` | Informe uma string que represente o nome do arquivo, sem espaços. |
+| `type` | Indica se você está usando um `file` ou um `folder`. Um version stack ocorre quando você empilha vários arquivos uns sobre os outros. |
+
+Se quiser criar uma nova pasta, não é necessário incluir `filesize` nem `filetype` na sua solicitação.
+
+Em uma solicitação `cURL`, você pode enviar rapidamente um asset para o Frame.io incluindo um link para o seu arquivo com o parâmetro `"source": {  "url":"URL_FOR_VIDEO" }`. O link precisa ser acessível publicamente. Caso contrário, você pode usar o SDK Python, que se encarrega de dividir seu arquivo em um bloco para cada link de envio.
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**As URLs de Assets expiram**
+
+As URLs retornadas pela chamada de API de criação de asset são pré-assinadas para autorizar seu envio, mas expiram após 24 horas.
+
+</Info>
+
+# Criar seu próprio uploader de arquivos {#build-your-own-file-uploader}
+
+Se quiser criar seu próprio uploader, para obter o melhor desempenho, recomenda-se enviar os blocos em paralelo. Cada bloco deve ser enviado via `PUT` diretamente para as URLs do Amazon S3 fornecidas na resposta da API do Frame.io.
+
+Os blocos do seu arquivo devem seguir a ordem das `upload_urls` fornecidas, pois elas *determinam a sequência do asset final concatenado e transcodificado.* Isso significa que a 1ª URL recebe o 1º bloco, a 2ª URL recebe o 2º bloco e assim por diante.
+
+#### Exemplo em pseudocódigo {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+Os cabeçalhos de cada solicitação ao S3 devem incluir o `filetype` do seu novo Asset exatamente como foi retornado na sua chamada inicial à API do Frame.io, além de um cabeçalho adicional de privacidade:
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+Você pode ver um exemplo de como tudo isso é tratado no nosso SDK Python [aqui](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py).
+
+<Info>
+
+**Os erros da AWS são formatados em XML**
+
+Observe que quaisquer erros recebidos nesta etapa virão diretamente da AWS e, portanto, estarão formatados em XML, e não no tratamento de erros JSON padrão do Frame.io. Em geral, recomendamos criar uma lógica de nova tentativa em torno desses envios para qualquer uso em produção, pois arquivos enviados de forma incompleta (ou seja, arquivos com blocos faltando) não serão transcodificados nem exibidos no Frame.io
+
+</Info>
+
+É só isso! Depois de concluir as chamadas `PUT` para as `upload_url`s, você terá um novo Asset no Frame.io.

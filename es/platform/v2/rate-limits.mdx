@@ -1,0 +1,58 @@
+---
+title: "Límites de velocidad"
+---
+
+# Descripción general {#overview}
+
+Ya sea que un token se distribuya mediante el Portal para desarrolladores, una concesión OAuth o el backend de Accounts que da servicio a las propias aplicaciones de Frame.io, **todas las llamadas a la API de Frame.io están sujetas a límites de velocidad.**
+
+Los límites de velocidad se aplican a todas y cada una de las solicitudes de API de un usuario individual (independientemente del token o del método de autenticación que se use), se agotan y se recargan progresivamente, y se reflejan en los encabezados de respuesta de cada solicitud realizada a la API de Frame.io. Cada endpoint está configurado con sus propios límites, que van desde tan solo `10` solicitudes/minuto hasta `100` solicitudes/segundo.
+
+Las solicitudes que hayan superado el límite de velocidad de un endpoint concreto recibirán un error HTTP `429` como respuesta.
+
+## Agotamiento y recarga {#depletion-and-refill}
+
+La API de Frame.io usa una estrategia de [leaky bucket](https://wikipedia.org/wiki/Leaky_bucket) para la limitación progresiva de velocidad, en la que los límites se renuevan gradualmente durante su ventana de tiempo asignada. En otras palabras, no existe el concepto de un corte fijo tras el cual se renuevan los límites de un recurso concreto (es decir, las estrategias de aplicación de “ventana fija” y “ventana deslizante”). En cambio, los límites restantes se renuevan constantemente a un ritmo relativo al límite y a la ventana de tiempo del recurso.
+
+### Retroceso exponencial {#exponential-backoff}
+
+Nuestra estrategia recomendada para gestionar los límites de velocidad se conoce habitualmente como “retroceso exponencial” (exponential backoff).
+
+En resumen:
+
+- Al recibir un `429`, haz una pausa durante un período (normalmente un segundo)
+- Si se recibe otro `429`, aumenta exponencialmente el período de espera hasta que se reanude el funcionamiento normal
+
+## Encabezados {#headers}
+
+Las respuestas a las solicitudes de API siempre incluirán los siguientes tres encabezados, que deben utilizarse para limitar tus solicitudes salientes:
+
+| Encabezado | Valor |
+| --- | --- |
+| `x-ratelimit-limit` | El límite de velocidad para esta ruta de recurso, medido en solicitudes. |
+| `x-ratelimit-remaining` | El número de solicitudes restantes en la ventana de tiempo actual. |
+| `x-ratelimit-window` | La ventana de tiempo de los límites de esta ruta de recurso, medida en milisegundos (ms). |
+
+### Ejemplo {#example}
+
+El siguiente ejemplo procede de la respuesta a `GET v2/assets/:id/children`, para obtener los assets hijos de la raíz de un Project, una carpeta o un Version Stack. El límite para esa ruta es de 40 solicitudes por 60.000 ms (un minuto), y quedan 39 solicitudes después de realizar una.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Detalles {#details}
+
+Los límites de velocidad varían mucho entre las rutas de recursos de la API de Frame.io. A continuación se muestran algunos detalles seleccionados, expresados para facilitar la lectura como recurso y acción (p. ej., “Assets — Update” en lugar de `PUT /assets/:id`).
+
+Como regla general, las rutas de recursos que crean datos nuevos están limitadas a 100 llamadas por minuto o menos, y las rutas de recursos que obtienen listas de assets están limitadas a 200 llamadas por minuto.
+
+| Recurso | Acción | Límite (solicitudes) | Ventana del límite (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1,000 |
+| **Assets** | `update` | `10` | 1,000 |
+| **Assets** | `read` | `5` | 1,000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60,000 |
+| **Search** | `read` | `200` | 60,000 |

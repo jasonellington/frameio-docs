@@ -1,0 +1,599 @@
+---
+title: "Cómo: subir archivos (avanzado)"
+sidebarTitle: "Subir archivos (avanzado)"
+---
+
+## Introducción {#introduction}
+
+La subida fiable de assets es la función principal de toda integración C2C. Esta guía ofrece técnicas avanzadas y prácticas recomendadas para crear un sistema de subida robusto, resiliente y eficiente que funcione bien incluso en entornos difíciles.
+
+## Requisitos previos {#prerequisites}
+
+Si aún no lo has hecho, revisa la guía [Implementar C2C: configuración](/es/camera-to-cloud/implementing-c2c-setting-up) antes de continuar.
+
+Necesitarás el `access_token` obtenido durante el [proceso de autenticación y autorización](/es/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Seguiremos usando el [mismo asset de prueba](https://f.io/Rq1q5CzB) de la [guía de subidas básicas](/es/camera-to-cloud/how-to-basic-upload).
+
+## Parámetros avanzados de assets {#advanced-asset-parameters}
+
+Al crear assets en Frame.io, puedes utilizar varios parámetros avanzados para personalizar el comportamiento de la subida. El parámetro `offset` es especialmente importante para una integración correcta.
+
+### Offset: gestionar dispositivos en pausa {#offset---handling-paused-devices}
+
+Proporcionar un valor de `offset` preciso es fundamental. Este parámetro especifica cuándo se creó un elemento multimedia y garantiza que tu dispositivo no suba contenido que no deba compartirse. Cuando un dispositivo está en pausa en Frame.io, el usuario indica que el contenido multimedia creado durante la pausa no debe subirse. Para obtener más información, consulta nuestra [guía sobre la función de pausa](/es/camera-to-cloud/how-to-heartbeats-connection-info-and-status#managing-the-paused-status).
+
+### Ventajas adicionales del parámetro offset {#additional-benefits-of-the-offset-parameter}
+
+El parámetro `offset` ofrece otra ventaja importante para organizar el contenido multimedia dentro de Frame.io. Al subir contenido capturado en una fecha anterior (por ejemplo, cuando un usuario selecciona durante la reproducción una foto tomada la semana anterior), el parámetro `offset` garantiza que ese contenido aparezca en las carpetas correspondientes a su fecha de captura original y no a la fecha actual de subida.
+
+Esta organización cronológica mantiene una línea temporal lógica en la estructura del proyecto de Frame.io. Sin el parámetro `offset`, el contenido antiguo aparecería agrupado incorrectamente con el contenido de hoy, lo que podría confundir a los editores y a otros colaboradores.
+
+Quizá quieras ofrecer a los usuarios la posibilidad de elegir en tu interfaz. Si los usuarios prefieren organizar todas las subidas por la fecha actual independientemente de cuándo se capturó el contenido, simplemente puedes omitir el parámetro `offset`, ya que su valor predeterminado es `0` cuando no se especifica.
+
+El diseño de nuestra API elimina la necesidad de que tu dispositivo controle el estado de pausa. En su lugar, al subir un archivo, indicas hace cuántos segundos se creó. Nuestro servidor lo compara con los intervalos de pausa y rechaza la subida si el archivo se creó durante una pausa.
+
+Para probar esta función, pausa tu dispositivo desde el menú de tres puntos de la pestaña C2C Connections.
+
+Ahora intenta subir un asset:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 0
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Especificación del endpoint de la API**
+
+La documentación de `/v2/devices/assets` está [disponible aquí](/es/camera-to-cloud/api-reference/device-asset-create).
+
+</Info>
+
+Recibirás este error:
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+Si reanudas el dispositivo y vuelves a intentarlo con la misma solicitud, se creará el asset.
+
+Sin embargo, si el asset se creó durante el intervalo de pausa, debes establecer el `offset` para reflejar cuándo se creó realmente:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 60
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Esto indica a Frame.io que el asset se creó hace 60 segundos (durante la pausa), lo que activa correctamente el error `Channel Paused`.
+
+*Los valores de `offset` precisos son esenciales* para evitar subir contenido confidencial en contra de los deseos del usuario, como propiedad intelectual protegida, material sensible u otro contenido restringido.
+
+<Danger>
+
+**Offset y reintentos**
+
+Al reintentar una llamada de creación de asset fallida, recuerda actualizar el valor de `offset`. Durante periodos de reintento prolongados, un offset estático podría desplazarse fuera del intervalo de pausa correspondiente, lo que podría permitir subidas que deberían bloquearse.
+
+</Danger>
+
+### Subir a un canal específico {#uploading-to-a-specific-channel}
+
+Si tu dispositivo tiene varios canales, puedes especificar cuál usar:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": -10,
+            "channel": 2
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Si no se especifica, el canal predeterminado es `0`. La mayoría de las integraciones no necesitarán cambiar este valor.
+
+### Solicitar un número personalizado de fragmentos {#requesting-a-custom-chunk-count}
+
+De forma predeterminada, el backend de Frame.io divide los archivos en fragmentos (chunks) de aproximadamente 25 MB. En redes con mucha congestión, quizá prefieras fragmentos más pequeños. Puedes solicitar un número específico de fragmentos con el parámetro `parts`:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "name": "C2C_TEST_CLIP.mp4",
+            "filetype": "video/mp4",
+            "filesize": 21136250,
+            "offset": 0,
+            "parts": 4
+        }
+__JSON__
+} | python -m json.tool
+```
+
+La respuesta incluirá cuatro URL de subida:
+
+```json
+{
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-01-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-02-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-03-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-04-path]"
+    ],
+    ...
+}
+```
+
+El tamaño de cada fragmento será:
+
+```python title="Python"
+math.ceiling(float(21136250) / float(4))
+# 5284063 bytes
+```
+
+El último fragmento tendrá 5.284.061 bytes (calculado como `21136250 - 5284063 * 3`).
+
+Al solicitar un número personalizado de fragmentos, ten en cuenta las [limitaciones de la subida multiparte de AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html):
+
+- Cada parte debe tener al menos 5 MiB (5.242.880 bytes), excepto la última
+- No puede haber más de 10.000 partes
+
+Si tu solicitud no cumple estas restricciones, recibirás un `500: INTERNAL SERVER ERROR`:
+
+```
+{
+    "code": 500,
+    "errors": [
+        {
+            "code": 500,
+            "detail": "There was a problem with your request",
+            "status": 500,
+            "title": "Something went wrong"
+        }
+    ],
+    "message": "Something went wrong"
+}
+```
+
+Verifica siempre que tu número personalizado de partes cumpla los requisitos de S3.
+
+## Subir de forma eficiente {#uploading-efficiently}
+
+Los dispositivos C2C suelen funcionar en entornos de red difíciles, por lo que la eficiencia es fundamental. Estas son algunas estrategias para maximizar el rendimiento.
+
+### Reutilización y agrupación de conexiones TCP {#tcp-connection-reuse/pooling}
+
+Establecer conexiones cifradas requiere una negociación con una sobrecarga considerable. Para un funcionamiento eficiente, reutiliza las conexiones TCP al realizar varias solicitudes. La mayoría de las bibliotecas HTTP ofrecen una abstracción `Client` o `Session` que mantiene conexiones persistentes.
+
+El proceso de negociación de una nueva conexión HTTPS incluye intercambios criptográficos (handshakes) y la validación de certificados. Al reutilizar las conexiones, solo asumes esta sobrecarga una vez en lugar de en cada solicitud.
+
+<Info>
+
+**Referencia sobre el handshake TCP**
+
+Para conocer los detalles técnicos de los procesos de handshake TLS, consulta la [explicación de Cloudflare](https://www.cloudflare.com/learning/ssl/what-happens-in-a-tls-handshake/).
+
+</Info>
+
+Para probar la reutilización de conexiones con `curl`, primero crea un nuevo asset en Frame.io como se describe en la [guía de subida básica](/es/camera-to-cloud/how-to-basic-upload#step-1-creating-an-asset).
+
+A continuación, divide el archivo en fragmentos independientes para las pruebas:
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk01"
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk02"
+```
+
+Ahora sube ambos fragmentos a través de una única conexión TCP con el parámetro `--next` de curl:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+Compáralo con conexiones independientes:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+&& curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+<Info>
+
+**Reutilizar las URL de los fragmentos**
+
+Puedes subir a la misma URL de fragmento varias veces, así que no dudes en reutilizar las URL entre ejemplos.
+
+</Info>
+
+En las pruebas, la reutilización de conexiones suele mejorar el rendimiento entre un 15 y un 20 % en las subidas secuenciales.
+
+### Subidas en paralelo {#parallel-uploads}
+
+Para obtener un rendimiento aún mayor, sube varios fragmentos simultáneamente:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path]\
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+Con suficiente ancho de banda, las subidas en paralelo se completan aproximadamente en el tiempo que tarda la subida individual más lenta.
+
+Para un paralelismo óptimo, una buena regla general es realizar dos subidas simultáneas por núcleo de CPU. Superar esta proporción puede provocar contención de recursos y rendimientos decrecientes.
+
+<Warning>
+
+**Velocidad de las subidas en paralelo**
+
+Las condiciones de la red influyen considerablemente en el rendimiento de las subidas en paralelo. En algunos entornos, las subidas secuenciales pueden superar a las paralelas. Las implementaciones avanzadas pueden supervisar el rendimiento y ajustar dinámicamente la concurrencia. Analiza siempre el rendimiento en tu entorno de producción real en lugar de basarte en los tiempos de los ejemplos.
+
+</Warning>
+
+### Combinar ambos enfoques {#combining-both-approaches}
+
+Para obtener la máxima eficiencia, combina la agrupación de conexiones con las subidas en paralelo. Crea varios procesos, cada uno de los cuales utilice la agrupación de conexiones para su propia secuencia de subidas:
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+<Info>
+
+**Funciones de las bibliotecas HTTP**
+
+La mayoría de las bibliotecas HTTP ofrecen abstracciones para la agrupación de conexiones y las solicitudes en paralelo. Experimenta con las opciones de tu biblioteca para determinar la configuración óptima para tu entorno.
+
+</Info>
+
+## Seguimiento del progreso de la subida {#tracking-upload-progress}
+
+Tu integración debe ofrecer a los usuarios una indicación básica del progreso. Una granularidad a nivel de fragmento es aceptable: en una subida de tres fragmentos, el progreso podría aumentar de 0 % → 33 % → 66 % → 100 % a medida que se completa cada fragmento.
+
+Un informe de progreso más detallado depende de las capacidades de tu biblioteca HTTP. Ponte en contacto con nuestro equipo si necesitas orientación para implementar un seguimiento del progreso más detallado.
+
+## Subir de forma fiable {#uploading-reliably}
+
+Para una gestión de errores robusta, revisa nuestra [guía de errores](/es/camera-to-cloud/how-to-handle-errors). En las secciones siguientes se da por hecho que has implementado las estrategias de gestión de errores que se describen en ella.
+
+Crear un sistema de subida con calidad de producción requiere tener en cuenta aspectos adicionales más allá de la gestión de errores de cada solicitud.
+
+### Crear una cola de subida {#creating-an-upload-queue}
+
+En situaciones reales, tu dispositivo puede generar contenido multimedia más rápido de lo que puede subirlo, o puede sufrir interrupciones de conexión prolongadas. Implementar un sistema de colas separa la creación del contenido de la gestión de las subidas.
+
+Considera una arquitectura de dos colas:
+
+1. Una **cola de contenido multimedia** para registrar los archivos locales en Frame.io
+2. Una **cola de fragmentos** para subir los fragmentos individuales de cada archivo
+
+Esta es una implementación simplificada:
+
+```python title="Python"
+# Where we are going to queue new files.
+FILE_QUEUE = Queue()
+
+# Where we are going to queue new chunks.
+CHUNK_QUEUE = Queue()
+
+# The http session that will handle TCP 
+# connection pooling for us.
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Snaps a picture for the user."""
+
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+    FILE_QUEUE.add(file_path)
+
+def task_register_assets():
+    """
+    Pulls snapped pictures from the FILE_QUEUE, registers
+    with Frame.io, and adds the chunks to the CHUNK_QUEUE.
+    """
+    while True:
+        # Get the latest file added to the queue and register 
+        # a C2C Asset for it.
+        new_file = FILE_QUEUE.get()
+        asset = c2c.crete_asset_for_file(HTTP_SESSION, new_file)
+
+        # Calculate the size for each chunk
+        chunk_size = c2c.calculate_chunk_size(asset, new_file)
+
+        # Create a message for each chunk with it's parameters 
+        # and add it to the 
+        # queue.
+        chunk_start = 0
+        for chunk_url in asset.upload_urls:
+            message = {
+                "file_path": new_file,
+                "chunk_url": chunk_url,
+                "chunk_start": chunk_start,
+                "chunk_size": chunk_size,
+            }
+
+            # Put the message in the queue and 
+            CHUNK_QUEUE.put(message)
+            chunk_start += chunk_size
+
+def task_upload_chunk():
+    """Takes a chunks and uploads them."""
+
+    while True:
+        info = CHUNK_QUEUE.get()
+        c2c.upload_chunk(HTTP_SESSION, info)
+
+def launch_upload_tasks():
+    """Lauches our Frame.io upload tasks."""
+    # Create a list to hold all of our tasks.
+    tasks = list()
+
+    # Create one task for registering assets.
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Create 2 tasks per CPU core for uploading chunks.
+    for _ in range(0, GET_CPU_COUNT() * 2):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run these tasks until shutdown
+    run_forever(tasks)
+```
+
+<Warning>
+
+**Gestión de errores**
+
+En el ejemplo anterior, damos por hecho que las funciones invocadas para las llamadas c2c gestionan los errores tal como se explica en la [guía de errores](/es/camera-to-cloud/how-to-handle-errors).
+
+</Warning>
+
+### Colas persistentes entre ciclos de encendido {#persistent-queuing-across-power-cycles}
+
+El enfoque de cola en memoria funciona bien mientras el dispositivo permanece encendido, pero ¿qué ocurre si se pierde la alimentación antes de que se completen las subidas? Para crear una integración verdaderamente resiliente, debemos asegurarnos de que el dispositivo pueda continuar donde lo dejó tras reiniciarse.
+
+Esto requiere conservar el estado de la cola en el almacenamiento entre ciclos de encendido. Una base de datos integrada como [SQLite](https://www.sqlite.org/index.html) ofrece una base excelente para esta funcionalidad.
+
+Tu implementación de cola persistente debe admitir estas operaciones clave:
+
+- Añadir los archivos recién creados a la cola de subida
+- Registrar cuándo se crean correctamente los assets en Frame.io
+- Registrar cuándo falla la creación de un asset debido a errores
+- Almacenar la información de los fragmentos de archivo para las tareas de subida
+- Obtener el siguiente fragmento que se va a subir
+- Marcar los fragmentos como subidos correctamente
+- Registrar los errores de subida de fragmentos
+- Proporcionar información sobre el estado de los archivos para mostrarla al usuario
+
+Así es como podríamos adaptar el ejemplo anterior para utilizar un sistema de almacenamiento persistente:
+
+```python title="Python"
+# Our persistence layer for queuing uploads, potentially using SQLite 
+# or another embedded database
+C2C_UPLOAD_STORE = NewC2CUploadStore()
+
+# HTTP session for connection pooling
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Captures an image and adds it to the upload queue."""
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+
+    # Register the file with our persistent store
+    C2C_UPLOAD_STORE.add_file(file_path)
+
+def task_register_assets():
+    """
+    Processes files from persistent storage and registers
+    them with Frame.io for upload.
+    """
+    while True:
+        # Get the next available file from our store
+        file_record = C2C_UPLOAD_STORE.get_file()
+
+        try:
+            # Register the asset with Frame.io
+            asset = c2c.create_asset_for_file(HTTP_SESSION, file_record)
+            chunk_size = c2c.calculate_chunk_size(asset, file_record)
+
+            # Create entries for each chunk in our persistent store
+            chunk_start = 0
+            for chunk_url in asset.upload_urls:
+                message = {
+                    "file_path": file_record,
+                    "chunk_url": chunk_url,
+                    "chunk_start": chunk_start,
+                    "chunk_size": chunk_size,
+                }
+                
+                C2C_UPLOAD_STORE.new_chunk(message)
+                chunk_start += chunk_size
+                
+        except BaseException as error:
+            # Record the error in our persistent store
+            C2C_UPLOAD_STORE.file_asset_create_error(file_record, error)
+        else:
+            # Mark the asset as successfully created
+            C2C_UPLOAD_STORE.file_asset_created(file_record)
+
+def task_upload_chunk():
+    """Uploads individual file chunks from the persistent queue."""
+    while True:
+        # Get the next chunk, marking it as "in progress" to prevent 
+        # other tasks from processing it simultaneously
+        chunk_record = C2C_UPLOAD_STORE.get_chunk()
+
+        try:
+            c2c.upload_chunk(HTTP_SESSION, chunk_record)
+        except BaseException as error:
+            # Record the error for potential retry
+            C2C_UPLOAD_STORE.chunk_error(chunk_record, error)
+        else:
+            # Mark successful completion
+            C2C_UPLOAD_STORE.chunk_success(chunk_record)
+
+def launch_upload_tasks():
+    """Launches Frame.io upload processing tasks."""
+    tasks = []
+
+    # Asset registration task
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Multiple parallel chunk upload tasks
+    worker_count = GET_CPU_COUNT() * 2
+    for _ in range(worker_count):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run indefinitely
+    run_forever(tasks)
+```
+
+Con este enfoque de almacenamiento persistente, tu integración se vuelve resistente a los cortes de alimentación. Cuando el dispositivo se reinicia, simplemente continúa procesando desde el último estado guardado. Esta arquitectura también sienta las bases para implementar funciones más avanzadas, como el seguimiento de errores y la detección de subidas bloqueadas.
+
+### Seguimiento de errores de subida {#tracking-upload-errors}
+
+Un sistema de subida robusto debe registrar cuidadosamente los errores. Después de reintentar una operación con las estrategias de la [guía de errores](/es/camera-to-cloud/how-to-handle-errors), registra estos fallos en tu almacenamiento persistente. Esto permite que tu sistema:
+
+1. Reduzca la prioridad de las subidas problemáticas para evitar que bloqueen toda la cola
+2. Proporcione a los usuarios información precisa sobre el estado
+3. Permita la intervención administrativa en caso de problemas persistentes
+
+Cuando se produzca un error fatal, marca el elemento para evitar reintentos innecesarios.
+
+### Gestionar subidas bloqueadas {#managing-stalled-uploads}
+
+Implementa medidas de protección contra subidas bloqueadas indefinidamente. Establece una duración máxima (por ejemplo, 30 minutos) tras la cual se debe finalizar y reiniciar una tarea de subida de fragmento. Esto evita situaciones en las que todos los procesos de subida quedan bloqueados por operaciones que no responden.
+
+### Recuperarse de fallos silenciosos {#recovering-from-silent-failures}
+
+Los bloqueos del sistema, los cortes de alimentación o la finalización de procesos pueden impedir que los errores se notifiquen con normalidad. Al obtener elementos de la cola, registra la hora en que se extrajeron. Si un elemento permanece en estado "en curso" más allá de un umbral razonable (por ejemplo, 30 minutos) sin notificar éxito ni fallo, devuélvelo automáticamente al conjunto disponible para que lo procese otro proceso de trabajo.
+
+### Mitigar subidas envenenadas {#mitigating-poisoned-uploads}
+
+Un elemento de cola "envenenado" falla de forma sistemática debido a problemas inherentes a los datos o al entorno. Si estos elementos vuelven a la cola continuamente, pueden bloquear de hecho todo tu sistema de subida. Considera estas estrategias para gestionar estos casos:
+
+- Tras varios fallos, reduce la prioridad del elemento para que el contenido más reciente pueda continuar
+- Registra tanto los errores explícitos como el número de intentos de procesamiento
+- Sigue las prácticas recomendadas de conexión y autorización para distinguir entre problemas transitorios del entorno y problemas intrínsecos del archivo
+- Implementa límites de reintento escalonados (por ejemplo, reintentar cada operación 10 veces dentro de cada uno de 3 intentos de trabajo, para un total de 30 intentos)
+- Proporciona una interfaz de usuario para restablecer manualmente las subidas problemáticas una vez resueltos los problemas del entorno
+
+Las subidas envenenadas pueden deberse a:
+
+- Datos de archivo dañados que provocan errores de E/S
+- Fallos catastróficos de procesos que impiden notificar los errores
+- Errores normalmente reintentables provocados por condiciones subyacentes permanentes
+
+### Reintentar tras reiniciar el sistema {#retry-after-system-restart}
+
+Antes de abandonar definitivamente las subidas problemáticas, márcalas para un último reintento tras el siguiente reinicio del sistema. Esto resuelve los casos en que las subidas fallan debido a problemas temporales del estado del sistema relacionados con la memoria, los controladores o la asignación de recursos. Si una subida sigue fallando tras un reinicio limpio, puedes marcarla con más seguridad como permanentemente problemática.
+
+## Vaciar la cola {#clearing-your-queue}
+
+Recuerda eliminar de la cola los archivos que ya no estén disponibles. Cuando se retire físicamente un soporte o se eliminen archivos, borra las entradas correspondientes de tu cola de subida para evitar errores innecesarios.
+
+*Es importante que vacíes la cola de subida al conectarte a un nuevo proyecto.* El contenido multimedia en cola para un proyecto nunca debe aparecer en otro. Cuando un usuario empareje el dispositivo con un proyecto diferente, comprueba si el proyecto ha cambiado y, en ese caso, vacía por completo la cola existente.
+
+## Próximos pasos {#next-steps}
+
+Te animamos a ponerte en contacto con nuestro equipo si tienes cualquier pregunta y a continuar con la [guía de subidas avanzadas](/es/camera-to-cloud/how-to-advanced-uploads). Estaremos encantados de apoyarte en el progreso de tu integración.

@@ -1,0 +1,58 @@
+---
+title: "Rate Limits"
+---
+
+# Überblick {#overview}
+
+Unabhängig davon, ob ein Token über das Developer Portal, eine OAuth-Freigabe oder das Accounts-Backend bereitgestellt wird, das die eigenen Anwendungen von Frame.io bedient, gilt: **Alle API-Aufrufe an Frame.io unterliegen Rate Limits.**
+
+Rate Limits gelten für alle API-Requests eines einzelnen Benutzers (unabhängig davon, welches Token oder welche Auth-Methode verwendet wird), werden schrittweise aufgebraucht und wieder aufgefüllt und spiegeln sich in den Response-Headern jedes Requests an die Frame.io API wider. Jeder Endpunkt ist mit eigenen Limits konfiguriert, die von nur `10` Requests/Minute bis zu `100` Requests/Sekunde reichen.
+
+Requests, die das Rate Limit für einen bestimmten Endpunkt überschritten haben, erhalten als Response einen `429`-HTTP-Fehler.
+
+## Aufbrauchen und Auffüllen {#depletion-and-refill}
+
+Die Frame.io API verwendet eine [Leaky-Bucket](https://wikipedia.org/wiki/Leaky_bucket)-Strategie für schrittweises Rate Limiting, bei der sich die Limits innerhalb ihres zugewiesenen Zeitfensters nach und nach erneuern. Mit anderen Worten: Es gibt keinen festen Zeitpunkt, nach dem sich die Limits für eine bestimmte Ressource erneuern (wie bei den Durchsetzungsstrategien „Fixed Window“ und „Sliding Window“). Stattdessen werden die verbleibenden Limits kontinuierlich in einem Tempo aufgefüllt, das sich nach dem Limit und dem Zeitfenster einer Ressource richtet.
+
+### Exponential Backoff {#exponential-backoff}
+
+Unsere empfohlene Strategie für den Umgang mit Rate Limits wird üblicherweise als „Exponential Backoff“ bezeichnet.
+
+Kurz gesagt:
+
+- Wenn Sie einen `429` erhalten, pausieren Sie für einen bestimmten Zeitraum (normalerweise eine Sekunde)
+- Wenn Sie einen weiteren `429` erhalten, erhöhen Sie die Wartezeit exponentiell, bis der normale Betrieb wieder aufgenommen wird
+
+## Header {#headers}
+
+Responses auf API-Requests enthalten immer die folgenden drei Header, die Sie zur Begrenzung Ihrer ausgehenden Requests nutzen sollten:
+
+| Header | Wert |
+| --- | --- |
+| `x-ratelimit-limit` | Das Rate Limit für diesen Ressourcenpfad, gemessen in Requests. |
+| `x-ratelimit-remaining` | Die Anzahl der im aktuellen Zeitfenster verbleibenden Requests. |
+| `x-ratelimit-window` | Das Zeitfenster für die Limits dieses Ressourcenpfads, gemessen in Millisekunden (ms). |
+
+### Beispiel {#example}
+
+Das folgende Beispiel stammt aus der Response auf `GET v2/assets/:id/children`, mit dem die untergeordneten Assets eines Project-Roots, eines Ordners oder eines Version Stacks abgerufen werden. Das Limit für diesen Pfad beträgt 40 Requests pro 60.000 ms (eine Minute), und nach einem ausgeführten Request verbleiben noch 39 Requests.
+
+```
+x-ratelimit-limit → 40
+x-ratelimit-remaining → 39
+x-ratelimit-window → 60000
+```
+
+## Details {#details}
+
+Rate Limits unterscheiden sich in der Frame.io API je nach Ressourcenpfad stark. Nachfolgend finden Sie einige ausgewählte Details, der Lesbarkeit halber als Ressource und Aktion ausgedrückt (z. B. „Assets — Update“ statt `PUT /assets/:id`).
+
+Als allgemeine Regel gilt: Ressourcenpfade, die neue Daten erstellen, sind auf höchstens 100 Aufrufe pro Minute begrenzt, und Ressourcenpfade, die Listen von Assets abrufen, sind auf 200 Aufrufe pro Minute begrenzt.
+
+| Ressource | Aktion | Limit (Requests) | Limit-Zeitfenster (ms) |
+| --- | --- | --- | --- |
+| **Assets** | `create` | `5` | 1.000 |
+| **Assets** | `update` | `10` | 1.000 |
+| **Assets** | `read` | `5` | 1.000 |
+| **Comments<br />Presentations<br />Projects<br />Review Links<br />Teams<br />Team Members** | `create` | `100` | 60.000 |
+| **Search** | `read` | `200` | 60.000 |

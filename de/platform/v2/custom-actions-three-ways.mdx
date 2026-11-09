@@ -1,0 +1,84 @@
+---
+title: "Drei Möglichkeiten, Custom Actions bereitzustellen"
+---
+
+## Einführung {#introduction}
+
+Was ist der schnellste Weg, eine Custom Action bereitzustellen? Welches ist das vielseitigste Setup, mit dem Sie Ihren Workflow vollständig anpassen können? Die Umgebung, die Sie zum Empfangen und Verarbeiten von Custom Actions wählen, ist ein wichtiger Faktor dafür, was in den nachfolgenden Workflow-Schritten mit Ihren Daten möglich ist. Die grundlegenden Optionen sind:
+
+1. No-Code-Bereitstellungen mit einer Automatisierungsplattform wie Zapier, Integromat oder Microsoft Power Automate
+2. Low-Code-Lösungen wie AWS Lambda oder Azure Functions, bei denen Sie einfache Skripte als „Jobs“ in vollständig gewarteten Umgebungen ausführen können;
+3. Server, die Sie selbst betreiben und warten
+
+Dieses Diagramm zeigt die Architektur von Custom Actions:
+
+![Custom Actions Diagram](/images/platform/v2/custom-actions-three-ways/a73b943-custom_actions_architecture.png)
+
+### No Code: Bereitstellung in Zapier {#no-code-deploy-to-zapier}
+
+Die „Klicken und Erstellen“-Oberfläche von Zapier ist eine gute Wahl für einfache Automatisierungen, bei denen Ihr Ziel darin besteht, Assets, Kommentare oder Status-Events von Frame.io an beliebte Apps oder Produktivitätstools zu senden.
+
+![Zapier Setup](/images/platform/v2/custom-actions-three-ways/548d2d6-zapier_catch_webhook.png)
+
+#### Vorteile {#pros}
+
+- Einfach zu bedienen. Automatisierungen per Klick erstellen.
+- [Task History](https://zapier.com/learn/getting-started-guide/task-history/) ist das Laufzeitprotokoll-Tool von Zapier und fasst die Ein- und Ausgabedaten jedes Workflow-Schritts bei jedem Automatisierungsdurchlauf zusammen.
+- Mit einem kostenpflichtigen Premium-Account wird [Paths](https://zapier.com/paths) freigeschaltet, ein Tool zum Hinzufügen von Verzweigungslogik zu Automatisierungen.
+
+#### Nachteile: {#cons}
+
+- Die Webhook-Unterstützung von Zapier ist insofern eingeschränkt, als sie keine detaillierten Nachrichten oder sonstige Interaktion zurück an den Frame.io-Benutzer unterstützt, wenn Ihre Custom Action ausgeführt wird. Diese Einschränkung wird in der Support-Dokumentation von Zapier erläutert:
+
+> We \[Zapier\] always return a success message with a payload of debugging information when collecting a webhook - regardless of whether there is a Zap behind the webhook or if it is paused or not…There is no way to customize the response to the request you send to the Catch Hook URL, as the response is sent before the Zap triggers and runs on the webhook request.
+
+- Die Zapier-UI kann mühsam sein, wenn Sie überprüfen möchten, ob Custom Actions ordnungsgemäß funktionieren. Beispielsweise müssen [Testdaten](https://zapier.com/help/create/basics/change-the-test-data-in-your-zap-trigger) während des Testens überprüft und aktualisiert werden; wenn die Testdaten nicht mit Ihren Live-Daten übereinstimmen, meldet Zapier möglicherweise „falsch negative“ Ergebnisse und zeigt Fehler an, obwohl Ihr Zap-Design eigentlich korrekt ist. Wenn ein wichtiges Datenelement wie `File URL` nicht verfügbar ist, wenn eine Task es erwartet, kann Ihr Zap fehlschlagen oder nicht wie erwartet funktionieren.
+
+<Info>
+
+**Wir haben dazu einen Leitfaden geschrieben!**
+
+Wir haben ausführliche Leitfäden zum Entwerfen von Zapier-Integrationen geschrieben, darunter eine detaillierte Anleitung zum [Bereitstellen von Custom Actions in Zapier](/de/platform/v2/deploy-custom-actions-to-zapier).
+
+</Info>
+
+## Low Code: Bereitstellung in AWS {#low-code-deploy-to-aws}
+
+Custom Actions können an API Gateway in AWS gesendet und in Amazons [berühmt-berüchtigt große](https://aws.amazon.com/what-is-aws/) Palette von Cloud-Services integriert werden. Das einfachste Muster besteht darin, das in Ihrer Custom Action enthaltene Frame.io-Event an AWS Lambda weiterzuleiten, einen Compute-Service zum Ausführen serverloser Funktionen. Hier ein Beispieldesign für einen Dateiarchivierungsdienst:
+
+![AWS Lambda](/images/platform/v2/custom-actions-three-ways/2ef81ac-action-lambda.png)
+
+#### Vorteile: {#pros-1}
+
+- Mit dem [AWS Free Tier](https://aws.amazon.com/free/?all-free-tier.sort-by=item.additionalFields.SortRank&all-free-tier.sort-order=asc&all-free-tier.q=Lambda&all-free-tier.q_operator=AND) erhalten Sie 3,2 Millionen Sekunden Rechenzeit pro Monat, bevor Ihnen Services in Rechnung gestellt werden.
+- API Gateway und Lambdas unterstützen hervorragende Test- und Monitoring-Tools wie CloudWatch und X-Ray.
+- Services können skaliert werden, um sehr große Dateien (500 GB+) zu unterstützen.
+
+#### Nachteile: {#cons-1}
+
+- Das Verknüpfen mehrerer Services (Webhook -> API Gateway -> Lambda 1 -> Lambda 2) oder das Erlernen neuerer Angebote wie AWS Fargate kann zeitaufwendig sein.
+- Die AWS-Dokumentation ist oft veraltet oder es fehlen wichtige Details. Beispielsweise ist beim Konfigurieren von API Gateway nicht leicht zu erkennen, ob Payloads Base64-codiert werden oder nicht.
+- Die Konfiguration ist im Allgemeinen etwas kompliziert.
+
+[Im Leitfaden finden Sie eine vollständige Schritt-für-Schritt-Anleitung zur Bereitstellung von Custom Actions in AWS](https://medium.com/@frameiokyle/automatic-s3-backups-with-frame-io-custom-actions-and-aws-lambda-d3b8dbed0133). Hinweis: Sie können Custom Actions in jedem Cloud-Compute-Service bereitstellen, nicht nur in AWS (Azure, Google Cloud Platform, Digital Ocean usw.).
+
+### Einen Server betreiben und eigenen Code hosten {#run-a-server-and-host-your-own-code}
+
+Cloud-Services sind äußerst praktisch, aber für Workflows, bei denen Sie die vollständige Kontrolle über Ihre Daten haben möchten, können Sie sich dafür entscheiden, einen eigenen Server zu schreiben und bereitzustellen.
+
+Im DevRel-Team schreiben wir gern [FastAPI-Server](https://fastapi.tiangolo.com/features/) in Python. Sie sind einfach zu erstellen und passen gut zum Request-Response-Muster von Custom Actions.
+
+#### Vorteile: {#pros-2}
+
+- Sie kontrollieren den gesamten Datenfluss von Anfang bis Ende. Absolut keine Überraschungen.
+- Synchronisieren Sie Daten auf ein NAS oder Dateisystem, ohne sie zusätzlich der Cloud auszusetzen.
+
+#### Nachteile: {#cons-2}
+
+- Erfordert die Administration eines Servers, die Entwicklung eigener Sicherheitsfunktionen, die Handhabung von Network Discovery, Last usw.
+
+Klonen Sie unseren [Beispielcode](https://github.com/Frameio/custom-actions-app-python), um einen FastAPI-Server zur Verarbeitung von Custom Actions bereitzustellen.
+
+### Lassen Sie uns über das beste Design für Ihre Anforderungen sprechen {#let’s-talk-about-the-best-design-for-your-needs}
+
+Posten Sie Ihre Anforderungen in unserer Community – wir helfen Ihnen gern dabei, das beste Design für Ihren Workflow herauszufinden.

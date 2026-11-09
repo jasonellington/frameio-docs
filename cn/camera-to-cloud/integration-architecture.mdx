@@ -1,0 +1,117 @@
+---
+title: "集成架构"
+---
+
+## 简介 {#introduction}
+
+在开始发起 API 请求之前，您需要了解 C2C 集成的基本架构。（别担心，在下一篇文章中您就会在终端里动手操作了。现在，我们先来介绍这些基本概念。）
+
+您的集成的简化数据模型大致如下：
+
+```text
+                                   ┌───────────────────┐    ┌─────────┐
+                                   │ Project Device 01 │ -> │ Project │
+┌───────────┐    ┌──────────────┐  └───────────────────┘    └─────────┘
+│ Oauth App │ -> │ Device Model │ ──────────⭥
+└───────────┘    └──────────────┘  ┌───────────────────┐    ┌─────────┐
+                                   │ Project Device 02 │ -> │ Project │
+                                   └───────────────────┘    └─────────┘
+```
+
+## OAuth 应用 {#oauth-apps}
+
+您的集成由一个 OAuth 应用定义。OAuth 应用是在我们后端注册的实体，允许您的设备使用 [OAuth 2](https://oauth.net/2/) 向 Frame.io 进行授权。您的 OAuth 应用定义了整个集成的授权策略。用户连接到 Frame.io 的每台设备都将通过同一个 OAuth 应用进行授权（不过，拥有多条设备产品线的集成方可能希望为每条产品线分别使用一个 OAuth 应用）。
+
+对于 C2C 集成，我们使用一种专为 UI 功能有限的设备设计的 OAuth 流程。
+
+### C2C 设备身份验证 {#c2c-device-authentication}
+
+C2C API 专为 UI 功能有限的设备而设计。这些设备通过显示一个 6 位数代码，让用户将其连接到 Frame.io；用户随后在自己的浏览器中打开 Frame.io 网站并输入该代码。
+
+设备会获得一个 `client_secret`，必须将其提供给我们的后端，才能获取 6 位数授权代码。这种简化的方法可确保所有 C2C 集成都拥有一致且安全的身份验证体验。
+
+## 设备型号 {#device-models}
+
+设备型号用于配置您的设备在与 C2C 后端交互时的行为，包括其支持哪些功能。以下设置由您的设备型号配置：
+
+<CardGroup cols={2}>
+
+<Card title="资产类型" icon="file-video" iconType="solid">
+
+您的设备生成的资产类别。可以是“video”、“audio”或“data”。请注意，“video”包括与音频混流的视频文件。
+
+</Card>
+
+<Card title="路径名称" icon="folder" iconType="solid">
+
+您的集成在任何已上传资产路径中显示的名称。
+
+</Card>
+
+<Card title="令牌化文件路径" icon="code" iconType="solid">
+
+C2C 仅允许将资产上传到特定的根文件路径，但在此要求之下，您可以将设备配置为根据资产所提供的元数据，将资产上传到动态计算出的文件路径。
+
+</Card>
+
+<Card title="必需元数据" icon="list" iconType="solid">
+
+将资产上传到 Frame.io 时需要提供哪些元数据，主要用于支持令牌化文件路径。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Socket 状态" icon="plug" iconType="solid">
+
+集成是使用低延迟的 Socket 来传达其当前状态，还是使用延迟较高的 REST 调用。
+
+</Card>
+
+</CardGroup>
+
+您的设备支持的功能可能会随固件版本而变化。为了实现向后兼容并提供简洁的用户体验，您的设备配置会根据检测到的固件版本动态选择。在不久的将来，一个集成将可以拥有多个 DeviceModel。具体使用哪个设备型号，将通过比较设备的固件版本与特定设备型号的最低固件版本要求来确定。
+
+## 项目设备与标识 {#project-devices-and-identification}
+
+`ProjectDevice` 代表连接到 Frame.io 的每个物理设备实例。
+
+`ProjectDevice` 使用一个名为 `client_id` 的唯一标识值来标识自身。该值必须保证不会被两台设备共用。它可以是设备的序列号，也可以是设备生成一次并保存下来的随机字符串。`client_id` 不应（NOT）是不归您的设备所有的值，例如计算机的 MAC 地址。
+
+我们的后端会跟踪每台项目设备，并保存有关它的信息，例如其当前固件版本。
+
+每个 `ProjectDevice` 都会关联一个特定的 Frame.io `Project`，以及一个 `OauthAuthorization`，后者授予设备访问该项目的权限，以及一组详细说明设备被允许执行哪些操作的权限范围（scope）。有关可用权限范围的更多信息，请参阅关于实施身份验证与授权的详细指南。
+
+`/me` 端点返回的就是 `ProjectDevice`。一个 `Device` 同一时间只能与一个 `ProjectDevice` 保持活动关联，因此同一时间也只能关联一个 `Project`。
+
+## 固件版本 {#firmware-versions}
+
+每当您调用 `https://api.frame.io` 上的端点时，您的设备都必须通过 `x-client-version` HTTP 请求头提供其当前固件版本。后续的 API 指南会在每个示例中包含此请求头。
+
+在某些情况下，我们的后端需要对多个固件版本进行排序。为此，我们要求这些值必须（MUST）是有效的 [语义化版本](https://semver.org/)。这类值包括 `0.1.2`、`2.1.3-preview.01` 和 `2.1.3-preview.01+build_19770504.01` 等。
+
+如果固件版本值不是有效的语义化版本，将返回错误。我们理解并非所有集成都使用语义化版本来跟踪固件。在这种情况下，我们要求您为创建的每个内部版本维护一个对应的语义化版本，以便提供给我们的后端。
+
+通过提供此请求头，您固件的不同版本可以在 Frame.io 中支持不同的（有时甚至相互冲突的）功能。
+
+<Info>
+
+**请求头主机**
+
+只有对 [https://api.frame.io](https://api.frame.io) 的调用才会处理固件版本；调用 [https://applications.frame.io](https://applications.frame.io) 时，该请求头不起作用。
+
+</Info>
+
+<Info>
+
+**当前要求**
+
+`x-client-version` 现在是必需的 HTTP 请求头，Frame 的服务器将强制执行此要求。
+
+</Info>
+
+## 后续步骤 {#next-steps}
+
+是时候发起一些 API 调用了！我们来学习如何通过 C2C 进行身份验证和授权。请按照 [设置指南](/cn/camera-to-cloud/implementing-c2c-setting-up) 开始操作。

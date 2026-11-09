@@ -1,0 +1,205 @@
+---
+title: "MakeでFrame.ioのワークフローを自動化する"
+sidebarTitle: "Make"
+---
+
+Makeは、アプリやサービスを連携させるノーコードの自動化プラットフォームです。ビジュアルなインターフェースで、さまざまなモジュールを順に並べて「シナリオ」と呼ばれるワークフローを構築します。
+
+すべてのシナリオには、トリガー(「Frame.ioで新しいProjectが作成された」など)と、それに続くアクション(「Google Sheetsに行を追加する」など)があります。これらのモジュールを視覚的に接続して、何がどの順序で実行されるかを定義します。
+
+## Frame.ioをMakeと連携する理由 {#why-connect-frame-io-to-make}
+
+Makeを使うと、Frame.ioをワークフロー全体に拡張できます。ファイルをストレージに同期したり、プロジェクト管理ツールを更新したり、レポートを生成したり、チームに通知したり、Frame.ioのアクティビティに基づいたカスタムワークフローを構築したりできます。Frame.ioを技術スタックと連携させるほど、その効果は大きくなります。
+
+**自動化のアイデア:**
+
+- クライアントが受付フォームを送信したときにFrame.io Projectを自動作成する
+- Frame.ioの動画にコメントが追加されたときにSlackに投稿する
+- 新しいFrame.io Projectが作成されたときにGoogle Sheetを更新する
+
+これらはほんの一例です。利用可能なFrame.ioモジュールの全一覧については、[Make.com](https://www.make.com/en/integrations/frame-io#:~:text=All-,Modules,-(26))のこちらのページを確認してください。
+
+## 必要なもの {#what-you-need}
+
+- **Frame.ioアカウント**(サブスクリプション情報は[こちら](https://frame.io/pricing))
+- **Makeアカウント**(無料プランあり)
+
+<br />
+
+<Note>
+
+**このガイドの構成**<br />
+
+次のセクションではMakeの基本を説明します。すぐに構築を始めたい場合は、Frame.ioアカウントを接続し、新しいFrame.io ProjectをGoogle Sheetに記録するシナリオを構築するチュートリアルまでスキップしてください。
+
+</Note>
+
+## モジュールの種類 {#module-types}
+
+Makeには、トリガー、検索、アクション、ユニバーサルモジュールの4種類のモジュールがあります。
+
+<CardGroup cols={2}>
+
+<Card title="トリガー" icon="bell" iconType="solid" horizontal={true}>
+
+トリガーはサービス内の変更を監視し、その変更をMakeに取り込んで、シナリオ内でそのデータを使用できるようにします。トリガーモジュールは、1つのシナリオにつき **1つ** 追加できます。
+
+<br />
+
+ポーリングトリガーとインスタントトリガーの詳細については、下の **トリガーの種類** セクションを参照してください。
+
+<br />
+
+- シナリオツールバーの **Schedule settings** をクリックすると、トリガーモジュールの実行頻度を設定できます
+- Makeでは、シナリオをトリガーモジュールから始めることを強く推奨しています。
+
+</Card>
+
+<Card title="検索" icon="magnifying-glass" iconType="solid" horizontal={true}>
+
+検索モジュールは、サービスから特定のデータを取得します。検索モジュールはシナリオ内の任意の位置に複数追加できます。ほとんどの検索は、1回の実行で最大3,200個のオブジェクトを返します。
+
+<br />
+
+**検索モジュールの種類:**
+
+<br />
+
+- **検索モジュール** では、フィルターやクエリを使って特定のデータを見つけられます
+  (Search Records、Search Rowsなど)
+- **リストモジュール** は、フィルタリングせずにすべてのデータを取得します。(List Projects、List Sheetsなど)
+
+</Card>
+
+<Card title="アクション" icon="bolt" iconType="solid" horizontal={true}>
+
+アクションモジュールは、サービスから取得したデータを処理します。アクションはシナリオ内の任意の位置に必要なだけ追加できます。
+
+<br />
+
+**アクションの種類:**
+
+<br />
+
+- GET
+- CREATE
+- UPDATE
+- DELETE
+
+<br />
+
+</Card>
+
+<Card title="ユニバーサルモジュール" icon="code" iconType="solid" horizontal={true}>
+
+ユニバーサルモジュール(通常は **Make an API Call** と呼ばれます)を使うと、必要な処理に対応する既製のモジュールがMakeに用意されていない場合に、カスタムのAPI呼び出しを行えます。
+
+<br />
+
+ユニバーサルモジュールは必要なだけ追加でき、シナリオ内の任意の位置に配置できます。
+
+</Card>
+
+</CardGroup>
+
+## トリガーの種類 {#trigger-types}
+
+Makeでは、ポーリングとインスタントの2種類のトリガーを使用します。
+
+**ポーリングトリガー** は、スケジュールに従ってサービスアカウントに新しいデータがあるかを確認します。通常は「Watch Records」や「Watch Rows」といった名前が付いています。シナリオが実行されると、Makeはサービスに新しいデータがあるかを問い合わせ、あればシナリオがそれを処理します。
+
+**インスタントトリガー** の仕組みは異なります。Webhookを使用するため、何かが起きるとサービスがすぐにMakeに通知し、シナリオが即座に実行されます。モジュール上の稲妻アイコンと「Instant」タグで見分けられます。
+
+Frame.ioのWatch Eventsモジュールはインスタントトリガーなので、後ほど構築するシナリオはリアルタイムで実行されます。
+
+さまざまなモジュールタイプの実行方法については、[MakeのHelp Centerのこちらのセクション](https://help.make.com/types-of-modules)で詳しく説明されています。
+
+# Makeのインターフェース {#the-make-interface}
+
+Makeのダッシュボードには、すべてのシナリオが表示されます。ここでは、アクティブなシナリオ、シナリオのパフォーマンス、クレジットの使用状況を監視できます。ヘッダーの **Create scenario** をクリックすると、ビルダーが開きます。
+
+### アプリケーションとモジュールの追加 {#adding-applications-+-modules}
+
+シナリオにモジュールを追加するには、ビルダー中央のプラスボタンをクリックします。パネルが開くので、Frame.ioやGoogle Sheetsなど必要なアプリを検索し、使用したい特定のモジュール(「Watch Events」や「Add a Row」など)を選択します。ビルダー内でモジュールをドラッグ&ドロップして接続し、シナリオを構築します。
+
+### アプリの管理と再接続 {#managing-+-reconnecting-apps}
+
+左サイドバーから、シナリオ、接続、Webhook、その他のMakeの機能にアクセスできます。
+
+Frame.ioやその他のアプリを再接続する必要がある場合は、左サイドバーの **Connections** をクリックします。接続済みのすべてのアプリが表示され、それぞれの横に **Reauthorize** ボタンがあります。これをクリックすると、認証フローをもう一度実行できます。
+
+### テスト {#testing}
+
+シナリオをテストするには、ツールバーの **Run once** をクリックします。テストが完了すると、各モジュールの上に実行されたオペレーション数を示すバブルが表示されます。バブルをクリックすると、そのステップの入力データと出力データを確認できます。
+
+**既存のデータでテストする:**
+
+デフォルトでは、トリガーは新しいイベントのみを処理します。既存のデータでテストするには、**Run once** ボタンの横にあるドロップダウン矢印をクリックします。ダイアログが開き、以前に受信したWebhookイベントのデータを再実行できます。
+
+---
+
+# 最初のシナリオを構築する:新しいプロジェクトをGoogle Sheetsに記録する {#building-your-first-scenario-log-new-projects-to-google-sheets}
+
+始める前に、次の列見出しを持つGoogle Sheetを作成してください。
+
+**Event Type**、**Resource ID**、**Workspace ID**、**User ID**。この例では、シート名を「Frame Projects」とします。
+
+<Steps>
+
+<Step title="Frame.ioに接続してトリガーを追加する">
+
+Makeビルダーでプラス記号をクリックしてモジュールを追加します。「Frame.io」を検索し、**Watch Events** を選択します。これにより、Frame.ioで特定のイベントが発生したときにトリガーされるWebhookが作成されます。
+
+**Frame.ioの接続:**
+
+- 接続フィールドの横にある **Add** をクリックします
+- デフォルトの接続名をそのまま使うか、名前を変更します
+- Adobeアカウントへのログインと、Makeの認可を求められます
+- 接続が完了すると、利用可能なすべてのFrame.ioアカウントとワークスペースがドロップダウンに表示されます
+
+**Webhookの設定:**
+
+- アカウントと、監視したいワークスペースを選択します。この例では「New Workspace」を使用します
+- イベントで **Project Created** を選択します(サポートされているイベントの詳細については、[Webhookのドキュメント](https://developer.adobe.com/frameio/guides/Webhooks/#webhook-event-subscriptions)を参照してください)
+- Webhookに名前を付けて、変更を保存します
+
+</Step>
+
+<Step title="Google Sheetsを追加する">
+
+プラス記号をクリックして次のステップを追加します。Google Sheetsアプリを検索して選択し、**Add a Row** モジュールをクリックします。
+
+**Google Sheetsの接続:**
+
+- **Add** をクリックして新しい接続を作成します
+- **Sign in with Google** をクリックし、MakeにGoogleアカウントへのアクセスを許可します
+- 接続が完了すると、アカウントのシートがドロップダウンに表示されます
+- シート/タブ名を選択します(この例では「Frame Projects」)
+
+**データのマッピング:**
+次に、Frame.ioのデータをスプレッドシートの列にマッピングします。各フィールドをクリックし、Frame.ioトリガーから対応するデータを選択します。
+
+- **Event Type** → Frame.ioのEvent Typeにマッピング
+- **Resource ID** → Frame.ioのResourceにマッピング
+- **Workspace ID** → Frame.ioのWorkspace IDにマッピング
+- **User ID** → Frame.ioのUser IDにマッピング
+
+</Step>
+
+<Step title="テストして有効化する">
+
+**Run once** をクリックしてシナリオをテストし、選択したFrame.ioワークスペースで新しいプロジェクトを作成します。すべてが正しく設定されていれば、スプレッドシートに新しい行が追加されます。
+
+![Sheet](/images/platform/docs/guides/make/frame_sheet_example.gif)
+
+本番運用を開始する準備ができたら、トグルを **Active** に切り替えると、自動的に実行されるようになります。
+
+</Step>
+
+</Steps>
+
+これで最初の自動化が完成しました。ここから、このシナリオにステップを追加したり、[Make.com](https://www.make.com/en/integrations/frame-io#:~:text=All-,Modules,-(26))で利用できる他のFrame.ioモジュールを使って新しいシナリオを構築したりできます。
+
+問題が発生した場合、質問がある場合、または構築したものを共有したい場合は、[Community Forum](https://forum.frame.io/)をご覧ください。
+
+---

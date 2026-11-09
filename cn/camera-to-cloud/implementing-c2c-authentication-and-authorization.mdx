@@ -1,0 +1,521 @@
+---
+title: "操作指南：授权"
+sidebarTitle: "授权"
+---
+
+## 简介 {#introduction}
+
+本指南演示 Camera to Cloud（C2C）设备在 Frame.io 项目中的身份验证和授权过程。我们将探讨标准的手动输入代码方法，以及可带来最佳用户体验的增强型二维码配对方法。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果您还没有阅读 [开始实施之前](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，请先查看。
+
+您应该已经从我们的团队收到用于识别您的集成的 `client_secret`。如果没有，请参阅这篇 C2C 生态系统 [简介](/cn/camera-to-cloud/getting-started-with-cloud-device-integrations)，并联系我们的团队。
+
+### URL 和二维码配对的前提条件 {#prerequisites-for-url-&-qr-code-pairing}
+
+要实现 URL 和二维码配对，请确保满足以下要求：
+
+- **设备兼容性**：确认您的设备支持在配对过程中生成 URL/二维码。
+
+## 了解身份验证流程 {#walking-through-the-auth-flow}
+
+要从用户的角度了解授权流程，请参考以下资源：
+
+- 关于添加新设备的 [支持文章](https://help.frame.io/en/collections/8960335-frame-io-c2c)。
+- 关于授权 Teradek Cube 的 [培训视频](https://help.frame.io/en/articles/5091124-camera-to-cloud-training-series)。
+
+此授权过程将实施要求降到了最低。您无需：
+
+- 重定向到网页浏览器（除非使用 URL 代码配对）
+- 处理 Frame.io 用户身份验证
+- 提供账户/项目选择界面
+- 开发除基本信息显示之外的复杂 UI 组件
+
+### 通过 URL 代码配对提升用户体验 {#enhancing-the-user-experience-with-url-code-pairing}
+
+现代用户期望与设备进行高效的交互。虽然当前的手动配对流程能够满足基本需求，但仍有优化空间。
+
+通过实现 URL 和二维码配对（类似于 Netflix 或 Disney+ 等流媒体服务的做法），我们可以显著简化流程、减少输入错误并缩短配对时间。
+
+## 设备标识（client_id） {#device-identification-client_id}
+
+每台物理设备都需要一个唯一标识符，以便在用户项目中跟踪其连接。
+
+对于设备而言，此标识符就是 `client_id`，它在授权过程中至关重要。在实施时，请考虑合适的标识符来源，例如设备序列号、UUID 或其他唯一字符串。如果您在 Apple 设备上进行集成，我们建议使用一个在设备重启后保持不变的唯一持久 UUID。
+
+请谨慎处理个人身份信息。用户电子邮件地址不适合用作 `client_id` 值。
+
+此外，请确保标识符由您控制。设备 MAC 地址并不合适，因为它们并不归您的软件所有，而且可能构成个人身份信息。
+
+如果您在选择合适的标识符方面需要指导，我们的团队可以协助您确定一个能够简化集成的合适值。
+
+## 第 1 步：请求设备代码 {#step-1-requesting-a-device-code}
+
+要开始实施，请通过 `/v2/auth/device/code` 端点请求设备代码：
+
+### 传统配对方法 {#traditional-pairing-method}
+
+```
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'scope=asset_create offline' \
+    | python -m json.tool
+```
+
+### 启用 URL 代码配对 {#enabling-url-code-pairing}
+
+如需使用 URL 代码配对，请在 API 调用中添加额外的请求头：
+
+```
+curl -X POST https://api.frame.io/v2/auth/device/code \
+    --header "x-client-version: 2.0.0" \
+    --header "x-client-platypus-enabled: true" \  # New header to enable URL pairing
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'scope=asset_create offline' \
+    | python -m json.tool
+```
+
+**注意：** 这些身份验证端点仅接受表单数据，不接受 JSON。完成身份验证后，其他端点将接受 JSON 负载，但身份验证端点会拒绝 JSON 请求。
+
+#### 负载参数 {#payload-parameters}
+
+- **client_id**：物理设备的唯一标识符。必须保证其唯一性，例如序列号或 UUID。
+
+- **client_secret**：由 Frame.io 支持团队提供，用于识别您的设备型号。这是一个机密值，应避免让用户接触到，并在存储时进行加密。
+
+- **scope**：所请求的权限，以空格分隔。设备可以请求：
+
+  - `asset_create`：允许创建和上传资产。
+  - `offline`：允许通过刷新令牌刷新授权。如果没有此权限范围，由于授权令牌会过期，用户需要每 8 小时重新授权一次设备。
+
+在实际实施中，设备通常会同时请求这两个权限范围。
+
+### 理解 API 响应 {#understanding-the-api-response}
+
+该请求会生成类似如下的响应：
+
+#### 传统配对响应 {#traditional-pairing-response}
+
+```
+{
+  "device_code": "[device_code]",
+  "expires_in": 120,
+  "interval": 5,
+  "name": "MyDevice-[client_id]",
+  "user_code": "573131"
+}
+```
+
+#### URL 配对响应 {#url-pairing-response}
+
+```
+{
+  "device_code": "[device_code]",
+  "expires_in": 120,
+  "interval": 5,
+  "name": "MyDevice-[client_id]",
+  "user_code": "573131",
+  "verification_uri": "https://next.frame.io/pair",
+  "verification_uri_complete": "https://next.frame.io/pair/573131"
+}
+```
+
+#### 响应详解 {#response-breakdown}
+
+- **device_code**：此内部标识符应对用户隐藏，用于在轮询期间标识授权请求。
+- **expires_in**：代码的有效期（秒）。
+- **interval**：建议的轮询间隔（秒）。
+- **name**：正在连接的设备的标识符。
+- **user_code**：用于在 Frame.io 中手动输入以完成设备配对的六位数代码。
+- **verification_uri**：无法扫描二维码时用于手动输入的基础 URL。
+- **verification_uri_complete**：包含配对代码的完整 URL，用于在移动应用中设置超链接或生成二维码，以便简化用户进入配对界面的操作。
+
+### 向用户显示二维码 {#displaying-the-qr-code-to-the-user}
+
+使用 `verification_uri_complete` 生成二维码并显示在设备屏幕上，供用户扫描，从而实现高效配对。
+
+#### 示例：显示二维码的设备屏幕 {#example-device-screen-with-qr-code-displayed}
+
+![Example device QR code pairing screen](/images/camera-to-cloud/implementing-c2c-authentication-and-authorization/193d938af906dbcbc9699953e9da5ddbeeee8cd75fdfabf0661127c2b528cdb4.webp)
+
+请始终提供备用选项：在无法扫描二维码时，显示 `user_code` 和 `verification_uri` 以供手动输入。或者，也可以考虑将 `verification_uri` 显示为静态二维码，供移动设备扫描。
+
+对于移动应用集成，请将 `verification_uri_complete` 作为可点击的超链接提供，因为用户无法用运行该应用的设备扫描二维码。
+
+## 第 2 步：轮询用户授权 {#step-2-polling-for-user-authorization}
+
+提供配对代码或 URL 代码后，使用以下请求验证用户是否已输入：
+
+```
+curl -X POST https://api.frame.io/v2/auth/token \
+    --form 'client_id=[client_id]' \
+    --form 'device_code=[device_code]' \
+    --form 'grant_type=urn:ietf:params:oauth:grant-type:device_code' \
+    | python -m json.tool
+```
+
+### 负载参数 {#payload-parameters-1}
+
+- **client_id**：与第 1 步中使用的标识符相同。
+- **device_code**：之前返回的 `device_code` 值。
+- **grant_type**：OAuth 授权类型标识符，在本实施中始终为 `urn:ietf:params:oauth:grant-type:device_code`。
+
+最初的轮询请求通常会返回：
+
+```
+{
+  "error": "authorization_pending"
+}
+```
+
+这是一个非致命错误，表示用户尚未完成代码输入。请继续轮询，直到完成为止。
+
+> **iOS 应用设备注意事项：** 如果用户切换到 Frame.io iOS 应用来输入配对代码，您的应用可能会转入后台。当您的应用再次变为活动状态时（例如在 `applicationDidBecomeActive` 中），请恢复轮询，以便授权流程能够继续进行，而无需用户重新开始配对。
+
+如果您收到：
+
+```
+{
+  "error": "expired_token"
+}
+```
+
+这表示代码在用户输入之前已过期。请通过第 1 步生成新的代码/二维码，将其展示给用户，然后恢复轮询。
+
+授权成功后会返回：
+
+```
+{
+  "access_token": "[access_token]",
+  "expires_in": 28800,
+  "refresh_token": "[refresh_token]",
+  "token_type": "bearer"
+}
+```
+
+恭喜您成功授权了 Camera to Cloud 设备！
+
+我们来分析一下这个响应：
+
+- **access_token**：用于访问 Frame.io 后端的身份验证凭据，后续 API 请求的请求头中需要包含它。
+- **expires_in**：访问令牌的有效期（秒），过期后需要刷新。
+- **refresh_token**：用于管理访问令牌，主要用于刷新授权，也可用于撤销授权。
+- **token_type**：对于 C2C API 实施，始终为 `bearer`，无需任何操作。
+
+## 整合各个步骤 {#putting-the-steps-together}
+
+现在，我们用类 Python 伪代码来实现这些 API 调用，并处理设备代码可能过期的情况：
+
+```python title="Python"
+def authorize_with_frame():
+    """
+    Handles authorizing our device with Frame.io.
+    """
+
+    # Our client ID can be a serial number, UUID, or some other unique string.
+    client_id = THIS_DEVICE.get_serial_number()
+
+    while True:
+        # Make the call to Frame.io to get our device codes.
+        pairing_codes = c2c.get_device_codes(client_id)
+
+        # We need to keep track of how long we have been polling for
+        polling_started = datetime.now()
+
+        # Now we are going to poll for authorization until the user enters the code.
+        while True:
+
+            # Re-write this output each time we poll. Note: This message will only update once
+            # per `interval` (e.g., 5 seconds), so if a smooth countdown is desired, that will
+            # need a different implementation.
+            print(
+                f"\rPAIRING CODE: {pairing_codes.user_code}, "
+                f"EXPIRES IN: {pairing_codes.expires_in - (datetime.now() - polling_started).seconds} seconds"
+            )
+
+            # Wait for `interval` before polling each time.
+            sleep(pairing_codes.interval)
+
+            # Make a call to Frame.io to see if the user has entered the code and authorized
+            # the device.
+            authorization, error = c2c.poll_for_authorization(
+                client_id, pairing_codes.device_code
+            )
+
+            if error and error.message == "authorization_pending":
+                # If the authorization is pending, try again.
+                continue
+            elif error and error.message == "expired_token":
+                # If the pairing codes have expired, break to generate new codes.
+                break
+            elif error:
+                # If there was some other error, raise it.
+                raise error
+            else:
+                # If there was no error, we have our authorization!
+                return authorization
+
+        # If we get here, our pairing codes expired. Let's try again.
+        print("\nPairing code expired. Generating a new one...")
+```
+
+**注意：** 外层循环用于处理配对代码过期、需要生成新代码的情况。
+
+最后一步，从 Frame.io 获取并显示项目信息，以确认已成功配对到预期的项目。我们将在下一篇教程中介绍这部分内容。
+
+## 创建并显示用于配对的二维码 {#creating-and-displaying-qr-codes-for-pairing}
+
+在实现 URL/二维码配对时，您需要根据响应中的 `verification_uri_complete` 值生成二维码。以下是在不同编程语言中使用常见库的示例：
+
+### 使用 qrcode 的 Python 示例 {#python-example-using-qrcode}
+
+```python title="Python"
+import qrcode
+from PIL import Image
+import io
+
+def generate_qr_code(verification_uri_complete, size=250):
+    """
+    Generate a QR code from the verification_uri_complete URL.
+    
+    Args:
+        verification_uri_complete (str): The complete verification URI returned by Frame.io
+        size (int, optional): Size of the QR code in pixels. Defaults to 250.
+    
+    Returns:
+        PIL.Image: QR code image that can be displayed or saved
+    """
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(verification_uri_complete)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Resize the image if needed
+    img = img.resize((size, size))
+    return img
+
+# Example usage in authorization flow
+def display_qr_for_pairing(pairing_codes):
+    """
+    Generate and display QR code along with manual pairing instructions.
+    """
+    if hasattr(pairing_codes, 'verification_uri_complete'):
+        # Generate QR code from the verification URI
+        qr_img = generate_qr_code(pairing_codes.verification_uri_complete)
+        
+        # Display the QR code on screen
+        # For GUI applications like Tkinter, PyQt, etc.
+        # display_image(qr_img)
+        
+        # For headless devices or testing, save to file
+        qr_img.save("frame_io_pairing_qr.png")
+        
+        print(f"Scan the QR code or visit: {pairing_codes.verification_uri}")
+        print(f"Manual code: {pairing_codes.user_code}")
+    else:
+        # Fallback for devices that received traditional pairing response
+        print(f"Enter code on Frame.io: {pairing_codes.user_code}")
+```
+
+### JavaScript 示例（Web 或 Electron） {#javascript-example-web-or-electron}
+
+```javascript
+import QRCode from 'qrcode';
+
+/**
+ * Generate and display a QR code from the verification URI
+ * @param {string} verificationUriComplete - The complete verification URI from Frame.io
+ * @param {string} elementId - ID of the HTML element to display the QR code in
+ */
+function displayQRCode(verificationUriComplete, elementId = 'qrcode-container') {
+  const element = document.getElementById(elementId);
+  
+  if (!element) {
+    console.error(`Element with ID ${elementId} not found`);
+    return;
+  }
+  
+  // Clear any existing content
+  element.innerHTML = '';
+  
+  // Generate QR code
+  QRCode.toCanvas(element, verificationUriComplete, { width: 250 }, function(error) {
+    if (error) {
+      console.error('Error generating QR code:', error);
+      // Fallback to displaying the URL as a link
+      element.innerHTML = `<a href="${verificationUriComplete}" target="_blank">Click here to pair</a>`;
+    }
+  });
+  
+  // Also display manual pairing information
+  const manualInfoDiv = document.createElement('div');
+  manualInfoDiv.innerHTML = `
+    <p>Scan the QR code or <a href="${verificationUriComplete}" target="_blank">click here</a> to pair your device.</p>
+    <p>Manual code: ${userCode}</p>
+  `;
+  element.parentNode.appendChild(manualInfoDiv);
+}
+
+// Example usage in authorization flow
+async function requestDeviceCode() {
+  try {
+    const response = await fetch('https://api.frame.io/v2/auth/device/code', {
+      method: 'POST',
+      headers: {
+        'x-client-version': '2.0.0',
+        'x-client-platypus-enabled': 'true'
+      },
+      body: new URLSearchParams({
+        'client_id': YOUR_CLIENT_ID,
+        'client_secret': YOUR_CLIENT_SECRET,
+        'scope': 'asset_create offline'
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.verification_uri_complete) {
+      displayQRCode(data.verification_uri_complete);
+      window.userCode = data.user_code; // Store for display purposes
+    } else {
+      // Fallback for traditional pairing
+      displayManualPairingCode(data.user_code);
+    }
+    
+    // Begin polling for authorization
+    beginPollingForAuthorization(data.device_code, data.interval);
+    
+  } catch (error) {
+    console.error('Error requesting device code:', error);
+  }
+}
+```
+
+### Android 示例（Java） {#android-example-java}
+
+```java
+import android.graphics.Bitmap;
+import android.widget.ImageView;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.common.BitMatrix;
+import com.journeyapps.barcodescanner.BarcodeEncoder;
+
+public void generateAndDisplayQRCode(String verificationUriComplete, ImageView qrCodeImageView) {
+    try {
+        MultiFormatWriter multiFormatWriter = new MultiFormatWriter();
+        BitMatrix bitMatrix = multiFormatWriter.encode(verificationUriComplete, 
+            BarcodeFormat.QR_CODE, 250, 250);
+        BarcodeEncoder barcodeEncoder = new BarcodeEncoder();
+        Bitmap bitmap = barcodeEncoder.createBitmap(bitMatrix);
+        
+        // Display in ImageView
+        qrCodeImageView.setImageBitmap(bitmap);
+        
+    } catch (Exception e) {
+        e.printStackTrace();
+        // Fallback to displaying the URL as text
+    }
+}
+```
+
+### iOS 示例（Swift） {#ios-example-swift}
+
+```swift
+import UIKit
+import CoreImage
+
+func generateQRCode(from string: String) -> UIImage? {
+    let data = string.data(using: String.Encoding.utf8)
+    
+    if let filter = CIFilter(name: "CIQRCodeGenerator") {
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("H", forKey: "inputCorrectionLevel")
+        
+        if let outputImage = filter.outputImage {
+            // Scale the image
+            let transform = CGAffineTransform(scaleX: 10, y: 10)
+            let scaledImage = outputImage.transformed(by: transform)
+            
+            // Convert to UIImage
+            let context = CIContext()
+            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
+                return UIImage(cgImage: cgImage)
+            }
+        }
+    }
+    
+    return nil
+}
+
+// Usage in your view controller
+func displayPairingQRCode(verificationUriComplete: String) {
+    if let qrCodeImage = generateQRCode(from: verificationUriComplete) {
+        qrCodeImageView.image = qrCodeImage
+        
+        // Also show manual pairing information
+        pairingInstructionsLabel.text = "Scan the QR code or enter code manually"
+        pairingCodeLabel.text = userCode
+    } else {
+        // Fallback to manual code display
+        pairingInstructionsLabel.text = "Enter this code on Frame.io:"
+        pairingCodeLabel.text = userCode
+    }
+}
+```
+
+## 二维码显示最佳实践 {#best-practices-for-qr-code-display}
+
+在实现二维码配对时，请参考以下准则，以获得最佳用户体验：
+
+1. **最佳尺寸**：二维码的显示尺寸至少应为 200-250 像素见方，以确保能够可靠扫描。
+
+2. **对比度**：确保二维码与背景之间具有高对比度（白底黑码最为理想）。
+
+3. **纠错**：使用中等纠错级别（L 或 M），以平衡二维码密度和可靠性。
+
+4. **清晰的说明**：提供关于如何扫描二维码的清晰指引，例如“使用智能手机摄像头扫描此二维码以配对您的设备”。
+
+5. **多种选项**：始终在二维码旁边提供手动配对代码作为备用方案：
+
+   ```
+   Scan to pair:
+   [QR CODE]
+
+   Or enter code manually: 573131
+   ```
+
+6. **为移动应用提供超链接**：如果您的集成是移动应用，请将 `verification_uri_complete` 作为可点击的链接提供，因为用户无法用同一台设备扫描二维码。
+
+7. **测试**：使用各种设备并在不同光照条件下测试二维码，以确保能够可靠扫描。
+
+![Example QR Code Display](/images/camera-to-cloud/implementing-c2c-authentication-and-authorization/193d938af906dbcbc9699953e9da5ddbeeee8cd75fdfabf0661127c2b528cdb4.webp)
+
+## 故障排除 {#troubleshooting}
+
+如果遇到问题，请参考以下常见情况及解决方案：
+
+- **“Connect Device”按钮不可见**：在访问 C2C 管理面板时，这可能表示：
+
+  - **权限不足**：如果您看到权限相关的提示消息，请联系您的客户经理调整权限或分配合适的角色。
+  - **已有设备连接**：连接一台设备后，主要的“Add New Device”按钮会被 C2C Connections 面板右上角的三点菜单所取代。
+
+- **Invalid Client 错误**：`invalid_client` 响应表示设备信息不匹配，通常是由于 `client_secret` 不正确。
+
+- **Bad Request 错误**：`bad_request` 响应表示请求数据格式错误。请检查字段名称，并确保包含所有必填字段。
+
+如果此处未涵盖您遇到的问题，请与我们分享您的经历，以便我们完善本故障排除部分。
+
+## 后续步骤 {#next-steps}
+
+我们建议您联系我们的团队，并继续阅读 [授权管理指南](/cn/camera-to-cloud/how-to-authorization-management)。期待您的反馈！

@@ -1,0 +1,674 @@
+---
+title: "Frame.io Python SDK — 身份验证指南"
+sidebarTitle: "Python SDK"
+---
+
+本指南介绍如何使用 **Frame.io Python SDK**（`frameio`）对 Frame.io API 进行身份验证。Frame.io V4 API 使用 [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/)，即 Adobe 基于 OAuth 2.0 的身份平台。
+
+这是一份面向 Python 开发者的独立参考文档。下面的所有代码示例和流程仅适用于 `frameio` 包。
+
+---
+
+## Python SDK 中的身份验证类型 {#authentication-types-in-the-python-sdk}
+
+Python SDK 支持四种身份验证选项：
+
+| 方法 | 用例 | 需要用户交互？ | 需要客户端密钥？ |
+| --- | --- | --- | --- |
+| **静态令牌** | 快速脚本、测试，或您已有令牌 | 否 | 否 |
+| **服务器到服务器** | 后端服务、cron 作业、自动化 | 否 | 是 |
+| **Web App** | 服务器端应用（Flask、Django、FastAPI） | 是 | 是 |
+| **SPA (PKCE)** | 浏览器应用、CLI，或任何无法存储密钥的应用 | 是 | 否 |
+
+**服务器到服务器**允许您的应用以服务账户的身份执行操作，无需用户交互。它仅适用于通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理的 Frame.io V4 账户。
+
+**Web App** 和 **SPA** 允许您的应用以特定用户的身份执行操作。两者底层都使用 Adobe IMS：用户授权您的应用，然后 SDK 将获得的代码交换为令牌。Python SDK 会为您处理 IMS `/authorize/v2` 和 `/token/v3` 流程。Web App 需要客户端密钥；SPA 则改用 [PKCE](https://datatracker.ietf.org/doc/html/rfc7636)。
+
+<Note>
+
+Adobe 的 [Native App 凭据](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-native-app-credential)需要在操作系统级别拦截重定向的自定义 URI scheme 处理程序（例如 `adobe+<hash>://…`）。Python 没有注册此类处理程序的标准方式，因此 Python SDK 不提供 `NativeAppAuth` 类。对于需要用户交互的 Python 应用，请使用 `WebAppAuth` 并搭配本地回调服务器（例如 Flask 或 FastAPI）。对于非交互式工作负载，请使用 `ServerToServerAuth`。
+
+</Note>
+
+---
+
+## 服务账户用户 {#service-account-users}
+
+使用服务器到服务器身份验证时，您的应用程序将作为**服务账户用户**运行，这是一种可以代表服务执行操作的独特账户类型。这些账户对 Frame.io 中的其他用户可见：当服务账户执行某项操作时，其名称会显示在 UI 中。
+
+您可以通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 和 [Developer Console](https://developer.adobe.com/console) 授予和撤销服务账户访问权限。服务账户名称在 Frame.io UI 中管理。默认情况下，您的第一个 S2S 连接名为 **Service Account User**，第二个名为 **Service Account User 2**，依此类推。
+
+<Info>
+
+有关更多信息，请参阅[使用 Frame.io 服务器到服务器支持自动化设置](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html)。
+
+</Info>
+
+---
+
+## 快速入门 {#quick-start}
+
+### 前提条件 {#prerequisites}
+
+1. 从 [Adobe Developer Console](https://developer.adobe.com/console) 获取的**凭据**：
+
+   - **Client ID** — 所有 OAuth 流程均需要
+   - **Client Secret** — 服务器到服务器和 Web App 流程需要
+   - **Redirect URI** — Web App 和 SPA 流程需要；必须在您的 Adobe 项目中注册
+
+2. **安装 SDK：**
+
+```bash
+pip install frameio
+```
+
+### 选择方法 {#choosing-a-method}
+
+- **不涉及用户？** 使用**服务器到服务器**（`ServerToServerAuth`）。
+- **涉及用户且可以存储密钥？** 使用 **Web App**（`WebAppAuth`）。
+- **涉及用户但无法存储密钥？** 使用 **SPA**（`SPAAuth`）。
+
+---
+
+## 访问令牌 {#access-token}
+
+如果您已有访问令牌（来自其他 OAuth 系统或之前的交换，例如通过我们的 [API Explorer](/cn/platform/api-reference/accounts/index?explorer=true) 获取），可以直接传入：
+
+```python
+from frameio import Frameio
+
+client = Frameio(token="YOUR_ACCESS_TOKEN")
+```
+
+这是最简单的方法，但令牌最终会过期，并且 SDK 不会为您刷新它。
+
+### 旧版开发者令牌 {#legacy-developer-tokens}
+
+对于已迁移到 V4 但尚未通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 进行管理的账户，您可以继续使用来自 [Frame.io 开发者网站](https://developer.frame.io/app/tokens)的旧版开发者令牌。您必须包含 `x-frameio-legacy-token-auth` 标头并将其设置为 `true`：
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers={"x-frameio-legacy-token-auth": "true"},
+)
+```
+
+旧版开发者令牌不会过期，但它们只是一种过渡机制。对于新的集成和生产工作负载，我们建议使用下方的某种 OAuth 2.0 流程。有关详细信息，请参阅[迁移指南](/cn/platform/docs/resources/migration#authentication)。
+
+---
+
+## 服务器到服务器（客户端凭据） {#server-to-server-client-credentials}
+
+此方式适用于需要在无用户交互的情况下访问 Frame.io 的后端服务和脚本。此流程仅适用于通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理的 Frame.io V4 账户。您的应用程序将以[服务账户用户](#service-account-users)的身份进行身份验证，无需人工参与。
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+
+client = Frameio(token=auth.get_token)
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+from frameio import AsyncFrameio
+from frameio.auth import AsyncServerToServerAuth
+
+auth = AsyncServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+
+client = AsyncFrameio(token=auth.get_token)
+```
+
+</Tab>
+
+</Tabs>
+
+就是这么简单。`auth.get_token` 是一个可调用对象，SDK 会在每次请求时调用它。如果当前令牌仍然有效，它会立即返回；如果令牌即将过期，它会先获取一个新令牌，整个过程完全透明。
+
+### 工作原理 {#how-it-works}
+
+您的客户端凭据（客户端 ID + 密钥）**永不过期**。您只需出于安全考虑手动轮换它们。S2S 为您提供实际上永久、不间断的 API 访问，无需任何手动干预。
+
+其底层机制如下：
+
+1. 在第一次 API 调用时，`get_token` 使用 `client_credentials` 授权类型从 Adobe IMS 请求新的访问令牌。
+2. 令牌缓存在内存中。单个访问令牌会过期（通常为 24 小时），但这一点会为您自动处理。
+3. 当缓存的令牌进入刷新缓冲期（默认：过期前 60 秒）时，SDK 会使用相同的客户端凭据自动获取新令牌。
+4. 不涉及刷新令牌。客户端凭据本身就是长期有效的密钥，始终可以用来生成新的访问令牌。
+
+### 显式身份验证 {#explicit-authentication}
+
+如果您希望提前获取令牌（例如，在启动时针对错误凭据快速失败）：
+
+```python
+auth = ServerToServerAuth(client_id="...", client_secret="...")
+auth.authenticate()  # raises AuthenticationError if credentials are invalid
+client = Frameio(token=auth.get_token)
+```
+
+---
+
+## Web App（授权码） {#web-app-authorization-code}
+
+此方式适用于用户使用其 Adobe ID 登录的服务器端应用程序。此流程需要客户端密钥，且必须安全地存储在您的服务器上。
+
+<Steps>
+
+<Step title="将用户重定向到 Adobe IMS">
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+from frameio.auth import WebAppAuth
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+# Generate a cryptographically random state value to prevent CSRF attacks
+import secrets
+state = secrets.token_urlsafe(32)
+
+authorization_url = auth.get_authorization_url(state=state)
+# Store `state` in the user's session, then redirect them to `authorization_url`
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+from frameio.auth import AsyncWebAppAuth
+
+auth = AsyncWebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+# get_authorization_url is synchronous (no I/O needed)
+import secrets
+state = secrets.token_urlsafe(32)
+
+authorization_url = auth.get_authorization_url(state=state)
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="处理回调">
+
+当 Adobe IMS 将用户重定向回您的 `redirect_uri` 时，提取 `code` 和 `state` 参数。验证 state 与您存储的值一致，然后将代码交换为令牌：
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+# In your callback handler (e.g. a Flask/FastAPI route):
+auth.exchange_code(code=request.args["code"])
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+# In your async callback handler (e.g. a FastAPI route):
+await auth.exchange_code(code=request.query_params["code"])
+```
+
+</Tab>
+
+</Tabs>
+
+这会将授权码交换为访问令牌和刷新令牌，并在内部存储两者。
+
+</Step>
+
+<Step title="使用客户端">
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+from frameio import Frameio
+
+client = Frameio(token=auth.get_token)
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+from frameio import AsyncFrameio
+
+client = AsyncFrameio(token=auth.get_token)
+```
+
+</Tab>
+
+</Tabs>
+
+就是这么简单。从现在起，`get_token` 会自动管理令牌生命周期。当访问令牌即将过期时，SDK 会使用刷新令牌获取新令牌，无需用户交互。
+
+</Step>
+
+</Steps>
+
+### 完整 Flask 示例 {#full-flask-example}
+
+```python
+import secrets
+from flask import Flask, redirect, request, session
+from frameio import Frameio
+from frameio.auth import WebAppAuth
+
+app = Flask(__name__)
+app.secret_key = secrets.token_bytes(32)
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="http://localhost:5000/callback",
+)
+
+@app.route("/login")
+def login():
+    state = secrets.token_urlsafe(32)
+    session["oauth_state"] = state
+    return redirect(auth.get_authorization_url(state=state))
+
+@app.route("/callback")
+def callback():
+    if request.args.get("state") != session.pop("oauth_state", None):
+        return "Invalid state parameter", 403
+
+    auth.exchange_code(code=request.args["code"])
+
+    client = Frameio(token=auth.get_token)
+    accounts = client.accounts.index()
+    return f"Authenticated — {len(accounts.data)} account(s) accessible."
+```
+
+---
+
+## 单页应用 / PKCE（授权码 + PKCE） {#single-page-app-/-pkce-authorization-code-+-pkce}
+
+此方式适用于无法安全存储客户端密钥的基于浏览器的应用程序、桌面应用或 CLI 工具。此流程使用 [PKCE (RFC 7636)](https://datatracker.ietf.org/doc/html/rfc7636) 来保护授权码交换过程。
+
+<Steps>
+
+<Step title="生成授权 URL">
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+from frameio.auth import SPAAuth
+
+auth = SPAAuth(
+    client_id="YOUR_CLIENT_ID",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+import secrets
+state = secrets.token_urlsafe(32)
+
+result = auth.get_authorization_url(state=state)
+# result.url            -> redirect the user here
+# result.code_verifier  -> store this securely until the callback
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+from frameio.auth import AsyncSPAAuth
+
+auth = AsyncSPAAuth(
+    client_id="YOUR_CLIENT_ID",
+    redirect_uri="https://yourapp.com/callback",
+)
+
+# get_authorization_url is synchronous (no I/O needed)
+import secrets
+state = secrets.token_urlsafe(32)
+
+result = auth.get_authorization_url(state=state)
+```
+
+</Tab>
+
+</Tabs>
+
+`get_authorization_url` 返回一个 `AuthorizationUrlResult`，其中包含完整的 URL（已嵌入 PKCE `code_challenge`）以及下一步所需的 `code_verifier`。
+
+</Step>
+
+<Step title="使用验证器交换代码">
+
+当用户被重定向回来时：
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+auth.exchange_code(
+    code="CODE_FROM_CALLBACK",
+    code_verifier=result.code_verifier,
+)
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+await auth.exchange_code(
+    code="CODE_FROM_CALLBACK",
+    code_verifier=result.code_verifier,
+)
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="使用客户端">
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+from frameio import Frameio
+
+client = Frameio(token=auth.get_token)
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+from frameio import AsyncFrameio
+
+client = AsyncFrameio(token=auth.get_token)
+```
+
+</Tab>
+
+</Tabs>
+
+就是这么简单。刷新机制与 Web App 相同——SDK 会自动使用刷新令牌。区别在于刷新时不会发送客户端密钥，因为 SPA 流程是为公共客户端设计的。
+
+</Step>
+
+</Steps>
+
+---
+
+## 异步用法 {#async-usage}
+
+每个身份验证类都有一个以 `Async` 为前缀的异步对应类。上面的代码示例在适用的地方都包含**同步**和**异步**选项卡。
+
+| 同步 | 异步 |
+| --- | --- |
+| `ServerToServerAuth` | `AsyncServerToServerAuth` |
+| `WebAppAuth` | `AsyncWebAppAuth` |
+| `SPAAuth` | `AsyncSPAAuth` |
+
+API 完全相同。`get_authorization_url` 仍然是同步的（无 I/O），而 `exchange_code`、`refresh`、`revoke` 和 `get_token` 都是 `async` 的。请将异步类与 `AsyncFrameio` 搭配使用。
+
+### 手动刷新令牌 {#manual-token-refresh}
+
+对于 Web App 和 SPA 流程，SDK 会通过 `get_token` 自动刷新令牌。如果您需要显式控制，可以直接调用 `refresh()`：
+
+<Tabs>
+
+<Tab title="同步">
+
+```python
+auth.refresh()  # fetches a new access token using the refresh token
+```
+
+</Tab>
+
+<Tab title="异步">
+
+```python
+await auth.refresh()
+```
+
+</Tab>
+
+</Tabs>
+
+当您希望在执行关键操作之前强制刷新，而不是依赖自动刷新缓冲期时，这会很有用。
+
+---
+
+## 令牌持久化 {#token-persistence}
+
+所有身份验证类都支持 `export_tokens()` 和 `import_tokens()`，用于在重启之间持久化令牌状态。对于 Web App 和 SPA 流程，这一点尤为重要，因为默认情况下访问令牌和刷新令牌都保存在内存中——如果您的应用程序重启，除非您将其持久化，否则用户需要重新进行身份验证。对于服务器到服务器，持久化是可选的（客户端凭据始终可以生成新令牌），但导入缓存的令牌可以避免启动时额外的一次往返请求。
+
+### 导出和导入 {#export-and-import}
+
+```python
+# After exchange_code(), save the token state
+token_data = auth.export_tokens()
+# token_data is a dict: {"access_token": "...", "refresh_token": "...", "expires_at": 1234567890.0}
+# Save it to your database, file, or secret store
+
+# On next startup, restore it
+auth.import_tokens(token_data)
+client = Frameio(token=auth.get_token)
+# The SDK will automatically refresh if the token is near expiry
+```
+
+### 使用 `on_token_refreshed` 自动持久化 {#automatic-persistence-with-on_token_refreshed}
+
+要在每次刷新令牌时自动持久化令牌，请使用 `on_token_refreshed` 回调：
+
+```python
+import json
+from pathlib import Path
+
+TOKEN_FILE = Path("tokens.json")
+
+def save_tokens(tokens: dict):
+    TOKEN_FILE.write_text(json.dumps(tokens))
+
+auth = WebAppAuth(
+    client_id="...",
+    client_secret="...",
+    redirect_uri="...",
+    on_token_refreshed=save_tokens,
+)
+
+# On startup, restore if available
+if TOKEN_FILE.exists():
+    auth.import_tokens(json.loads(TOKEN_FILE.read_text()))
+```
+
+该回调接收与 `export_tokens()` 相同结构的字典，并在每次成功刷新令牌后触发。
+
+对于异步类，`on_token_refreshed` 既可以是普通函数，也可以是 `async` 函数，两者均受支持。
+
+---
+
+## 吊销令牌 {#revoking-tokens}
+
+要注销用户并在 Adobe IMS 中使其令牌失效：
+
+```python
+auth.revoke()
+```
+
+这会尽力向 Adobe IMS 发送针对访问令牌和刷新令牌的吊销请求，然后清除所有本地令牌状态。吊销后，用户需要重新进行身份验证。
+
+<Tip>
+
+对于异步类，请使用 `await auth.revoke()`。
+
+</Tip>
+
+---
+
+## 错误处理 {#error-handling}
+
+所有身份验证错误都继承自 `FrameioAuthError`，因此您可以统一捕获它们，也可以分别处理特定情况：
+
+```python
+from frameio.auth import (
+    FrameioAuthError,
+    AuthenticationError,
+    TokenExpiredError,
+    ConfigurationError,
+    NetworkError,
+    RateLimitError,
+)
+
+try:
+    auth.exchange_code(code="...")
+except TokenExpiredError:
+    # The refresh token has expired; redirect the user to sign in again
+    pass
+except AuthenticationError as e:
+    # Token exchange failed
+    print(f"Error: {e.error_code} - {e.error_description}")
+except NetworkError:
+    # Timeout or connection failure (after retries)
+    pass
+except RateLimitError as e:
+    # 429 from Adobe IMS; retry after e.retry_after seconds
+    pass
+except FrameioAuthError:
+    # Catch-all for any other auth error
+    pass
+```
+
+### 错误参考 {#error-reference}
+
+| 异常 | 触发时机 |
+| --- | --- |
+| `ConfigurationError` | 配置缺失或无效（例如 `client_id` 为空、重定向 URI 不是 HTTPS） |
+| `AuthenticationError` | 令牌交换或刷新被 Adobe IMS 拒绝（包含 `.error_code` 和 `.error_description`） |
+| `TokenExpiredError` | 刷新令牌本身已过期；用户必须重新进行身份验证 |
+| `NetworkError` | 所有重试后仍出现 HTTP 超时或连接失败 |
+| `RateLimitError` | Adobe IMS 返回 429；请检查 `.retry_after` 以获取退避建议 |
+| `PKCEError` | PKCE 验证失败（SPA 流程） |
+
+### 在生产环境中处理过期的刷新令牌 {#handling-expired-refresh-tokens-in-production}
+
+<Warning>
+
+对于 Web App 和 SPA 流程，刷新令牌最终会过期。届时，`get_token` 会引发 `TokenExpiredError`。您应捕获此异常，并引导用户重新完成授权流程。
+
+</Warning>
+
+```python
+from frameio.auth import TokenExpiredError
+
+try:
+    client = Frameio(token=auth.get_token)
+    assets = client.files.list(project_id="...")
+except TokenExpiredError:
+    # Clear persisted tokens and redirect user to login
+    auth.revoke()
+    return redirect("/login")
+```
+
+---
+
+## 配置参考 {#configuration-reference}
+
+所有身份验证类都接受以下可选参数：
+
+<AccordionGroup>
+
+<Accordion title="参数参考">
+
+| 参数 | 默认值 | 描述 |
+| --- | --- | --- |
+| `scopes` | 因流程而异的默认值 | 以空格分隔的 OAuth 作用域。S2S 默认为 `openid AdobeID frame.s2s.all`；面向用户的流程默认为 `openid email profile offline_access additional_info.roles`。 |
+| `ims_base_url` | `https://ims-na1.adobelogin.com` | Adobe IMS 基础 URL。可针对预发布或非生产环境进行覆盖。 |
+| `http_client` | `None` | 自定义 `httpx.Client`（或 `httpx.AsyncClient`），用于代理、mTLS 或连接池。 |
+| `timeout` | `30` | 令牌端点调用的 HTTP 请求超时时间（秒）。 |
+| `max_retries` | `2` | 针对瞬时故障（5xx、超时）的最大重试次数。速率限制重试（429）单独计算。 |
+| `refresh_buffer` | `60` | 在令牌过期前多少秒触发主动刷新。 |
+| `on_token_refreshed` | `None` | 每次成功刷新令牌后触发的回调。接收包含 `access_token`、`refresh_token` 和 `expires_at` 的字典。 |
+
+</Accordion>
+
+</AccordionGroup>
+
+### 预发布环境 {#staging-environments}
+
+通过覆盖 `ims_base_url` 指向预发布 Adobe IMS 实例。如果您需要以编程方式引用生产环境的值，SDK 还导出了 `DEFAULT_IMS_BASE_URL`（`https://ims-na1.adobelogin.com`）。
+
+```python
+auth = ServerToServerAuth(
+    client_id="...",
+    client_secret="...",
+    ims_base_url="https://ims-na1-stg1.adobelogin.com",
+)
+```
+
+### 自定义 HTTP 客户端 {#custom-http-client}
+
+用于代理支持或自定义 TLS 配置：
+
+```python
+import httpx
+
+http_client = httpx.Client(
+    proxy="http://corporate-proxy:8080",
+    verify="/path/to/custom-ca-bundle.pem",
+)
+
+auth = ServerToServerAuth(
+    client_id="...",
+    client_secret="...",
+    http_client=http_client,
+)
+```
+
+---
+
+## 线程安全 {#thread-safety}
+
+同步身份验证类完全线程安全。当多个线程同时调用 `get_token` 且需要刷新时，只有一个线程执行刷新，其他线程会等待并获得相同的结果。无需外部加锁。
+
+异步类使用 `asyncio.Lock` 提供同样的保证，可在单个事件循环中安全地用于并发协程。

@@ -1,0 +1,45 @@
+---
+title: "Filozofia Camera to Cloud"
+---
+
+## Czym jest API Camera to Cloud? {#what-is-the-camera-to-cloud-api}
+
+API Camera to Cloud (C2C) zapewnia bezpieczną metodę przesyłania multimediów bezpośrednio do Frame.io natychmiast po zakończeniu nagrywania, bez konieczności dodatkowych działań ze strony użytkownika. W Frame.io dążymy do tego, aby multimedia były dostępne do recenzji i współpracy, gdy tylko nagrywanie się zakończy lub zostaną wprowadzone metadane.
+
+W trakcie prac rozwojowych ustaliliśmy, że aby zapewnić najlepsze doświadczenia zarówno integratorom, jak i użytkownikom, API C2C musi działać jako osobny, wyspecjalizowany system backendowy, oddzielony od głównego ekosystemu Frame.io. Choć ta decyzja architektoniczna może początkowo nie wydawać się intuicyjna, ten dokument wyjaśnia nasze rozumowanie, przedstawiając zasady przewodnie C2C.
+
+## Nie tylko materiał z kamery {#beyond-camera-footage}
+
+Choć API nosi nazwę „Camera to Cloud” ze względu na przejrzystość i rozpoznawalność, jego możliwości wykraczają poza materiał z kamery. API C2C obsługuje wiele rodzajów treści cyfrowych. Niezależnie od tego, czy Twoje urządzenie tworzy audio, wideo, pliki PDF czy inne typy plików, Frame.io poradzi sobie z nimi wszystkimi. API usprawnia przenoszenie dowolnego zasobu cyfrowego od momentu jego utworzenia do przechowywania w chmurze przy minimalnych utrudnieniach.
+
+## Zapisuj, ale nie odczytuj {#write-but-don’t-read}
+
+Frame.io utrzymuje wysokie standardy bezpieczeństwa, a wprowadzenie łączności urządzeń wiąże się z potencjalnymi kwestiami bezpieczeństwa. Wiele urządzeń do przechwytywania multimediów nie posiada tradycyjnych zabezpieczeń, takich jak hasła czy blokada ekranu, ponieważ pierwotnie nie projektowano ich z myślą o łączności sieciowej. Zapewnienie tym urządzeniom pełnego dostępu do API Frame.io mogłoby stworzyć luki w zabezpieczeniach, gdyby pozostały bez nadzoru.
+
+Ponadto operatorzy urządzeń często potrzebują dostępu jedynie do określonych elementów, a nie do całego projektu. Ich rola może ograniczać się do tworzenia konkretnych zasobów multimedialnych, a nie do zarządzania całym projektem.
+
+To doprowadziło nas do podstawowej zasady projektowej: urządzenia rejestrujące istnieją przede wszystkim po to, aby tworzyć multimedia, a nie po to, aby przeglądać lub komentować treści z innych źródeł. Najlepszym podejściem do bezpieczeństwa było opracowanie API ograniczonego wyłącznie do jego podstawowej funkcji — przesyłania danych do chmury. Całkowicie eliminując możliwość odczytu, skutecznie zapobiegliśmy nieautoryzowanemu dostępowi do poufnych informacji o projekcie.
+
+## Projektowanie dla urządzeń z ograniczonymi interfejsami {#designing-for-devices-with-limited-interfaces}
+
+Istniejące API Frame.io zaprojektowano przy założeniu, że będą współpracować z aplikacjami wyposażonymi w graficzne interfejsy użytkownika. Aplikacje te mogły wyświetlać użytkownikom opcje, a dokonane przez nich wybory były następnie wysyłane do serwera.
+
+Ekosystem C2C obejmuje jednak urządzenia fizyczne z ograniczonym interfejsem graficznym lub całkowicie go pozbawione, a potencjalnie także bez jakichkolwiek mechanizmów wprowadzania danych przez użytkownika. Wymagało to zasadniczo odmiennego podejścia do interakcji z użytkownikiem.
+
+Projektując C2C, musieliśmy stworzyć system, który mógłby skutecznie działać na urządzeniach o ograniczonych możliwościach interfejsu. Oznaczało to opracowanie modelu interakcji, który nie wymagałby wprowadzania danych przez użytkownika na samym urządzeniu, ponieważ w wielu przypadkach mogłoby to być niemożliwe.
+
+To ograniczenie wykluczyło możliwość wykorzystania naszej istniejącej architektury API, która opierała się na przeglądarkowych przepływach uwierzytelniania i wyborze folderów docelowych przez użytkownika. Musieliśmy uprościć nie tylko działania, jakie może wykonywać urządzenie, ale także całe doświadczenie użytkownika związane z tymi działaniami.
+
+## Obsługa przerywanej łączności {#accommodating-intermittent-connectivity}
+
+Poza ograniczeniami interfejsu wiele urządzeń w ekosystemie C2C działa w środowiskach o nieprzewidywalnej łączności sieciowej. Zaprojektowaliśmy nasze API tak, aby minimalizować komunikację z backendem, ograniczając liczbę niezbędnych wywołań podczas pracy i zapewniając niezawodne działanie profesjonalistom pracującym w odległych lokalizacjach z ograniczonym dostępem do Wi-Fi lub sieci komórkowej.
+
+## Uproszczenie integracji {#simplifying-integration}
+
+Naszym priorytetem było uczynienie integracji tak prostą, jak to tylko możliwe. Opracowaliśmy skoncentrowane API z minimalnym zestawem endpointów, ograniczonymi wymaganiami dotyczącymi negocjacji z serwerem i wąsko zdefiniowanym zakresem, zgodnym z naszymi celami. Zdajemy sobie sprawę, że dla niektórych integratorów może to być pierwsze doświadczenie z implementacją wywołań sieciowych do usług zewnętrznych. Niezależnie od tego, czy jesteś doświadczonym deweloperem szukającym wydajnej implementacji, czy dopiero zaczynasz przygodę z REST API, zaprojektowaliśmy to doświadczenie tak, aby było przystępne i proste.
+
+## Kolejne kroki {#next-steps}
+
+Zachęcamy do kontaktu z naszym zespołem w razie jakichkolwiek pytań i do przejścia do kolejnego przewodnika z tej serii. Z przyjemnością wesprzemy Twoją integrację C2C.
+
+Przegląd techniczny znajdziesz w [przewodniku po architekturze integracji](/pl/camera-to-cloud/integration-architecture).

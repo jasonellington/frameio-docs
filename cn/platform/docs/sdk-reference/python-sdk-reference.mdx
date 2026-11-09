@@ -1,0 +1,4245 @@
+---
+title: "Python SDK 参考"
+---
+
+### 安装 {#installation}
+
+```bash
+pip install frameio
+```
+
+---
+
+### 用法 {#usage}
+
+按如下方式实例化并使用客户端：
+
+```python
+from frameio import (
+    Frameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateFieldDefinitionParamsData_Select(
+        field_configuration=SelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Fields definition name",
+    ),
+)
+```
+
+---
+
+### 异步客户端 {#async-client}
+
+SDK 还导出了一个异步客户端，以便您对我们的 API 进行非阻塞调用。请注意，如果您要构造一个异步 httpx 客户端类并传入此客户端，请使用 httpx.AsyncClient() 而不是 httpx.Client()（例如，用于此客户端的 httpx_client 参数）。
+
+```python
+import asyncio
+
+from frameio import (
+    AsyncFrameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = AsyncFrameio(
+    token="YOUR_TOKEN",
+)
+
+
+async def main() -> None:
+    await client.metadata_fields.metadata_field_definitions_create(
+        account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+        data=CreateFieldDefinitionParamsData_Select(
+            field_configuration=SelectDefinitionParamsFieldConfiguration(
+                enable_add_new=False,
+                options=[
+                    SelectDefinitionParamsFieldConfigurationOptionsItem(
+                        display_name="Option 1",
+                    ),
+                    SelectDefinitionParamsFieldConfigurationOptionsItem(
+                        display_name="Option 2",
+                    ),
+                ],
+            ),
+            name="Fields definition name",
+        ),
+    )
+
+
+asyncio.run(main())
+```
+
+---
+
+### 异常处理 {#exception-handling}
+
+当 API 返回非成功状态码（4xx 或 5xx 响应）时，将抛出以下错误的子类。
+
+```python
+from frameio.core.api_error import ApiError
+
+try:
+    client.metadata_fields.metadata_field_definitions_create(...)
+except ApiError as e:
+    print(e.status_code)
+    print(e.body)
+```
+
+---
+
+### 分页 {#pagination}
+
+分页请求将返回 SyncPager 或 AsyncPager，可用作底层对象的生成器。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.project_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+---
+
+### 高级 {#advanced}
+
+#### 访问原始响应数据 {#access-raw-response-data}
+
+SDK 通过 .with_raw_response 属性提供对原始响应数据（包括标头）的访问。.with_raw_response 属性返回一个“原始”客户端，可用于访问 .headers 和 .data 属性。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+)
+response = (
+    client.metadata_fields.with_raw_response.metadata_field_definitions_create(
+        ...
+    )
+)
+print(response.headers)  # access the response headers
+print(response.data)  # access the underlying object
+pager = client.project_permissions.index(...)
+print(pager.response.headers)  # access the response headers for the first page
+for item in pager:
+    print(item)  # access the underlying object(s)
+for page in pager.iter_pages():
+    print(page.response.headers)  # access the response headers for each page
+    for item in page:
+        print(item)  # access the underlying object(s)
+```
+
+---
+
+#### 重试 {#retries}
+
+SDK 内置了带指数退避的自动重试机制。只要请求被判定为可重试，且重试次数未超过配置的重试上限（默认：2），请求就会被重试。<br />
+当返回以下任一 HTTP 状态码时，请求被判定为可重试：
+
+- 408（超时）
+- 429（请求过多）
+- 5XX（内部服务器错误）
+
+<br />
+
+使用 `max_retries` 请求选项来配置此行为。
+
+```python
+client.metadata_fields.metadata_field_definitions_create(..., request_options={
+    "max_retries": 1
+})
+```
+
+---
+
+#### 超时 {#timeouts}
+
+SDK 默认超时时间为 60 秒。您可以在客户端或请求级别通过 timeout 选项进行配置。
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+    timeout=20.0,
+)
+
+
+# Override timeout for a specific method
+client.metadata_fields.metadata_field_definitions_create(..., request_options={
+    "timeout_in_seconds": 1
+})
+```
+
+---
+
+#### 自定义客户端 {#custom-client}
+
+您可以覆盖 httpx 客户端，以根据您的使用场景进行自定义。一些常见的使用场景包括支持代理和传输层。
+
+```python
+import httpx
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+    httpx_client=httpx.Client(
+        proxy="http://my.test.proxy.example.com",
+        transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+    ),
+)
+```
+
+---
+
+### 参考 {#reference}
+
+#### 账户权限 {#account-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.account_permissions.index(...) -> AsyncPager[AccountUserRole, AccountUserRolesResponse]">
+
+列出指定账户的用户角色。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.account_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`include_deactivated`: typing.Optional\[bool\] — 支持在响应中包含已停用的用户。默认为 false。
+
+`sort`: typing.Optional\[AccountPermissionsIndexRequestSort\] — 通过查询参数对账户用户排序
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 账户 {#accounts}
+
+<AccordionGroup>
+
+<Accordion title="client.accounts.index(...) -> AsyncPager[Account, AccountsResponse]">
+
+列出当前用户的账户。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.accounts.index(
+    sort="display_name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`sort`: typing.Optional\[AccountsIndexRequestSort\] — 通过查询参数对账户排序
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.accounts.auditlog_index(...) -> AsyncPager[AuditLog, AuditLogsWithIncludesResponse]">
+
+列出审计日志，支持通过查询参数进行筛选。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.accounts.auditlog_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="user",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+    api_version="4.0",
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`api_version`: `typing.Literal["4.0"]` —
+
+`include`: `typing.Optional[typing.Literal["user"]]` —
+
+`filters`: `typing.Optional[Filters]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 认证 {#auth}
+
+<AccordionGroup>
+
+<Accordion title="frameio.auth.ServerToServerAuth(*, client_id, client_secret, ...)" defaultOpen={true}>
+
+使用 OAuth 2.0 client_credentials 授权方式进行认证。此流程不涉及用户，也不会返回刷新令牌。访问令牌过期时，SDK 会使用客户端凭据自动请求新的令牌。如需异步使用，请使用 `AsyncServerToServerAuth`。
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+
+auth = ServerToServerAuth(client_id="YOUR_CLIENT_ID", client_secret="YOUR_CLIENT_SECRET")
+client = Frameio(token=auth.get_token)
+```
+
+**参数**
+
+`client_id`: `str` — Adobe IMS OAuth 客户端 ID。
+
+`client_secret`: `str` — Adobe IMS OAuth 客户端密钥。
+
+`scopes`: `str` — 以空格分隔的作用域（OAuth 2.0 RFC 6749）。默认为 `openid AdobeID frame.s2s.all`。
+
+`ims_base_url`: `str` — 用于预发布/其他环境的 IMS 基础 URL。默认为生产环境。
+
+`http_client`: `typing.Optional[httpx.Client]` — 用于代理、TLS 或连接池的可选 httpx.Client。
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — 每次获取令牌后触发的可选回调。
+
+`timeout`: `float` — HTTP 请求超时时间（秒）。默认为 30。
+
+`max_retries`: `int` — 暂时性故障的最大重试次数。默认为 2。
+
+`refresh_buffer`: `int` — 在过期前多少秒触发主动刷新。默认为 60。
+
+**方法**
+
+`get_token() -> str` — 返回有效的访问令牌，必要时进行刷新。将此方法引用（而非调用结果）传递给 SDK：`Frameio(token=auth.get_token)`。
+
+`authenticate() -> dict[str, Any]` — 显式获取新的访问令牌。返回包含 `access_token`、`expires_in` 等字段的令牌响应字典。
+
+`revoke() -> None` — 在服务器端吊销两个令牌并清除本地状态。
+
+`export_tokens() -> dict[str, Any]` — 导出当前令牌状态以便持久化。
+
+`import_tokens(data: dict[str, Any]) -> None` — 从先前导出的字典中恢复令牌状态。
+
+</Accordion>
+
+<Accordion title="frameio.auth.WebAppAuth(*, client_id, client_secret, redirect_uri, ...)">
+
+使用 OAuth 2.0 authorization_code 授权方式进行认证。适用于能够安全存储客户端密钥的服务器端应用程序。如需异步使用，请使用 `AsyncWebAppAuth`。
+
+```python title="usage"
+
+import secrets
+from frameio import Frameio
+from frameio.auth import WebAppAuth
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://myapp.com/callback",
+)
+url = auth.get_authorization_url(state=secrets.token_urlsafe(32))
+# redirect user to url ...
+auth.exchange_code(code="CODE_FROM_CALLBACK")
+client = Frameio(token=auth.get_token)
+```
+
+**参数**
+
+`client_id`: `str` — Adobe IMS OAuth 客户端 ID。
+
+`client_secret`: `str` — Adobe IMS OAuth 客户端密钥。
+
+`redirect_uri`: `str` — 已注册的重定向 URI。
+
+`scopes`: `str` — 以空格分隔的作用域（OAuth 2.0 RFC 6749）。
+
+`ims_base_url`: `str` — 用于预发布/其他环境的 IMS 基础 URL。默认为生产环境。
+
+`http_client`: `typing.Optional[httpx.Client]` — 用于代理、TLS 或连接池的可选 httpx.Client。
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — 每次刷新令牌后触发的可选回调。
+
+`timeout`: `float` — HTTP 请求超时时间（秒）。默认为 30。
+
+`max_retries`: `int` — 暂时性故障的最大重试次数。默认为 2。
+
+`refresh_buffer`: `int` — 在过期前多少秒触发主动刷新。默认为 60。
+
+**方法**
+
+`get_token() -> str` — 返回有效的访问令牌，必要时进行刷新。将此方法引用传递给 SDK：`Frameio(token=auth.get_token)`。
+
+`get_authorization_url(state: str) -> str` — 构建 Adobe IMS 授权 URL。传入一个不透明的 CSRF/state 值，该值会被原样回传。
+
+`exchange_code(code: str) -> dict[str, Any]` — 使用授权码换取访问令牌和刷新令牌。
+
+`refresh() -> dict[str, Any]` — 手动触发令牌刷新。
+
+`revoke() -> None` — 在服务器端吊销两个令牌并清除本地状态。
+
+`export_tokens() -> dict[str, Any]` — 导出当前令牌状态以便持久化。
+
+`import_tokens(data: dict[str, Any]) -> None` — 从先前导出的字典中恢复令牌状态。
+
+</Accordion>
+
+<Accordion title="frameio.auth.SPAAuth(*, client_id, redirect_uri, ...)">
+
+使用 authorization_code + PKCE（无客户端密钥）进行认证。适用于无法安全存储客户端密钥的基于浏览器的应用或原生应用。如需异步使用，请使用 `AsyncSPAAuth`。
+
+```python title="usage"
+
+import secrets
+from frameio import Frameio
+from frameio.auth import SPAAuth
+
+auth = SPAAuth(client_id="YOUR_CLIENT_ID", redirect_uri="https://myapp.com/cb")
+result = auth.get_authorization_url(state=secrets.token_urlsafe(32))
+# redirect user to result.url, store result.code_verifier
+auth.exchange_code(code="CODE_FROM_CALLBACK", code_verifier=result.code_verifier)
+client = Frameio(token=auth.get_token)
+```
+
+**参数**
+
+`client_id`: `str` — Adobe IMS OAuth 客户端 ID。
+
+`redirect_uri`: `str` — 已注册的重定向 URI。
+
+`scopes`: `str` — 以空格分隔的作用域（OAuth 2.0 RFC 6749）。
+
+`ims_base_url`: `str` — 用于预发布/其他环境的 IMS 基础 URL。默认为生产环境。
+
+`http_client`: `typing.Optional[httpx.Client]` — 用于代理、TLS 或连接池的可选 httpx.Client。
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — 每次刷新令牌后触发的可选回调。
+
+`timeout`: `float` — HTTP 请求超时时间（秒）。默认为 30。
+
+`max_retries`: `int` — 暂时性故障的最大重试次数。默认为 2。
+
+`refresh_buffer`: `int` — 在过期前多少秒触发主动刷新。默认为 60。
+
+**方法**
+
+`get_token() -> str` — 返回有效的访问令牌，必要时进行刷新。将此方法引用传递给 SDK：`Frameio(token=auth.get_token)`。
+
+`get_authorization_url(state: str) -> AuthorizationUrlResult` — 构建带有 PKCE 质询的 Adobe IMS 授权 URL。返回包含 `url` 和 `code_verifier` 属性的 `AuthorizationUrlResult`。
+
+`exchange_code(code: str, code_verifier: str) -> dict[str, Any]` — 使用授权码和 PKCE 验证码换取令牌。
+
+`refresh() -> dict[str, Any]` — 手动触发令牌刷新。
+
+`revoke() -> None` — 在服务器端吊销两个令牌并清除本地状态。
+
+`export_tokens() -> dict[str, Any]` — 导出当前令牌状态以便持久化。
+
+`import_tokens(data: dict[str, Any]) -> None` — 从先前导出的字典中恢复令牌状态。
+
+</Accordion>
+
+<Accordion title="frameio.auth.AuthorizationUrlResult">
+
+由 `SPAAuth.get_authorization_url()` 和 `AsyncSPAAuth.get_authorization_url()` 返回的冻结 dataclass。包含授权 URL 和 PKCE 代码验证码。
+
+**属性**
+
+`url`: `str` — 用于重定向用户的完整授权 URL。
+
+`code_verifier`: `str` — 需要存储并传递给 `exchange_code()` 的 PKCE 代码验证码。
+
+</Accordion>
+
+<Accordion title="frameio.auth.close_clients() / aclose_clients()">
+
+关闭认证模块使用的模块级 HTTP 客户端。在应用程序关闭时，请在同步代码中调用 `close_clients()`，或在异步代码中调用 `await aclose_clients()`，以释放连接。
+
+```python title="usage"
+
+from frameio.auth import close_clients
+
+# During application shutdown
+close_clients()
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 认证异常 {#auth-exceptions}
+
+所有认证异常均继承自 `FrameioAuthError`。
+
+| 异常 | 描述 |
+| --- | --- |
+| `FrameioAuthError` | 所有 `frameio.auth` 错误的基础异常。 |
+| `AuthenticationError` | 令牌交换或刷新失败。具有 `error_code` 和 `error_description` 属性。 |
+| `TokenExpiredError` | 刷新令牌已过期，需要重新认证。 |
+| `ConfigurationError` | 必需的配置缺失或无效。 |
+| `NetworkError` | 网络请求失败（超时、连接错误等）。 |
+| `RateLimitError` | API 返回 429 且重试次数已用尽。具有 `retry_after` 属性。 |
+| `PKCEError` | PKCE 验证失败。 |
+
+#### 集合 {#collections}
+
+<AccordionGroup>
+
+<Accordion title="client.collections.index(...) -> AsyncHttpResponse[CollectionsResponse]">
+
+列出项目的集合。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.collections.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator,project",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`include`: `typing.Optional[CollectionInclude]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.collections.show(...) -> AsyncHttpResponse[CollectionResponse]">
+
+显示集合详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.collections.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    collection_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator,project",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`collection_id`: `Uuid` —
+
+`include`: `typing.Optional[CollectionInclude]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 评论 {#comments}
+
+<AccordionGroup>
+
+<Accordion title="client.comments.show(...) -> AsyncHttpResponse[CommentWithIncludesResponse]">
+
+显示文件上的单条评论。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    include="owner",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`include`: typing.Optional\[CommentsShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.comments.delete(...) -> AsyncHttpResponse[None]">
+
+删除资产上的评论。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.comments.update(...) -> AsyncHttpResponse[CommentResponse]">
+
+更新指定资产上的评论。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.comments import UpdateCommentParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    data=UpdateCommentParamsData(
+        annotation='[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed=False,
+        page=4,
+        text="This is great!",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`data`: UpdateCommentParamsData
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.comments.index(...) -> AsyncPager[CommentWithIncludes, CommentsWithIncludesResponse]">
+
+列出指定资产上的评论。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.comments.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    include="owner",
+    sort="owner_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`file_id`: Uuid —
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`include`: typing.Optional\[CommentInclude\] —
+
+`sort`: typing.Optional\[CommentsIndexRequestSort\] — 通过查询参数对评论排序
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.comments.create(...) -> AsyncHttpResponse[CommentResponse]">
+
+在文件上创建评论。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.comments import CreateCommentParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    data=CreateCommentParamsData(
+        annotation='[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed=False,
+        page=4,
+        text="This is great!",
+        timestamp="00:00:02:12",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`file_id`: Uuid —
+
+`data`: CreateCommentParamsData
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.comments.create_attachment(...) -> AsyncHttpResponse[CommentAttachmentResponse]">
+
+为现有评论创建附件。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import AttachmentInput, Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.create_attachment(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AttachmentInput(
+        file_size=1024000,
+        media_type="image/png",
+        name="screenshot.png",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`comment_id`: `Uuid` —
+
+`data`: `AttachmentInput`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.comments.delete_attachment(...) -> AsyncHttpResponse[None]">
+
+删除评论中的附件。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.delete_attachment(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    attachment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`comment_id`: `Uuid` —
+
+`attachment_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 自定义操作 {#custom-actions}
+
+<AccordionGroup>
+
+<Accordion title="client.custom_actions.actions_index(...) -> AsyncHttpResponse[ActionsWithIncludesResponse]">
+
+列出指定工作区中的操作。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_show(...) -> AsyncHttpResponse[ActionWithIncludesResponse]">
+
+显示自定义操作详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_create(...) -> AsyncHttpResponse[ActionCreateResponse]">
+
+在工作区中创建自定义操作。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.custom_actions import ActionCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ActionCreateParamsData(
+        description="customizing our workflow",
+        event="my.event",
+        name="First Custom Action",
+        timeout=7,
+        url="https://example.com/custom-action",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`data`: `ActionCreateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_update(...) -> AsyncHttpResponse[ActionResponse]">
+
+更新自定义操作详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.custom_actions import ActionUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ActionUpdateParamsData(
+        active=True,
+        description="customizing our workflow",
+        event="my.event",
+        multi_asset=True,
+        name="First Custom Action",
+        timeout=7,
+        url="https://example.com/custom-action",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`data`: `ActionUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_delete(...) -> AsyncHttpResponse[None]">
+
+删除自定义操作。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 文件 {#files}
+
+<AccordionGroup>
+
+<Accordion title="client.files.list(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+列出指定文件夹中的文件。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`include`: `typing.Optional[FilesListRequestInclude]` —
+
+`sort`: `typing.Optional[FilesListRequestSort]` — 通过查询参数对文件排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[AssetRequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.create(...) -> AsyncHttpResponse[FileWithUploadUrlsResponse]">
+
+在父文件夹下创建新文件。此端点已被 `Create file (local upload)` 和 `Create file (remote upload)` 取代。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateParamsData(
+        file_size=1137444,
+        media_type="image/png",
+        name="asset.png",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.show(...) -> AsyncHttpResponse[FileWithIncludesResponse]">
+
+显示文件详情。
+使用 include 查询参数可选择性地在响应中包含其他属性。
+
+<Note>
+
+如果包含 `media_links.original`，而用户没有下载该文件的权限，则此端点将返回 `403 Forbidden` 错误。如果由于该用户需要水印且所请求的 media_links 不支持水印而导致内容无法访问，则请求会成功，但不受支持的媒体链接将被设置为 null。同样，如果某个文件不存在所请求的转码链接（例如，对静态图片文件包含 `media_links.video_h264_180`），或者转码过程尚未完成（即文件状态为“uploaded”而非“transcoded”），则响应负载中的该链接也将被设置为 null。简而言之，客户端必须妥善处理为 null 的媒体链接。
+
+</Note>
+
+速率限制：每个 account_user 每 1 秒 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`include`: `typing.Optional[FilesShowRequestInclude]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.delete(...) -> AsyncHttpResponse[None]">
+
+按 ID 删除文件。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.update(...) -> AsyncHttpResponse[FileResponse]">
+
+更新文件详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileUpdateParamsData(
+        name="asset.png",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`data`: `FileUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.copy(...) -> AsyncHttpResponse[FileCopyResponse]">
+
+复制文件。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    copy_comments="none",
+    data=FileCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`copy_metadata`: `typing.Optional[bool]` — 是否随文件一起复制元数据值
+
+`copy_comments`: `typing.Optional[FilesCopyRequestCopyComments]` — 随文件一起复制哪些评论
+
+`data`: `typing.Optional[FileCopyParamsData]`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.create_remote_upload(...) -> AsyncHttpResponse[FileRemoteUploadResponse]">
+
+通过远程上传在父文件夹下创建新文件。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateRemoteUploadParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create_remote_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateRemoteUploadParamsData(
+        name="asset.png",
+        source_url="https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.png",
+    ),
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateRemoteUploadParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.move(...) -> AsyncHttpResponse[FileResponse]">
+
+将文件移动到文件夹或 version_stack。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`data`: `FileMoveParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.create_local_upload(...) -> AsyncHttpResponse[FileWithUploadUrlsResponse]">
+
+通过本地上传在父文件夹下创建新文件。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create_local_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateLocalUploadParamsData(
+        file_size=1137444,
+        name="asset.png",
+    ),
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateLocalUploadParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.show_file_upload_status(...) -> AsyncHttpResponse[FileUploadStatusResponse]">
+
+显示文件上传状态详情。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.show_file_upload_status(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.files.import_file(...) -> AsyncHttpResponse[FileResponse]">
+
+从账户上配置的存储位置导入文件。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileImportParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.import_file(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileImportParamsData(
+        key="uploads/08091b0f-a541-42f5-a059-5e8c4afecc12/original.png",
+        name="asset.png",
+        storage_location="123e4567-e89b-12d3-a456-426614174000",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileImportParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 文件夹权限 {#folder-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.folder_permissions.folder_user_roles_index(...) -> AsyncHttpResponse[UserRolesResponse]">
+
+列出指定文件夹的用户角色。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.folder_user_roles_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`include_deactivated`: `typing.Optional[bool]` — 支持在响应中包含已停用的用户。默认为 false。
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folder_permissions.folder_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+如果用户已添加到指定文件夹，则更新该用户在此文件夹中的角色。如果用户尚未添加到该文件夹，则会以指定角色添加该用户。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.folder_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`data`: `UpdateUserRolesParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folder_permissions.delete(...) -> AsyncHttpResponse[None]">
+
+从指定文件夹中移除用户。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 文件夹 {#folders}
+
+<AccordionGroup>
+
+<Accordion title="client.folders.show(...) -> AsyncHttpResponse[FolderWithIncludesResponse]">
+
+显示文件夹详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.delete(...) -> AsyncHttpResponse[None]">
+
+按 ID 删除文件夹。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.update(...) -> AsyncHttpResponse[FolderResponse]">
+
+更新文件夹详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderUpdateParamsData(
+        name="Folder name",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderUpdateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.index(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+列出指定文件夹中的子项。
+使用 include 查询参数可选择性地在响应中包含其他属性。
+
+<Note>
+
+如果包含 `media_links.original`，而用户没有下载相应项目中文件的权限，则此端点将返回 403 Forbidden 错误。如果由于该用户需要水印且所请求的 media_links 不支持水印而导致内容无法访问，则请求会成功，但不受支持的媒体链接将被设置为 null。同样，如果某个文件不存在所请求的转码链接（例如，对静态图片文件包含 `media_links.video_h264_180`），或者转码过程尚未完成（即文件状态为“uploaded”而非“transcoded”），则响应负载中的媒体链接也将被设置为 null。简而言之，客户端必须妥善处理为 null 的媒体链接。
+
+</Note>
+
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    type="file,folder,version_stack",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersIndexRequestInclude\] —
+
+`type`: typing.Optional\[ChildrenType\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.copy(...) -> AsyncHttpResponse[FolderCopyResponse]">
+
+复制文件夹。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    data=FolderCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`copy_metadata`: typing.Optional\[bool\] — 是否随文件夹一起复制元数据值
+
+`data`: typing.Optional\[FolderCopyParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.list(...) -> AsyncHttpResponse[FoldersWithIncludesResponse]">
+
+列出指定文件夹中的文件夹。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersListRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.create(...) -> AsyncHttpResponse[FolderResponse]">
+
+在 folder_id 路径参数指定的文件夹内创建新文件夹。<br />
+速率限制：每个 account_user 每 1 秒 3 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderCreateParamsData(
+        name="Folder name",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.folders.move(...) -> AsyncHttpResponse[FolderResponse]">
+
+将文件夹移动到另一个文件夹。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderMoveParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 群组 {#groups}
+
+<AccordionGroup>
+
+<Accordion title="client.groups.index(...) -> AsyncHttpResponse[GroupsWithIncludesResponse]">
+
+列出账户中的群组。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="creator_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`sort`: `typing.Optional[GroupsIndexRequestSort]` — 通过查询参数对群组排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.groups.show(...) -> AsyncHttpResponse[GroupWithIncludesResponse]">
+
+显示群组详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    group_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`group_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.groups.create(...) -> AsyncHttpResponse[GroupResponse]">
+
+为当前账户创建群组。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.groups import CreateGroupParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateGroupParamsData(
+        emoji="smile",
+        name="group-1",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`data`: `CreateGroupParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.groups.update(...) -> AsyncHttpResponse[GroupResponse]">
+
+更新群组详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.groups import UpdateGroupParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    group_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateGroupParamsData(
+        emoji="smile",
+        name="group-1",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`group_id`: `Uuid` —
+
+`data`: `UpdateGroupParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 元数据 {#metadata}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata.bulk_update(...) -> AsyncHttpResponse[None]" defaultOpen={true}>
+
+批量更新多个文件的元数据值。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.metadata import (
+    BulkUpdateMetadataParamsData,
+    BulkUpdateMetadataParamsDataValuesItem,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata.bulk_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=BulkUpdateMetadataParamsData(
+        file_ids=[
+            "09b31c2a-04de-464a-a593-643a36ef0d98",
+            "b967fc36-4e18-4b48-a3ab-c790100e2baa",
+        ],
+        values=[
+            BulkUpdateMetadataParamsDataValuesItem(
+                field_definition_id="ff41ce50-269b-4624-8306-aac10e28ab94",
+                value=[
+                    {
+                        "id": "e60f47b4-cf8e-4273-96d5-3258a830a0aa",
+                        "type": "user",
+                    },
+                    {
+                        "id": "24eeaf7e-ce27-4555-bc77-cce39900626d",
+                        "type": "account_user_group",
+                    },
+                ],
+            )
+        ],
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`data`: `BulkUpdateMetadataParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.metadata.show(...) -> AsyncHttpResponse[MetadataResponse]">
+
+显示文件的元数据。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    show_null=True,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`show_null`: `typing.Optional[bool]` —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 元数据字段 {#metadata-fields}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_delete(...) -> AsyncHttpResponse[None]">
+
+删除账户级自定义字段定义。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    field_definition_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`field_definition_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_update(...) -> AsyncHttpResponse[FieldDefinitionResponse]">
+
+更新账户级自定义字段定义。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import (
+    Frameio,
+    UpdateSelectDefinitionParamsFieldConfiguration,
+    UpdateSelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import UpdateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    field_definition_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateFieldDefinitionParamsData_Select(
+        field_configuration=UpdateSelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                UpdateSelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                UpdateSelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Updated-Field-Name",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`field_definition_id`: Uuid —
+
+`data`: typing.Optional\[UpdateFieldDefinitionParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_index(...) -> AsyncHttpResponse[FieldDefinitionsWithIncludesResponse]">
+
+列出账户级字段定义。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`sort`: typing.Optional\[MetadataFieldDefinitionsIndexRequestSort\] — 通过查询参数对字段定义排序
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_create(...) -> AsyncHttpResponse[FieldDefinitionResponse]">
+
+创建账户级字段定义。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import (
+    Frameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateFieldDefinitionParamsData_Select(
+        field_configuration=SelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Fields definition name",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`data`: typing.Optional\[CreateFieldDefinitionParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 项目权限 {#project-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.project_permissions.index(...) -> AsyncPager[UserRole, UserRolesResponse]">
+
+列出指定项目的用户角色。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.project_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`include_deactivated`: typing.Optional\[bool\] — 支持在响应中包含已停用的用户。默认为 false。
+
+`sort`: typing.Optional\[ProjectPermissionsIndexRequestSort\] — 通过查询参数对用户排序
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+注意：此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.project_permissions.delete(...) -> AsyncHttpResponse[None]">
+
+从指定项目中移除用户。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.project_permissions.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`user_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.project_permissions.project_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+如果用户已添加到指定项目，则更新该用户在此项目中的角色。如果用户尚未添加到该项目，则会以指定角色添加该用户。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.project_permissions.project_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`user_id`: Uuid —
+
+`data`: UpdateUserRolesParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 项目 {#projects}
+
+<AccordionGroup>
+
+<Accordion title="client.projects.show(...) -> AsyncHttpResponse[ProjectWithIncludesResponse]">
+
+显示项目详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.projects.delete(...) -> AsyncHttpResponse[None]">
+
+删除项目。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.projects.update(...) -> AsyncHttpResponse[ProjectResponse]">
+
+更新项目详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.projects import ProjectUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ProjectUpdateParamsData(
+        name="Project Name",
+        restricted=True,
+        status="active",
+    ),
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`data`: `ProjectUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.projects.index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+列出指定工作区中的项目。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[ProjectsIndexRequestSort]` — 通过查询参数对项目排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+` `include_total_count`: `typing.Optional\[IncludeTotalCount\]\` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.projects.create(...) -> AsyncHttpResponse[ProjectResponse]">
+
+在指定工作区中创建项目。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.projects import ProjectParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ProjectParamsData(
+        name="Project Name",
+        restricted=True,
+    ),
+)
+```
+
+**参数**
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`data`: `ProjectParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.projects.account_projects_index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+列出已认证用户在指定账户内有权访问的所有项目。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.account_projects_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[AccountProjectsIndexRequestSort]` — 通过查询参数对项目排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.projects.invited_projects_index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+列出当前用户在指定账户内受邀加入、但不具有工作区级访问权限的项目。在这些项目中，用户仅拥有项目级协作者访问权限，而没有更广泛的团队/工作区权限。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.invited_projects_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[InvitedProjectsIndexRequestSort]` — 通过查询参数对项目排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 搜索 {#search}
+
+<AccordionGroup>
+
+<Accordion title="client.search.search(...) -> AsyncHttpResponse[SearchResponse]">
+
+在账户内跨资产、文件夹和项目进行搜索。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.search import SearchParamsFilters
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.search.search(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    engine="nlp",
+    query="red car driving on highway",
+    filters=SearchParamsFilters(
+        files_and_version_stacks=True,
+        folders=False,
+        projects=False,
+    ),
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`engine`: `SearchParamsEngine` — 要使用的搜索引擎。可用引擎：lexical、nlp。
+
+`query`: `str` — 搜索查询文本
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`filters`: `typing.Optional[SearchParamsFilters]` — 用于控制返回哪些类型结果的筛选条件
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 共享 {#shares}
+
+<AccordionGroup>
+
+<Accordion title="client.shares.show(...) -> AsyncHttpResponse[ShareResponse]">
+
+显示单个共享。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.delete(...) -> AsyncHttpResponse[None]">
+
+删除共享。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.update(...) -> AsyncHttpResponse[ShareResponse]">
+
+更新共享。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+import datetime
+
+from frameio import Frameio
+from frameio.shares import UpdateShareParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateShareParamsData(
+        access="public",
+        description="A descriptive summary of the share",
+        downloading_enabled=True,
+        expiration=datetime.datetime.fromisoformat(
+            "2026-01-22 17:04:53+00:00",
+        ),
+        name="Share Name",
+        passphrase="as!dfj39sd(*",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `UpdateShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.list_reviewers(...) -> AsyncPager[User, ShareReviewersResponse]">
+
+列出共享审阅者。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.shares.list_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`sort`: `typing.Optional[SharesListReviewersRequestSort]` — 通过查询参数对共享审阅者排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.add_reviewers(...) -> AsyncHttpResponse[None]">
+
+通过三种标识符类型向安全共享添加审阅者：`adobe_user_id`、`email` 和 `user_id`。
+一个请求只能包含一种标识符类型参数。
+`email` 是唯一能够将在共享所属账户中不是 Frame 账户成员的审阅者添加到共享中的标识符。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import (
+    AddReviewersToShareParamsData,
+    AddReviewersToShareParamsDataReviewers,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.add_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AddReviewersToShareParamsData(
+        message="Please join my share!",
+        reviewers=AddReviewersToShareParamsDataReviewers(
+            emails=["email1@domain.com", "email2@domain.com"],
+        ),
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `AddReviewersToShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.remove_reviewers(...) -> AsyncHttpResponse[None]">
+
+通过三种标识符类型从安全共享中移除审阅者：`adobe_user_id`、`email` 和 `user_id`。
+一个请求只能包含一种标识符类型参数。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import (
+    RemoveReviewerParamsData,
+    RemoveReviewerParamsDataReviewers,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.remove_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=RemoveReviewerParamsData(
+        reviewers=RemoveReviewerParamsDataReviewers(
+            adobe_user_ids=[
+                "2A3C1A3D66C621B20A494021@176719f5667c82b4499999.e"
+            ],
+        ),
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `RemoveReviewerParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.remove_asset(...) -> AsyncHttpResponse[RemoveAssetResponse]">
+
+从共享中移除当前位于该共享中的资产。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.remove_asset(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    asset_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`asset_id`: `Uuid`—
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.add_asset(...) -> AsyncHttpResponse[AddAssetResponse]">
+
+添加新的资产共享。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import AddAssetParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.add_asset(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AddAssetParamsData(
+        asset_id="0cc1cb59-1d7c-4176-8532-afe099897318",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `AddAssetParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.index(...) -> AsyncPager[Share, SharesResponse]">
+
+列出项目上的共享。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.shares.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid`—
+
+`sort`: `typing.Optional[SharesIndexRequestSort]` — 通过查询参数对共享排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.shares.create(...) -> AsyncHttpResponse[ShareResponse]">
+
+创建共享。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+import datetime
+
+from frameio import Frameio, AssetShareParamsSortBy
+from frameio.shares import CreateShareParamsData_Asset
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateShareParamsData_Asset(
+        card_info_enabled=True,
+        enabled=True,
+        access="public",
+        theme="dark",
+        editable_fields_enabled=False,
+        asset_ids=[
+            "12eb1446-5736-4f93-85fc-3b636f156211",
+            "f23a3b3e-7b1f-4655-b91a-acf0566e5bb9",
+        ],
+        card_aspect_ratio="square",
+        commenting_enabled=True,
+        passphrase="as!dfj39sd(*",
+        sort_by=AssetShareParamsSortBy(
+            direction="asc",
+            field_definition_id="c11f3f0a-9744-474d-b6e5-63894c1b5397",
+        ),
+        forensic_watermark_enabled=False,
+        name="Share Name",
+        card_size="medium",
+        drm_enabled=False,
+        captions_enabled=True,
+        transcripts_enabled=True,
+        watermark_enabled=True,
+        featured_field_definition_id="f8db45bb-bf52-446e-8216-7d4efb5ea396",
+        open_in_viewer_enabled=True,
+        downloading_enabled=True,
+        accent_color="#FF6600",
+        layout="grid",
+        show_all_asset_versions=True,
+        thumbnail_scale="fill",
+        title_line_count=1,
+        expiration=datetime.datetime.fromisoformat(
+            "2026-01-22 17:04:53+00:00",
+        ),
+        visible_field_definition_ids=[
+            "c36ec769-8144-48b6-bc8f-da799a849197"
+        ],
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid`—
+
+`data`: `CreateShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 上传 {#upload}
+
+<AccordionGroup>
+
+<Accordion title="frameio.upload.FrameioUploader(asset, file, ...)" defaultOpen={true}>
+
+使用 `client.files.create_local_upload(...)` 返回的预签名 URL 将本地文件上传到 Frame.io。`FrameioUploader` 是一个轻量封装，它从 `FileWithUploadUrls` 响应中读取 `upload_urls`、`file_size` 和 `media_type`，并执行分块、多线程的 S3 上传。
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.files.create_local_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateLocalUploadParamsData(
+        file_size=1137444,
+        name="asset.png",
+    ),
+)
+with open("asset.png", "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+**参数**
+
+`asset`: `FileWithUploadUrls` — 由 `client.files.create_local_upload(...)` 返回的 `FileWithUploadUrls` 实例。
+
+`file`: `typing.BinaryIO` — 以二进制读取模式（`"rb"`）打开的类文件对象。
+
+`max_workers`: `int` — 传递给底层上传器的线程池并发数。默认为 5。
+
+`headers`: `typing.Optional[typing.Dict[str, str]]` — 合并到每个 S3 PUT 请求中的附加标头。默认为 Frame.io 所要求的 `{"x-amz-acl": "private"}`。
+
+`max_retries`: `int` — 每个分块的重试次数。默认为 3。
+
+`on_progress`: `typing.Optional[typing.Callable[[int, int], None]]` — 每个分块上传后调用的可选回调，参数为 `(bytes_uploaded_so_far, total_bytes)`。
+
+**方法**
+
+`upload() -> None` — 上传文件。阻塞直至完成，出错时抛出异常。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 用户 {#users}
+
+<AccordionGroup>
+
+<Accordion title="client.users.show() -> AsyncHttpResponse[ProfileResponse]">
+
+查看与 bearer 令牌关联的用户的详细信息。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.users.show()
+```
+
+**参数**
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 版本堆栈 {#version-stacks}
+
+<AccordionGroup>
+
+<Accordion title="client.version_stacks.index(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+列出指定版本堆栈中的子项（文件）。
+使用 include 查询参数可选择性地在响应中包含其他属性。
+
+<Note>
+
+如果包含 `media_links.original`，而用户没有下载相应项目中文件的权限，则此端点将返回 `403 Forbidden` 错误。如果由于该用户需要水印且所请求的 media_links 不支持水印而导致内容无法访问，则请求会成功，但不受支持的媒体链接将被设置为 null。同样，如果某个文件不存在所请求的转码链接（例如，对静态图片文件包含 `media_links.video_h264_180`），或者转码过程尚未完成（即文件状态为“uploaded”而非“transcoded”），则响应负载中的媒体链接也将被设置为 null。简而言之，客户端必须妥善处理为 null 的媒体链接。
+
+</Note>
+
+.
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksIndexRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.show(...) -> AsyncHttpResponse[VersionStackWithIncludesResponse]">
+
+显示版本堆栈详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.copy(...) -> AsyncHttpResponse[VersionStackCopyResponse]">
+
+复制版本堆栈。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+目前不支持在基于 Adobe 存储的项目之间复制版本堆栈。对于这些项目，目前支持的复制版本堆栈的方法是：复制版本堆栈中的各个文件，然后重新将它们堆叠。
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    data=VersionStackCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`copy_metadata`: typing.Optional\[bool\] — 是否随版本堆栈一起复制元数据值
+
+`data`: typing.Optional\[VersionStackCopyParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.list(...) -> AsyncHttpResponse[VersionStacksWithIncludesResponse]">
+
+列出指定文件夹中的版本堆栈。<br />
+速率限制：每个 account_user 每 1 秒 5 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksListRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.create(...) -> AsyncHttpResponse[VersionStackWithIncludesResponse]">
+
+在父文件夹下创建新的版本堆栈。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=VersionStackCreateParamsData(
+        file_ids=[
+            "dd2a3cdd-fc90-41bd-a7b8-8a0447aec6d4",
+            "79fed48a-8372-496e-8dcb-5e959b9b9fcf",
+        ],
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: VersionStackCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.version_stacks.move(...) -> AsyncHttpResponse[VersionStackResponse]">
+
+将版本堆栈移动到文件夹。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=VersionStackMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`data`: VersionStackMoveParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Webhooks {#webhooks}
+
+<AccordionGroup>
+
+<Accordion title="client.webhooks.index(...) -> AsyncPager[WebhookWithIncludes, WebhooksWithIncludesResponse]">
+
+列出指定工作区的 Webhook。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.webhooks.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.webhooks.create(...) -> AsyncHttpResponse[WebhookCreateResponse]">
+
+创建一个带有密钥的 Webhook。
+
+有效事件：
+
+`file.created`,<br />
+`file.deleted`,<br />
+`file.ready`,
+`file.updated`,
+`file.upload.completed`,
+`file.versioned`,
+`file.copied`,
+`folder.created`,
+`folder.deleted`,
+`folder.updated`,
+`folder.copied`,
+`comment.completed`,
+`comment.created`,
+`comment.deleted`,
+`comment.uncompleted`,
+`comment.updated`,
+`customfield.created`,
+`customfield.updated`,
+`customfield.deleted`,
+`metadata.value.updated`,
+`project.created`,
+`project.deleted`,
+`project.updated`,
+`collection.created`,
+`collection.updated`,
+`collection.deleted`,
+`share.created`,
+`share.updated`,
+`share.deleted`,
+`share.viewed`.
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.webhooks import WebhookCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WebhookCreateParamsData(
+        events=[
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name="New Webhook",
+        url="https://url.example.com",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`data`: WebhookCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.webhooks.show(...) -> AsyncHttpResponse[WebhookWithIncludesResponse]">
+
+显示 Webhook 详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.webhooks.delete(...) -> AsyncHttpResponse[None]">
+
+删除 Webhook。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.webhooks.update(...) -> AsyncHttpResponse[WebhookResponse]">
+
+更新 Webhook 详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.webhooks import WebhookUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WebhookUpdateParamsData(
+        active=True,
+        events=[
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name="Updated Webhook",
+        url="https://url.example.com",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`data`: WebhookUpdateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 工作区权限 {#workspace-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.workspace_permissions.index(...) -> AsyncPager[UserRole, UserRolesResponse]">
+
+列出指定工作区的用户角色。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.workspace_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include_deactivated`: `typing.Optional[bool]` — 支持在响应中包含已停用的用户。默认为 false。
+
+`sort`: `typing.Optional[WorkspacePermissionsIndexRequestSort]` — 通过查询参数对用户排序
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.workspace_permissions.workspace_user_roles_delete(...) -> AsyncHttpResponse[None]">
+
+从指定工作区中移除用户。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspace_permissions.workspace_user_roles_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.workspace_permissions.workspace_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+如果用户已添加到指定工作区，则更新该用户在此工作区中的角色。如果用户尚未添加到该工作区，则会以指定角色添加该用户。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspace_permissions.workspace_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid`—
+
+`user_id`: `Uuid` —
+
+`data`: `UpdateUserRolesParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+#### 工作区 {#workspaces}
+
+<AccordionGroup>
+
+<Accordion title="client.workspaces.show(...) -> AsyncHttpResponse[WorkspaceWithIncludesResponse]">
+
+显示工作区详情。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.workspaces.delete(...) -> AsyncHttpResponse[None]">
+
+从账户中删除工作区。<br />
+速率限制：每个 account_user 每 1.00 分钟 60 次调用
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.workspaces.update(...) -> AsyncHttpResponse[WorkspaceResponse]">
+
+更新工作区。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+
+from frameio import Frameio, WorkspaceParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WorkspaceParamsData(
+        name="My Workspace",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`data`: WorkspaceParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.workspaces.index(...) -> AsyncPager[WorkspaceWithIncludes, WorkspacesWithIncludesResponse]">
+
+列出指定账户的工作区。<br />
+速率限制：每个 account_user 每 1.00 分钟 100 次调用
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.workspaces.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“owner”\]\] —
+
+`sort`: typing.Optional\[WorkspacesIndexRequestSort\] — 通过查询参数对工作区排序
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+用于返回分页结果的请求的不透明游标查询参数。
+
+<Tip>
+
+此值为自动生成，并作为上一个响应中链接的一部分包含在内。它并非供人阅读。
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+<Accordion title="client.workspaces.create(...) -> AsyncHttpResponse[WorkspaceResponse]">
+
+在账户中创建工作区。<br />
+速率限制：每个 account_user 每 1.00 分钟 10 次调用
+
+```python title="usage"
+from frameio import Frameio, WorkspaceParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WorkspaceParamsData(
+        name="My Workspace",
+    ),
+)
+```
+
+**参数**
+
+`account_id`: Uuid —
+
+`data`: WorkspaceParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — 特定于请求的配置。
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+### PyPI {#pypi}
+
+<Info>
+
+在 [PyPI](https://pypi.org/project/frameio/) 上查看
+
+</Info>
+
+---

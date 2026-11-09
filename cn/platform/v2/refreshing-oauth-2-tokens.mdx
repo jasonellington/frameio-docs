@@ -1,0 +1,171 @@
+---
+title: "刷新 OAuth 2 Tokens"
+---
+
+<Warning>
+
+**本指南假定您已经构建了 OAuth2 应用**
+
+如果您尚未构建，请参阅[这篇](https://developer.frame.io/oauth-2-applications/building-an-oauth-2-app)指南，并在通过成功的 OAuth 2 凭据授权获取 `access_token` 和 `refresh_token` 后再回到这里。
+
+</Warning>
+
+## Token 刷新基础 {#basics-of-token-refresh}
+
+假设您在 OAuth2.0 凭据请求中包含了 ***offline*** scope，那么通过 Frame.io 的 Accounts 应用成功认证后，将返回如下所示的 payload：
+
+```json
+{
+  "access_token":"BEARER_TOKEN",
+  "expires_in":3600,
+  "refresh_token":"REFRESH_TOKEN",
+  "scope":"account.read offline",
+  "token_type":"bearer"
+}
+```
+
+`access_token` 是一个 bearer token，可用于代表已认证用户执行操作；它将在 3600 秒（一小时）后过期；此后，可以使用 `refresh_token` 获取新的 `access_token`。refresh token 随后会在 30 天后过期，届时您需要让用户重新登录，以生成新的 access/refresh token 对；依此类推。
+
+如果您没有明确请求 *offline* scope，就不会收到 `refresh_token`，因此一小时后必须让用户完全重新认证。
+
+### 在认证成功时获取 refresh token {#capturing-the-refresh-token-on-successful-authentication}
+
+不用说，您无法使用自己没有的 `refresh_token`，因此请务必在应用中：
+
+- 请求 **offline** scope
+- 获取成功回调中返回的 `refresh_token`。
+
+为方便起见，这里转载了我们 [OAuth 2 应用指南](https://developer.frame.io/oauth-2-applications/building-an-oauth-2-app)中的回调，并添加了一个 `os` 调用来暂存 Refresh token。请注意，这里提供了两个示例：一个配置了 PKCE（不包含 basic auth header），另一个未配置（包含 basic auth header）。
+
+### 不使用 PKCE {#without-pkce}
+
+```python title="Python"
+def callback():
+  # Where `request` refers to our initial call to the auth URL
+  state = request.args.get('state')
+  scope = request.args.get('scope')
+  code = request.args.get('code')
+  error = request.args.get('error')
+
+  if error:
+    return "Error: " + error
+
+  # Set up for client authorization and set up the data you need to send.
+  client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID, CLIENT_SECRET)
+
+  post_data = {
+    "grant_type": "authorization_code",
+    "code": code,
+    "redirect_uri": REDIRECT_URI,
+    "state": state,
+    "scope": SCOPE
+  }
+
+  # Send a POST request with the data you need to receive an access token. 
+  response = requests.post(TOKEN, auth=client_auth, data=post_data)    
+	# Stash the refresh token for later
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+### 使用 PKCE {#with-pkce}
+
+```python title="Python"
+def callback():
+  # Where `request` refers to our initial call to the auth URL
+  state = request.args.get('state')
+  scope = request.args.get('scope')
+  code = request.args.get('code')
+  error = request.args.get('error')
+
+  if error:
+    return "Error: " + error
+
+  # If using PKCE, you must include the CLIENT_ID in your request body  
+  post_data = {
+    "grant_type": "authorization_code",
+    "code": code,
+    "redirect_uri": REDIRECT_URI,
+    "state": state,
+    "scope": SCOPE
+    "client_id": CLIENT_ID 
+  }
+
+  # Send a POST request with the data you need to receive an access token.
+  # If using PKCE, use the below request with no auth
+  response = requests.post(TOKEN_URL, data=post_data)
+  # Stash the refresh token for later
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+## 执行刷新 {#executing-a-refresh}
+
+刷新本身只需对 Frame.io 的 token URL 发出一次调用：
+
+- 方法：POST
+- URL：**[https://applications.frame.io/oauth2/token](https://applications.frame.io/oauth2/token)**
+- `Content-Type`：*application/x-www-form-urlencoded*
+
+刷新请求的表单数据中始终至少包含以下三个属性：
+
+- `grant_type`：*refresh_token*
+- `scope`：&lt;SCOPES>
+- `refresh_token`：&lt;REFRESH_TOKEN>
+
+如果您使用 PKCE，则需要在此表单数据中包含应用的 `client_id`；如果不使用，则需要包含一个 Basic 认证 header，分别以应用的 `client_id` 和 `client_secret` 作为用户名和密码。
+
+### 不使用 PKCE {#without-pkce-1}
+
+与在不使用 PKCE 的情况下[发出初始认证回调](https://developer.frame.io/oauth-2-applications/building-an-oauth-2-app#the-callback)类似，这种标准刷新需要在 Basic Authentication header 中以用户名和密码的形式提供您的 `client_id` 和 `client_secret`。
+
+```python title="Python"
+def refresh():
+  # Fetch the refresh token, assuming we have it
+  REFRESH_TOKEN = os.environ.get('REFRESH_TOKEN')
+
+  client_auth = requests.auth.HTTPBasicAuth(CLIENT_ID,CLIENT_SECRET)
+  post_data = {
+    "grant_type": "refresh_token",
+    "scope": SCOPE,
+    "refresh_token": REFRESH_TOKEN
+    # if using PKCE, you will need to include your client_id as below
+    # "client_id": CLIENT_ID 
+  }
+
+  response = requests.post(TOKEN_URL, auth=client_auth, data=post_data)
+  # Catch + stash a new Refresh Token
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+### 使用 PKCE {#with-pkce-1}
+
+同样，我们沿用初始 `/callback` 周期的规则：
+
+- 不包含 `Authorization` header
+- 必须在 payload 中包含 `client_id`
+
+```python title="Python"
+def refresh():
+  # Fetch the refresh token, assuming we have it
+  REFRESH_TOKEN = os.environ.get('REFRESH_TOKEN')
+
+  post_data = {
+    "grant_type": "refresh_token",
+    "scope": SCOPE,
+    "refresh_token": REFRESH_TOKEN
+    "client_id": CLIENT_ID 
+  }
+
+  response = requests.post(TOKEN_URL, data=post_data)
+  # Catch + stash a new Refresh Token
+  os.environ['REFRESH_TOKEN'] = response.json()["refresh_token"]
+
+  return response.text
+```
+
+恭喜！现在您已经可以处理 OAuth2.0 客户端应用的整个 token 生命周期了。

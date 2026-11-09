@@ -1,0 +1,214 @@
+---
+title: "概念与基础知识"
+---
+
+## 了解核心概念 {#understanding-core-concepts}
+
+C2C API 依赖于若干关键技术，在开始集成项目之前，您应当先了解这些技术。请浏览本文中的各个标题——如果其中有您不熟悉的术语，本指南将帮助您弥补这些知识空白。如果您在理解某些概念时遇到困难，我们的团队可以为您提供更多资源和支持。
+
+## 您需要了解的内容 {#what-you-need-to-know}
+
+要成功集成 C2C API，您应当对以下内容有基本的了解：
+
+<CardGroup cols={3}>
+
+<Card title="网络" icon="network-wired" iconType="solid">
+
+TLS/SSL、TCP/IP 协议以及网络基础知识
+
+</Card>
+
+<Card title="HTTPS" icon="globe" iconType="solid">
+
+如何实现安全的 HTTPS 请求
+
+</Card>
+
+<Card title="认证与授权" icon="shield" iconType="solid">
+
+认证（Authentication）与授权（Authorization）方法
+
+</Card>
+
+</CardGroup>
+
+## 网络基础与术语表 {#networking-basics-and-glossary}
+
+从本质上讲，Frame.io API 实现了 Frame.io 服务器与您的设备或应用程序之间的通信，每一项操作都需要进行网络交互。
+
+在任何关系中，清晰的沟通都至关重要，服务器与客户端之间也不例外。正如日常对话中会出现误解一样，计算机在交换信息时也会面临类似的挑战。
+
+除了解决常规的通信问题之外，我们还需要确保敏感数据的安全传输。Frame.io 要求所有与服务器的通信都必须加密，从而为整个过程增加必要的安全层。
+
+在实现 C2C API 时，您很可能会使用第三方库来处理网络细节。但由于网络组件经常会产生实际错误，因此了解与 Frame.io 服务器交互时的底层过程非常有价值。以下是一份简明的基本术语表：
+
+<CardGroup cols={2}>
+
+<Card title="TCP/IP" icon="network-wired" iconType="solid">
+
+传输控制协议 / 网际协议（Transmission Control Protocol / Internet Protocol）——一套使全球数据传输得以实现的标准化组件和分层。如需了解更多信息，我们推荐这份[通俗易懂的概览资料](https://www.freecodecamp.org/news/what-is-tcp-ip-layers-and-protocols-explained/)。
+
+</Card>
+
+<Card title="TLS/SSL" icon="shield-halved" iconType="solid">
+
+传输层安全 / 安全套接层（Transport Layer Security / Secure Socket Layer）——虽然两者在技术上有所不同，但如今通常可以互换使用。TLS 是 SSL 的演进版本，不过原来的缩写仍被广泛使用。如需了解有关 TLS 的更多信息，[请参阅此概述](https://www.internetsociety.org/deploy360/tls/basics/)。
+
+</Card>
+
+</CardGroup>
+
+### 公钥与私钥 {#public-and-private-keys}
+
+公钥就像一把锁，而私钥则是与之对应的钥匙。
+
+设想这样一个场景：您想给一位同事发送一条机密消息，并确保在送达之前不被他人看到。
+
+首先，请您的同事给您寄一把锁，而这把锁的钥匙只有他自己持有。
+
+收到这把锁后，您将机密消息放入一个容器中，并用这把锁锁好。虽然任何经手这个容器的人都能看到这把锁，但只有您的同事拥有能打开它的钥匙。对于试图查看消息的未授权方来说，这把锁毫无用处。即使是您自己，没有钥匙也无法打开它。
+
+当您的同事收到这个上锁的容器后，只需用自己的钥匙即可打开查看内容。
+
+公钥和私钥的工作方式与此相同。您可以广泛分享公钥。接收者使用该公钥对消息进行加密，但只有私钥持有者才能解密这些通信内容。只要私钥保持机密，公钥就无法用于解密由它加密的消息。
+
+这种公钥/私钥机制是 TLS 功能的基础，使各方能够在公开通信的同时建立安全、私密的通道。
+
+### 证书 {#certificates}
+
+证书包含公钥和私钥，并由受信任的证书颁发机构进行认证。
+
+当证书颁发机构（Certificate Authority）验证某个密钥时，实际上就是在为该密钥的真实性作担保。公钥的接收者（例如来自 Google 的公钥）可以验证这一来自公认证书颁发机构的背书。未经背书的密钥会被视为可能存在欺诈，并触发安全警报。
+
+Frame.io 的证书由 Amazon Root CA 1 证书颁发机构验证。这些证书可以通过多种途径获取，包括 Certifi 库（Mozilla 和 Python Requests 库都在使用）。
+
+在实现时，我们推荐使用 Certifi 的 [GitHub 代码库](https://github.com/certifi/python-certifi)和[证书 PEM 包](https://github.com/certifi/python-certifi/blob/master/certifi/cacert.pem)来验证发往 api.frame.io 的 HTTPS 请求。
+
+<CardGroup cols={2}>
+
+<Card title="服务器" icon="server" iconType="solid">
+
+为其他计算机提供或存储信息的计算机。当您通过 Web 浏览器访问 Frame.io 时，浏览器会向 Frame.io 的服务器请求内容，服务器则相应地作出响应。您在 Frame.io 中的每一项操作都会触发浏览器与我们服务器之间的通信，服务器处理您的请求并返回相应的结果。当您将媒体上传到 Frame.io 时，就是在将其发送到我们的服务器。
+
+</Card>
+
+<Card title="客户端" icon="laptop" iconType="solid">
+
+客户端应用程序向服务器请求信息或发送数据。在实现 C2C API 时，您将开发一个 C2C 客户端。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="HTTP/S" icon="globe" iconType="solid">
+
+超文本传输协议 / 安全（Hypertext Transfer Protocol / Secure）——运行于 TCP/IP 模型的应用层。HTTP 与 HTTPS 的区别在于安全性——HTTPS 在网络通信中加入了 TLS/SSL 验证。HTTP 已历经多个版本的演进，并随时间推移不断确立新的标准。1.1 版本至今仍是全球标准，与 Frame.io API 通信时应使用该版本。
+
+</Card>
+
+<Card title="RESTful API" icon="code" iconType="solid">
+
+REST（表述性状态转移，Representational State Transfer）是一种基于 HTTP 请求-响应模式开发 API 的设计方法。REST 常被用作使用 HTTP 进行程序间交互（区别于浏览器与网页之间的通信）这一通用方法的简称，即使该 API 并未严格遵循 REST 原则。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="JSON" icon="file-code" iconType="solid">
+
+JavaScript 对象表示法（JavaScript Object Notation）——一种标准化的数据交换格式。虽然最初是为 JavaScript 对象而开发的，但它已成为网络通信的通用标准。C2C API 以 JSON 数据的形式返回响应。
+
+</Card>
+
+<Card title="AWS S3" icon="cloud" iconType="solid">
+
+Amazon 的简单存储服务（Simple Storage Service）提供基于云的数据存储解决方案。S3 存储 Frame.io 的视频和音频媒体，也是集成上传的目标位置。
+
+</Card>
+
+</CardGroup>
+
+## HTTP/S 请求 {#http/s-requests}
+
+HTTP 在网页浏览中无处不在——几乎每个网站地址的开头都会出现它。HTTP（超文本传输协议）建立了标准化的计算机间通信协议。
+
+您可以将 HTTP 理解为一套用于客户端与服务器交互的标准化表单系统——类似于申请信息或办理业务时必须填写的政府表格。如果表格填写不正确，政府机构就无法处理或回复请求。
+
+所有 Frame.io 应用程序的交互都是通过 HTTP 请求完成的。在 C2C API 框架中，HTTP 请求类型代表了可用的功能。
+
+如需全面了解 HTTP，请参阅[这篇内容翔实的文章](https://www.freecodecamp.org/news/http-and-everything-you-need-to-know-about-it/)。在继续之前，理解这些基础知识至关重要。如果您刚开始接触 HTTP 请求，建议先阅读一些入门资料。为了做好充分准备，请熟悉以下 HTTP 概念：
+
+<CardGroup cols={2}>
+
+<Card title="URL 组成部分" icon="link" iconType="solid">
+
+- 协议（Protocol）
+- 主机（Host）
+- 端口（Port）
+- 资源（Resource）
+
+</Card>
+
+<Card title="HTTP 要素" icon="list" iconType="solid">
+
+- 标头（Headers）
+- Content-Type/Mimetype
+- 请求和响应负载
+- HTTP 动词的用法：GET、POST、PUT、DELETE 等
+- 表单数据（Form Data）
+
+</Card>
+
+</CardGroup>
+
+虽然网络库通常会负责构建请求，但如有需要，可以参考 [HTTP/1.1 RFC](https://greenbytes.de/tech/webdav/rfc2616.html)。
+
+## 认证与授权 {#authentication-and-authorization}
+
+我们稍后会更深入地探讨这些概念，但了解以下基本原理非常重要：
+
+<CardGroup cols={2}>
+
+<Card title="认证" icon="key" iconType="solid">
+
+认证用于验证请求是否确实来自其声称的来源。当您使用用户名/密码凭据登录网站时，就是通过证明您知道密码来完成身份认证。多重身份认证（例如通过短信接收验证码）则是额外的认证机制。
+
+</Card>
+
+<Card title="授权" icon="user-shield" iconType="solid">
+
+授权用于确认是否有权执行特定操作。当您将协作者添加到 Frame.io 项目或 Google 文档中时，就是在授予他们访问权限。Frame.io 或 Google 事先已对这些用户的身份进行了认证，因此您可以放心地授权他们参与。
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="OAuth" icon="lock" iconType="solid">
+
+OAuth（开放授权，Open Authorization）通过与第三方认证服务集成，为授权管理提供了一个标准化框架。
+
+</Card>
+
+<Card title="Scope" icon="list-check" iconType="solid">
+
+Scope（权限范围）定义了用户可执行的已授权操作。将设备连接到 Frame.io 时，您将请求并获得授权执行特定操作的 scope。例如，`asset_create` scope 允许创建和上传资产。从概念上讲，scope 相当于权限集。
+
+</Card>
+
+</CardGroup>
+
+## 后续步骤 {#next-steps}
+
+如有任何问题，欢迎联系我们的团队，然后继续阅读指南的下一部分。我们期待为您的集成工作提供支持。
+
+如需了解技术概览，请参阅[集成架构指南](/cn/camera-to-cloud/integration-architecture)。
+
+如果您尚未阅读，请在继续之前先查看 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要使用在[认证与授权流程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)中获得的 `access_token`。

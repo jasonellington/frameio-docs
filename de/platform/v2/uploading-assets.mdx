@@ -1,0 +1,178 @@
+---
+title: "Assets hochladen"
+---
+
+# Überblick {#overview}
+
+Dieses Tutorial erklärt, wie Sie Assets in Frame.io hochladen. Frame.io kann mit allen Dateitypen umgehen – nicht nur mit Videos, sondern auch mit Skripten, Bildern, Karten und Referenzdateien. Technischer ausgedrückt ist ein Asset in Frame.io eine umfassende Darstellung einer Datei in S3 und ihres Kontexts in Frame.io, einschließlich Transcodes, Benutzer-/Team-/Project-Kontext und Metadaten. Weitere Informationen zu Assets finden Sie in der Ressourcendefinition.​
+
+## Kernhierarchien {#core-hierarchies}
+
+Es ist außerdem hilfreich zu wissen, wie Frame.io seine Kernmodelle strukturiert.
+
+**Accounts**, denen **Users** angehören, haben viele **Projects**, die alle **Assets** enthalten. **Teams** sind nur für Enterprise-Accounts verfügbar und bieten eine zusätzliche Ebene der logischen Trennung. Assets „wissen“ nicht, zu welchem Team sie gehören – nur zu welchem Project und Account. Projects gehören jedoch ausschließlich zu Teams und nicht zu Accounts, wodurch Teams ein fester Bestandteil des Asset-Upload-Prozesses sind.
+
+## Voraussetzungen {#prerequisites}
+
+Für dieses Tutorial benötigen Sie:
+
+- Einen Frame.io-Account mit einem Developer Token (Tokens werden unten erklärt)
+- [Frame.io Python SDK](https://github.com/Frameio/python-frameio-client)
+
+## Ein Asset hochladen {#upload-an-asset}
+
+Dieser Abschnitt führt Sie durch die Schritte zum Hochladen eines Assets.
+
+1. Erstellen Sie unter [developer.frame.io](/de/platform/v2) ein Developer Token mit den folgenden Scopes:
+
+| Scope | Grund |
+| --- | --- |
+| **Accounts:** Read | Die Account-Liste für den anfragenden User abrufen. |
+| **Teams:** Read | Verfügbare Teams für den gewünschten Account abrufen. |
+| **Projects:** Read | Verfügbare Projects für das gewünschte Team abrufen. |
+| **Assets:** Create, Read | Den neuen Asset-Datensatz erstellen und verfügbare Assets abrufen, um die Ordnerstruktur innerhalb des Projects zu durchlaufen. |
+
+<Info>
+
+**Benötigen Sie Hilfe beim Erstellen eines API-Tokens?**
+
+Lesen Sie die Anleitung [**hier**](/de/platform/v2/authentication).
+
+</Info>
+
+2. Bestimmen Sie ein Ziel für Ihr Asset. Assets müssen mindestens innerhalb eines **Projects** abgelegt werden. Sie müssen die Root-Asset-ID (`root_asset_id`) eines Projects oder die Asset-ID eines Ordners abrufen, um den Ort in der Dateihierarchie anzugeben, an den Sie hochladen möchten.
+
+<Warning>
+
+**HINWEIS:**
+
+Sie können nicht nur mit einer Project-ID hochladen.  Um in das Root Ihres Projects hochzuladen, geben Sie die `root_asset_id` in Ihrem Request an.
+
+</Warning>
+
+Im Allgemeinen müssen Sie (in der angegebenen Reihenfolge) Folgendes abrufen:
+
+- Account-ID(s) und einen Account auswählen
+- Team-ID(s) und ein Team auswählen
+- Die mit einem Team verknüpften Projects
+- Die Project-ID des Projects, mit dem Sie arbeiten möchten
+- Die Root-Asset-ID oder eine Ordner-ID
+
+Mit der `root_asset_id` können Sie direkt in das Root eines Projects hochladen.
+
+### Assets auflisten {#list-assets}
+
+Um auszuwählen, wohin Sie Ihr neues Asset hochladen möchten, können Sie mit der API alle Assets in einem Project oder in einem Ordner innerhalb eines Projects auflisten. Wenn ein Asset ein *Ordner* ist, enthält es untergeordnete Assets, die ebenfalls Dateien und Ordner sein können. Beim Auflisten von Asset-Informationen können Sie jede beliebige Asset-ID verwenden. Wenn Sie jedoch alles sehen möchten, was mit einem Project verknüpft ist, verwenden Sie die `root_asset_id`.
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+Aus der zurückgegebenen Liste von Assets können Sie die ID eines beliebigen Assets verwenden, das ein Ordner ist, oder die Root-Asset-ID. Mit dieser ID legen Sie fest, wohin Sie Ihr neues Asset hochladen möchten.
+
+### Asset hochladen {#upload-asset}
+
+In diesem Beispiel laden wir eine neue Datei hoch. Sie senden Ihren Request mit den folgenden Informationen:
+
+| Parameter | Beschreibung |
+| --- | --- |
+| `filesize` | Geben Sie die Größe der Datei ein, die Sie hochladen möchten |
+| `filetype` | Wählen Sie den Typ der Datei, die Sie hochladen. Zur Auswahl stehen u. a. Video und Bild. Beispiele: `video/mp4`, `image/png`. |
+| `name` | Geben Sie eine Zeichenfolge für den Dateinamen ohne Leerzeichen ein. |
+| `type` | Gibt an, ob Sie eine Datei (`file`) oder einen Ordner (`folder`) verwenden. Ein Version Stack entsteht, wenn Sie mehrere Dateien übereinander stapeln. |
+
+Wenn Sie einen neuen Ordner erstellen möchten, müssen Sie `filesize` und `filetype` nicht in Ihren Request aufnehmen.
+
+Bei einem `cURL`-Request können Sie ein Asset schnell in Frame.io hochladen, indem Sie über den Parameter `"source": {  "url":"URL_FOR_VIDEO" }` einen Link zu Ihrer Datei angeben. Der Link muss öffentlich zugänglich sein. Alternativ können Sie das Python SDK verwenden, das Ihre Datei für Sie in einen Chunk pro Upload-Link aufteilt.
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Asset-URLs laufen ab**
+
+Die URLs, die Sie vom API-Aufruf zur Asset-Erstellung zurückerhalten, sind vorsigniert, um Ihren Upload zu autorisieren, laufen jedoch nach 24 Stunden ab.
+
+</Info>
+
+# Einen eigenen Datei-Uploader entwickeln {#build-your-own-file-uploader}
+
+Wenn Sie einen eigenen Uploader entwickeln möchten, wird für eine optimale Leistung empfohlen, die Chunks parallel hochzuladen. Jeder Chunk sollte per `PUT` direkt an die Amazon-S3-URLs übertragen werden, die in der Response der Frame.io API bereitgestellt werden.
+
+Ihre Datei-Chunks müssen der Reihenfolge der bereitgestellten `upload_urls` entsprechen, da diese *die Reihenfolge des endgültigen zusammengesetzten und transkodierten Assets bestimmen.* Das bedeutet: Die 1. URL nimmt den 1. Chunk auf, die 2. URL den 2. Chunk und so weiter.
+
+#### Pseudocode-Beispiel {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+Die Header jedes Requests an S3 sollten den `filetype` Ihres neuen Assets genau so enthalten, wie er bei Ihrem ersten Aufruf der Frame.io API zurückgegeben wurde, sowie einen zusätzlichen Datenschutz-Header:
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+Ein Beispiel dafür, wie all das in unserem Python SDK umgesetzt wird, finden Sie [hier](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py).
+
+<Info>
+
+**AWS-Fehler sind im XML-Format**
+
+Bitte beachten Sie, dass alle Fehler, die Sie in dieser Phase erhalten, direkt von AWS stammen und daher als XML formatiert sind und nicht der standardmäßigen JSON-Fehlerbehandlung von Frame.io entsprechen. Für den Produktionseinsatz empfehlen wir generell, eine Retry-Logik für diese Uploads zu implementieren, da unvollständig hochgeladene Dateien (d. h. Dateien mit fehlenden Chunks) nicht transkodiert und in Frame.io angezeigt werden können.
+
+</Info>
+
+Das war's! Sobald Sie die `PUT`-Aufrufe an die `upload_url`s abgeschlossen haben, haben Sie ein neues Asset in Frame.io.

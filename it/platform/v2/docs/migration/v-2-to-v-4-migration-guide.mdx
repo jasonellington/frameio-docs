@@ -1,0 +1,85 @@
+---
+title: "Guida alla migrazione dell'API Frame.io da V3 a V4"
+sidebarTitle: "Guida alla migrazione da V2 a V4"
+---
+
+La guida seguente ti aiuterà a migrare dall'API Frame.io V3 (a volte indicata nella documentazione come endpoint "legacy" o "v2") all'API Adobe Frame.io V4. Ricalca lo stile e la struttura dell'esempio di migrazione dell'API di Dropbox, offrendoti una panoramica completa delle corrispondenze tra endpoint, delle modifiche ai payload, degli aggiornamenti dell'autenticazione e altro ancora.
+
+---
+
+## Checklist di migrazione per sviluppatori {#migration-checklist-for-developers}
+
+1. **Identifica il tuo utilizzo attuale di V3:**
+
+   - Elenca tutte le chiamate effettuate dalla tua app (ad es. creazione di file, elenco di cartelle, aggiunta di commenti).
+   - Confronta ciascuna con la tabella delle corrispondenze per trovare il nuovo equivalente in V4.
+
+2. **Ottieni le credenziali Adobe IMS (OAuth 2.0):**
+
+   - Crea un'integrazione nella Adobe Developer Console.
+   - Configura le credenziali client OAuth 2.0 e lo scope (accesso a Frame.io).
+   - Sostituisci tutti i vecchi token sviluppatore di Frame.io con il nuovo flusso di token IMS.
+
+3. **Aggiorna gli URL degli endpoint:**
+
+   - **V3:** `https://api.frame.io/v2/...` con gli asset gestiti tramite `assets/{asset_id}`.
+   - **V4:** `https://api.frame.io/v4/`, con endpoint che includono `accounts/{account_id}` e `folders/{folder_id}` / `files/{file_id}` separati.
+
+4. **Adegua i payload delle richieste e il parsing delle risposte:**
+
+   - V4 in genere racchiude i dati in un oggetto `data` (ad es. `{"data": {...}}`).
+   - La creazione di cartelle, il caricamento di file e così via utilizzano nuovi nomi di campi JSON (ad es. `file_size`, `media_type`).
+   - **Modifiche da Team a Workspace:** sostituisci `team_id` (V3) con `workspace_id` (V4).
+
+5. **Rivedi le registrazioni dei webhook:**
+
+   - Elimina o disattiva i vecchi webhook V3 (che non vengono più attivati in V4).
+   - Registra i nuovi webhook tramite `POST /v4/accounts/{account_id}/webhooks`.
+
+6. **Testa la gestione degli errori e i limiti di frequenza:**
+
+   - Assicurati che il tuo codice gestisca le nuove risposte 4xx/5xx e le modifiche ai formati di richiesta/risposta.
+   - V4 può restituire strutture di errore diverse (ad es. JSON più strutturato, 409 per i conflitti, ecc.).
+
+7. **Verifica accesso e permessi:**
+
+   - Verifica che il token Adobe IMS appartenga a un utente (o a un account di servizio) con i permessi corretti per l'account/workspace.
+   - I token legacy V3 con scope "a livello di team" non sono validi in V4.
+
+8. **Distribuisci e monitora:**
+
+   - Testa prima il codice aggiornato in un ambiente sandbox o di sviluppo.
+   - Monitora i log per individuare errori 4xx/5xx o comportamenti imprevisti; risolvi eventuali problemi prima della distribuzione completa.
+
+---
+
+## Endpoint: corrispondenze V3 → V4 {#endpoints-v3-→-v4-mapping}
+
+Di seguito trovi un confronto affiancato tra i principali endpoint di Frame.io V3 (a sinistra) e i loro equivalenti V4 (a destra). Questa sezione si ispira alla tabella "v1 → v2 mapping" di Dropbox.
+
+> **Suggerimento:** questa tabella si concentra sulle operazioni tipiche su file, cartelle e progetti. Gli endpoint specializzati (ad es. Camera to Cloud) sono omessi.
+
+### OAuth e autenticazione {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| Token sviluppatore (Bearer `<token>`) oppure OAuth 2.0 di Frame.io con `Authorization: Bearer <token>` | OAuth 2.0 di Adobe IMS (è necessario creare un progetto nella Adobe Developer Console) e usare: `Authorization: Bearer <adobe_access_token>` |
+
+**Nota:** i token sviluppatore legacy non possono essere convertiti automaticamente. Devi implementare il nuovo flusso OAuth IMS.<br />
+**Documentazione:** [Come ottenere un token di accesso Adobe Frame.io](https://developer.adobe.com/frameio/api/current/)
+
+### Operazioni su cartelle e file {#folder-and-file-operations}
+
+#### Creare una cartella {#create-a-folder}
+
+- **V3 (Creare una cartella):**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

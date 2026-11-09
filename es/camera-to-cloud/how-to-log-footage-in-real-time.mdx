@@ -1,0 +1,116 @@
+---
+title: "Cómo: registrar metraje en tiempo real"
+sidebarTitle: "Registrar metraje en tiempo real"
+---
+
+## Introducción {#introduction}
+
+El registro en tiempo real permite a los dispositivos registrar comentarios, el estado de los assets y otros datos mientras se graba un elemento multimedia en el rodaje, antes de que se registre en Frame.io, para cualquier asset C2C generado por cualquier dispositivo del mismo proyecto.
+
+Imagina a un director que sigue la señal en el Video Village y puede pulsar un botón cada vez que el actor ofrece una buena interpretación, o una claqueta inteligente (Smart Slate) que puede marcar el punto del claquetazo en todos los assets.
+
+## ¿Qué necesitaré? {#what-will-i-need}
+
+Si no has leído la guía [Implementar C2C: configuración](/es/camera-to-cloud/implementing-c2c-setting-up), ¡échale un vistazo rápido antes de continuar!
+
+Necesitarás el `access_token` que recibiste durante la guía de autenticación y autorización del dispositivo de hardware o de la aplicación C2C.
+
+## Requisitos de código de tiempo {#timecode-requirements}
+
+Para alinear los eventos de registro en tiempo real con los assets, esperamos que tanto el asset que se captura como el dispositivo que se utiliza para registrar estén [sincronizados mediante jam-sync o gen-lock](https://www.bhphotovideo.com/explora/video/tips-and-solutions/timecode-versus-sync-how-they-differ-and-why-it-matters). Tanto el dispositivo de grabación como el dispositivo de registro serán responsables de enviar el código de tiempo a nuestro backend, donde realizaremos una operación de sincronización de código de tiempo para alinear el evento de registro con el fotograma correcto.
+
+## Configurar las entradas {#setting-up-your-input-configurations}
+
+El registro en tiempo real se basa en un nuevo concepto del modelo de datos: las entradas (inputs). Una entrada representa un botón físico de tu dispositivo que puede configurarse para enviar datos a Frame.io. Lo primero que tendrás que decidir es el número de botones que permitirás que realicen este tipo de operación y, a continuación, asignar un índice a cada botón, empezando por 0. Este índice se utilizará para identificar qué botón se ha pulsado cuando el evento se envíe a nuestros servidores. Las entradas pertenecen directamente a los canales, por lo que cada mensaje de pulsación de botón deberá dirigirse a un endpoint de canal específico. Para obtener más información sobre los canales, consulta la \[guía de gestión de canales\].
+
+La configuración de lo que hace cada botón la gestiona el usuario a través de la interfaz de Frame.io, lo que permite que las integraciones sean lo más sencillas posible. No necesitarás ningún elemento especial en tu interfaz, aparte de poder asignar un botón como "acción de Frame.io", si tus botones, disparadores, etc. son configurables.
+
+Trabajaremos contigo para determinar la siguiente configuración para cada una de las entradas de tu dispositivo:
+
+- Índice: un número entero, empezando por 0, que se utilizará para identificar la entrada.
+
+- Nombre visible: el nombre de la entrada que se mostrará al usuario en la pantalla de configuración de Frame.io.
+
+- Acciones admitidas: por ahora, el único tipo de acción es "pulsación simple", pero en el futuro podríamos admitir otros tipos de acción, como "pulsación larga" o "doble pulsación", para que cada entrada admita varias acciones, cada una con un significado diferente.
+
+- Color del botón: si tu botón tiene un color asociado, podemos mostrarlo para ayudar a los usuarios a orientarse al configurar los ajustes de entrada del dispositivo.
+
+- Tipo de evento predeterminado: el tipo de evento que genera esta entrada de forma predeterminada:
+
+  - Comentario: esta entrada genera un comentario
+  - Estado: la entrada actualiza el estado del asset
+
+- Texto de comentario predeterminado: el texto predeterminado que debe utilizarse en los comentarios generados por esta entrada
+
+- Estado predeterminado: el estado predeterminado con el que se actualizarán los assets cuando esta entrada se utilice para el estado. Puede ser:
+
+  - `in_progress`
+  - `needs_review`
+  - `approved`
+
+Al proporcionar esta información por adelantado, reducimos al mínimo los requisitos para tu dispositivo.
+
+## Enviar un evento de registro en tiempo real {#sending-a-real-time-logging-event}
+
+Los eventos de registro en tiempo real pueden enviarse con la siguiente llamada
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/channels/{channel_id}/inputs/{input_index}/trigger \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "action_type": "single_press",
+            "offset": 0,
+            "start": {
+                "smpte_timecode": "01:00:00:00",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            },
+            "duration": {
+                "smpte_timecode": "00:00:00:01",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            }
+       }
+__JSON__
+} | python -m json.tool
+```
+
+Si la operación se realiza correctamente, recibirás un `204` con una carga útil vacía.
+
+**Parámetros de URL**
+
+- `channel_id`: el UUID del canal en el que está registrada esta entrada. Este ID se habrá recibido en la llamada de creación del canal o desde el [endpoint de identidad](/es/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information).
+- `input_index`: el índice de la entrada que realiza la llamada
+
+**Cuerpo JSON**
+
+- `action_type`: el tipo de acción que se va a realizar. Actualmente, la única acción admitida es `single_press`.
+
+- `offset`: el desplazamiento desde el inicio del asset en el que se registrará el evento.
+
+- `start`: la hora de inicio, representada mediante el [código de tiempo SMPTE](https://workflow.frame.io/guide/timecode) + la frecuencia de fotogramas del momento en que se activó la entrada.
+
+  - `smpte_timecode`: código de tiempo representado como una cadena SMPTE.
+
+  - `rate`: frecuencia de fotogramas del flujo de código de tiempo.
+
+    - `playback`: velocidad de reproducción de la frecuencia de fotogramas, representada como un par `[numerator, denominator]` en un array. Opcionalmente, este campo también acepta fracciones en formato de cadena, `"numerator/denominator"`. Las frecuencias de fotogramas NTSC como 23,98 deben enviarse como su valor racional completo: \[`24000, 1001]`.
+    - `ntsc`: el estándar NTSC del código de tiempo. Puede ser "`non_drop"` o `null`. Si es `null`, `playback` debe representar un valor entero, como `[24, 1]`. Si es `"non_drop"`, `playback` debe representar una frecuencia de fotogramas NTSC válida, como `[24000, 1001]`.
+
+- `duration`: la duración del evento, representada mediante un [código de tiempo SMPTE](https://workflow.frame.io/guide/timecode) + la frecuencia de fotogramas del momento en que se activó la entrada. Se ajusta a la misma definición de objeto que `start`. En los eventos `single_press`, debe ser exactamente 1 fotograma (`"01:00:00:00"`).
+
+## Requisitos de fiabilidad {#reliability-requirements}
+
+Los disparadores de subida en tiempo real deben aplicar las mismas [pautas de fiabilidad](/es/camera-to-cloud/how-to-advanced-uploads#uploading-reliably) que las subidas y respetar el [estado de pausa del dispositivo](/es/camera-to-cloud/how-to-advanced-uploads#offset---handling-paused-devices).
+
+## A continuación {#next-up}
+
+Si aún no lo has hecho, te animamos a ponerte en contacto con nuestro equipo y, después, a continuar con la siguiente guía. ¡Esperamos tener noticias tuyas!

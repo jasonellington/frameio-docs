@@ -1,0 +1,85 @@
+---
+title: "Frame.io API V3 → V4 迁移指南"
+sidebarTitle: "V2 到 V4 迁移指南"
+---
+
+本指南将帮助你从 Frame.io API V3（文档中有时称为"旧版"或"v2"端点）迁移到 Adobe Frame.io API V4。本指南沿用了 Dropbox API 迁移示例的风格和结构，全面介绍端点映射、payload 变更、身份验证更新等内容。
+
+---
+
+## 开发者迁移清单 {#migration-checklist-for-developers}
+
+1. **确认你当前对 V3 的使用情况：**
+
+   - 列出你的应用发出的所有调用（例如创建文件、列出文件夹、添加评论）。
+   - 对照映射表逐一查找对应的新 V4 端点。
+
+2. **获取 Adobe IMS 凭据（OAuth 2.0）：**
+
+   - 在 Adobe Developer Console 中创建一个集成。
+   - 配置 OAuth 2.0 客户端凭据和 scope（Frame.io 访问权限）。
+   - 用新的 IMS 令牌流程替换所有旧的 Frame.io 开发者令牌。
+
+3. **更新你的端点 URL：**
+
+   - **V3：** `https://api.frame.io/v2/...`，通过 `assets/{asset_id}` 操作 Asset。
+   - **V4：** `https://api.frame.io/v4/`，端点包含 `accounts/{account_id}`，并分为独立的 `folders/{folder_id}` / `files/{file_id}`。
+
+4. **调整请求 payload 与响应解析：**
+
+   - V4 通常将数据包装在 `data` 对象中（例如 `{"data": {...}}`）。
+   - 文件夹创建、文件上传等操作使用新的 JSON 字段名（例如 `file_size`、`media_type`）。
+   - **Team → Workspace 变更：** 将 `team_id`（V3）替换为 `workspace_id`（V4）。
+
+5. **重新注册 Webhook：**
+
+   - 删除或停用旧的 V3 webhook（它们在 V4 上不会再触发）。
+   - 通过 `POST /v4/accounts/{account_id}/webhooks` 注册新的 webhook。
+
+6. **测试错误处理与速率限制：**
+
+   - 确保你的代码能够处理新的 4xx/5xx 响应以及请求/响应格式的变化。
+   - V4 可能返回不同的错误结构（例如结构化程度更高的 JSON、冲突时返回 409 等）。
+
+7. **确认访问权限：**
+
+   - 验证 Adobe IMS 令牌所属的用户（或服务账户）具有正确的账户/工作区权限。
+   - 带有"团队级"scope 的旧版 V3 令牌在 V4 中无效。
+
+8. **部署与监控：**
+
+   - 首先在沙盒或开发环境中测试更新后的代码。
+   - 监控日志中的 4xx/5xx 或异常行为；在全面部署前修复所有问题。
+
+---
+
+## 端点：V3 → V4 映射 {#endpoints-v3-→-v4-mapping}
+
+下面对主要的 Frame.io V3 端点（左）与其对应的 V4 端点（右）进行了并列比较。本节参考了 Dropbox 的"v1 → v2 映射"表。
+
+> **提示：** 此表主要涵盖常见的文件、文件夹和项目操作。专用端点（例如 Camera to Cloud）未列出。
+
+### OAuth 与身份验证 {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| 开发者令牌（Bearer `<token>`）或 Frame.io OAuth 2.0，使用 `Authorization: Bearer <token>` | Adobe IMS OAuth 2.0（必须在 Adobe Developer Console 中创建项目），并使用：`Authorization: Bearer <adobe_access_token>` |
+
+**注意：** 旧版开发者令牌无法自动转换。你必须实现新的 IMS OAuth 流程。<br />
+**文档：** [如何获取 Adobe Frame.io 访问令牌](https://developer.adobe.com/frameio/api/current/)
+
+### 文件夹和文件操作 {#folder-and-file-operations}
+
+#### 创建文件夹 {#create-a-folder}
+
+- **V3（创建文件夹）：**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

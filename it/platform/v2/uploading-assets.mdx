@@ -1,0 +1,178 @@
+---
+title: "Caricare Asset"
+---
+
+# Panoramica {#overview}
+
+Questo tutorial spiega come caricare asset in Frame.io. Frame.io è in grado di gestire tutti i tipi di file, non solo i video, ma anche script, immagini, mappe e file di riferimento. In termini più tecnici, un asset in Frame.io è una rappresentazione completa di un file in S3 e del suo contesto in Frame.io, inclusi transcodifiche, contesto di utente/team/progetto e metadati. Per ulteriori informazioni sugli asset, consulta la definizione della risorsa.​
+
+## Gerarchie principali {#core-hierarchies}
+
+È utile anche sapere come Frame.io struttura i suoi modelli principali.
+
+Gli **Account**, a cui appartengono gli **utenti**, hanno molti **Project**, che contengono tutti degli **Asset**. I **Team** sono disponibili solo per gli account Enterprise e forniscono un ulteriore livello di separazione logica. Gli Asset non "sanno" a quale Team appartengono, ma solo a quale Project e Account; tuttavia, i Project sono di proprietà esclusiva dei Team, e non degli Account, il che rende i Team parte integrante del processo di caricamento degli Asset.
+
+## Prerequisiti {#prerequisites}
+
+Per questo tutorial, avrai bisogno di:
+
+- Un account Frame.io con un developer token (i token sono spiegati di seguito)
+- [Frame.io Python SDK](https://github.com/Frameio/python-frameio-client)
+
+## Caricare un Asset {#upload-an-asset}
+
+Questa sezione illustra i passaggi per caricare un asset.
+
+1. Crea un developer token su [developer.frame.io](/it/platform/v2) con i seguenti scope:
+
+| Scope | Motivo |
+| --- | --- |
+| **Accounts:** Read | Recuperare l'elenco degli Account per l'utente che effettua la richiesta. |
+| **Teams:** Read | Recuperare i Team disponibili per l'Account desiderato. |
+| **Projects:** Read | Recuperare i Project disponibili per il Team desiderato. |
+| **Assets:** Create, Read | Creare il nuovo record dell'Asset e recuperare gli Asset disponibili per attraversare la struttura delle cartelle all'interno del Project. |
+
+<Info>
+
+**Hai bisogno di aiuto per creare un token API?**
+
+Consulta le istruzioni [**qui**](/it/platform/v2/authentication).
+
+</Info>
+
+2. Individua una destinazione per il tuo asset. Come minimo, gli Asset devono essere collocati all'interno di un **Project**. Dovrai recuperare l'ID dell'asset root (`root_asset_id`) di un progetto o l'ID asset di una cartella, in modo da poter specificare la posizione nella gerarchia dei file in cui desideri caricare.
+
+<Warning>
+
+**NOTA:**
+
+Non è possibile caricare utilizzando solo l'ID di un progetto.  Per caricare nella root del progetto, specifica il `root_asset_id` nella richiesta.
+
+</Warning>
+
+In generale, devi recuperare (nell'ordine indicato):
+
+- gli ID degli account e scegliere un account
+- gli ID dei team e scegliere un team
+- i progetti associati a un team
+- l'ID del progetto con cui vuoi lavorare
+- l'ID dell'asset root o l'ID di una cartella
+
+Puoi caricare direttamente nella root di un progetto utilizzando il `root_asset_id`.
+
+### Elencare gli Asset {#list-assets}
+
+Per scegliere dove caricare il nuovo asset, puoi utilizzare l'API per elencare tutti gli asset di un progetto o di una cartella all'interno di un progetto. Se un asset è una *cartella*, conterrà asset figli, che possono essere a loro volta file e cartelle. Quando elenchi le informazioni sugli asset, puoi utilizzare qualsiasi ID asset, ma se desideri esaminare tutto ciò che è associato a un progetto, usa il `root_asset_id`.
+
+```bash
+curl --request GET \
+  --url https://api.frame.io/v2/assets/<ROOT_ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>'
+```
+
+```python
+from frameioclient import FrameioClient
+import os
+
+ASSET_ID = ""
+TOKEN = ""
+
+client = FrameioClient(TOKEN)
+response_list = client.assets.get_children(ASSET_ID)
+assets = response_list.results
+
+for item in assets:
+    print(item['id'], item['name'])
+```
+
+Dall'elenco di asset restituito, puoi utilizzare l'ID di qualsiasi asset che sia una cartella, oppure l'ID dell'asset root. Utilizzerai questo ID per indicare dove desideri caricare il nuovo asset.
+
+### Caricare l'Asset {#upload-asset}
+
+In questo esempio caricheremo un nuovo file. Invia la richiesta con le seguenti informazioni:
+
+| Parametro | Descrizione |
+| --- | --- |
+| `filesize` | Inserisci la dimensione del file che desideri caricare |
+| `filetype` | Scegli il tipo di file che stai caricando. Le opzioni includono video e immagine. Esempi: `video/mp4`, `image/png`. |
+| `name` | Inserisci una stringa che rappresenta il nome del file, senza spazi. |
+| `type` | Indica se stai utilizzando un `file` o una `folder`. Un version stack si ha quando impili più file uno sull'altro. |
+
+Se desideri creare una nuova cartella, non è necessario includere `filesize` o `filetype` nella richiesta.
+
+Con una richiesta `cURL`, puoi caricare rapidamente un asset in Frame.io includendo un link al file tramite il parametro `"source": {  "url":"URL_FOR_VIDEO" }`. Il link deve essere accessibile pubblicamente. In alternativa, puoi utilizzare il Python SDK, che si occupa di suddividere il file in un chunk per ciascun link di caricamento.
+
+```bash
+curl --request POST \
+  --url https://api.frame.io/v2/assets/<ASSET_ID>/children \
+  --header 'authorization: Bearer <DEV_TOKEN>' \
+  --header 'content-type: application/json' \
+  --data '{"filesize":200000,"filetype":"video/mp4","name":"test","source":{"url":"URL_FOR_VIDEO"},"type":"file"}'
+```
+
+```python
+# Code sample uses the Python SDK: https://github.com/Frameio/python-frameio-client
+
+from frameioclient import FrameioClient
+
+client = frameioclient("FRAMEIO_TOKEN)
+
+asset = client.assets.upload(
+  destination_id="PARENT_ASSET_ID",
+  filepath="./my_file.mov"
+)
+
+# Create a folder:
+asset = client.assets.create_folder(
+  parent_asset_id=PARENT_ASSET_ID,
+  name="My Awesome Folder"
+)
+```
+
+<Info>
+
+**Gli URL degli Asset scadono**
+
+Gli URL restituiti dalla chiamata API di creazione dell'asset sono prefirmati per autorizzare il caricamento, ma scadono dopo 24 ore.
+
+</Info>
+
+# Creare un uploader di file personalizzato {#build-your-own-file-uploader}
+
+Se desideri creare un uploader personalizzato, per ottenere le migliori prestazioni si consiglia di caricare i chunk in parallelo. Ogni chunk deve essere inviato con `PUT` direttamente agli URL di Amazon S3 forniti nella risposta dell'API di Frame.io.
+
+I chunk del file devono rispettare l'ordine degli `upload_urls` forniti, poiché questi *determinano la sequenza dell'asset finale concatenato e transcodificato.* Ciò significa che il 1° URL riceve il 1° chunk, il 2° URL riceve il 2° chunk e così via.
+
+#### Esempio di pseudocodice {#psuedocode-example}
+
+```python title="Python"
+filesize = 30000000
+upload_urls = ["https://...", "https://...", "https://..."]
+chunk_size = filesize / len(upload_urls)
+
+start_byte = 0 # Set to 0 to start
+for i, url in enumerate(upload_urls):
+  end_byte = chunk_size * (i + 1)
+  upload_chunk(url=url, start_byte, end_byte)
+  start_byte = start_byte + chunk_size
+```
+
+Gli header di ogni richiesta a S3 devono includere il `filetype` del nuovo Asset esattamente come è stato restituito dalla chiamata iniziale all'API di Frame.io, oltre a un ulteriore header relativo alla privacy:
+
+```text
+PUT https://frameio-uploads-production.s3/etc/etc
+Content-Type: video/mp4
+x-amz-acl: private
+```
+
+Puoi vedere un esempio di come tutto questo viene gestito nel nostro Python SDK [qui](https://github.com/Frameio/python-frameio-client/blob/master/examples/upload_asset.py).
+
+<Info>
+
+**Gli errori AWS sono in formato XML**
+
+Tieni presente che tutti gli errori che ricevi in questa fase provengono direttamente da AWS e saranno quindi formattati in XML, e non secondo la gestione standard degli errori JSON di Frame.io. In generale, per qualsiasi utilizzo in produzione, consigliamo di implementare una logica di nuovo tentativo per questi caricamenti, poiché i file caricati in modo incompleto (ossia file con chunk mancanti) non verranno transcodificati né visualizzati in Frame.io
+
+</Info>
+
+Tutto qui! Una volta completate le chiamate `PUT` agli `upload_url`, avrai un nuovo Asset in Frame.io.

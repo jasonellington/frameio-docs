@@ -1,0 +1,674 @@
+---
+title: "Frame.io MCP"
+---
+
+Frame.io MCP 托管于 `https://mcp.frame.io/v1/mcp`，可将 Claude、ChatGPT、Cursor、VS Code 和 GitHub Copilot 等兼容 MCP 的客户端连接到您的 Frame.io 账户。连接后，您就可以借助 AI 智能体来驱动您在 Frame.io 中的各项操作。
+
+本指南介绍 MCP 的工作原理、如何连接到它，以及运行后它能做什么，并附有工具参考和示例提示词，帮助您快速上手。如果您刚接触 MCP，下一节会在介绍连接步骤之前先讲解该协议。
+
+---
+
+## Model Context Protocol {#model-context-protocol}
+
+MCP 是由 Anthropic 创建的开放标准，用于将 AI 客户端连接到外部系统。已连接的系统会公开一组工具，即 AI 智能体可以调用的操作。当您发出请求时，智能体会选择合适的工具、调用服务器，并使用响应来完成请求。
+
+有关 MCP 的更多信息，请参阅 Anthropic 的[最初发布公告](https://www.anthropic.com/news/model-context-protocol)。
+
+---
+
+## 工作原理 {#how-it-works}
+
+### 架构 {#architecture}
+
+```
+┌───────────────┐        ┌─────────────────────┐        ┌───────────────┐
+│   AI Agent    │        │     Frame.io MCP    │        │ Frame.io API  │
+│(Claude, etc.) │◀──────▶│  mcp.frame.io/mcp   │◀──────▶│ api.frame.io  │
+└───────────────┘        └──────────┬──────────┘        └───────────────┘
+                                    │
+                           ┌────────┴────────┐
+                           │   Adobe Login   │
+                           │  (OAuth 2.0)    │
+                           └─────────────────┘
+```
+
+---
+
+### 身份验证 {#authentication}
+
+身份验证通过 Adobe IMS 使用 OAuth 2.0，并需要一个与您的 Frame.io 账户关联的 Adobe ID。MCP 不支持 Frame.io Legacy 账户。
+
+每个客户端都有各自独特的连接步骤（详见下文），但基本流程如下：身份验证仅在首次连接时运行一次，之后 MCP 会自动处理令牌刷新。您会被重定向到 Adobe 登录屏幕进行登录并授权访问，然后返回 AI 智能体，此时连接已激活。
+
+工具调用以您的 Frame.io 权限运行。MCP 只能执行您的账户角色已允许的操作，因此试图超出您访问权限的工具会返回权限错误，而不会执行该操作。有关角色与功能的对应关系，请参阅[管理用户权限](/cn/platform/docs/guides/managing-user-permissions)。
+
+#### Adobe Managed Accounts（AMA）与 Frame Managed Accounts（FMA） {#adobe-managed-accounts-ama-and-frame-managed-accounts-fma}
+
+Frame.io 有两种以不同方式管理的用户账户类型，这在身份验证过程中很重要。完整说明请参阅 [Frame Managed 与 Adobe Managed 账户](https://help.frame.io/en/articles/13719174-frame-managed-vs-adobe-managed-accounts)。
+
+**Frame Managed Accounts（FMA）**直接在 Frame.io 中创建和管理。在 IMS 提示时使用您的 Adobe 凭据登录并授权访问，即可完成连接。
+
+**Adobe Managed Accounts（AMA）**通过 Adobe Admin Console 进行管理，通常面向企业团队。与 FMA 一样，身份验证也通过 IMS 进行，但关键区别在于，同一个 Adobe 身份可以属于多个组织（有时标记为账户或账户配置文件）。您通过哪个组织进行身份验证，决定了 MCP 可以访问哪个 Frame.io 账户。
+
+当 OAuth 流程在浏览器中打开时，Adobe IMS 会检查您是否已登录。如果已登录，它会复用该会话，而不会要求您选择配置文件。如果该会话所属的组织与您的 Frame.io 账户所关联的组织不同，您虽然会成功通过身份验证，但会进入错误的位置。MCP 可以无错误地连接，但 Frame.io API 调用会返回空结果或权限错误。
+
+如果您使用的是 AMA，并在连接后遇到这种情况，请参阅"故障排除"中的 [AMA 多账户身份验证错误](#ama-multi-account-authentication-errors)。
+
+---
+
+连接需要一个关联了 Adobe ID 的有效 Frame.io 账户（有关连接 Adobe 身份验证的更多信息，请参阅[此处](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication)）。
+
+<Tip>
+
+**如果这些步骤看起来有所不同**
+
+下文介绍的客户端会频繁更改其 MCP 设置流程。本指南会随着这些变更的推出而更新，但如果您看到的选项或标签与以下步骤不同，请查看各部分中链接的客户端文档以获取最新说明。
+
+</Tip>
+
+---
+
+<Tabs>
+
+<Tab title="Claude">
+
+## 连接到 Claude {#connecting-to-claude}
+
+以下步骤适用于 Claude Desktop。Claude 也可在 Web、iOS、Cowork 和 Code Desktop 上使用。请参阅 [Anthropic 的连接器文档](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)，确认您所使用平台的设置步骤。
+
+<Steps>
+
+<Step title="打开连接器">
+
+在 Claude Desktop 中，从菜单栏打开 **Customize**。在左侧边栏中选择 **Connectors**，然后点击 Connectors 面板右上角的 **+**。
+
+</Step>
+
+<Step title="输入服务器详细信息">
+
+在 **Add custom connector** 对话框中，填写以下两个字段：
+
+```
+  Name: Frame.io
+  URL: https://mcp.frame.io/v1/mcp
+```
+
+点击 **Add**。
+
+</Step>
+
+<Step title="进行身份验证">
+
+Frame.io 会出现在 **Not connected** 部分，并带有 **CUSTOM** 标签。点击右侧面板中的 **Connect**。您将被带到 Adobe IMS。使用与您的 Frame.io 账户关联的 Adobe ID 登录。授权后，您将返回 Claude Desktop。
+
+</Step>
+
+<Step title="检查工具权限">
+
+完成身份验证后，Frame.io 会移至 **Web** 部分。右侧面板会列出工具，分为 **Interactive tools** 和 **Read-only tools**。
+
+每组都有一个权限设置，默认为 **Needs approval**。点击下拉菜单进行更改：
+
+| 设置 | 行为 |
+| --- | --- |
+| Always allow | Claude 调用工具时不会提示 |
+| Needs approval | Claude 在每次调用工具前都会暂停并询问 |
+| Blocked | Claude 无法使用这些工具 |
+| Custom | 按工具单独配置权限 |
+
+只读工具可以放心设置为 **Always allow**。在您阅读下方的[工具审批设置](#tool-approval-settings)部分之前，请将所有其他工具保持为 **Needs approval**。
+
+有关更多详细信息，请参阅 Claude 关于[连接器权限](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)的文档。
+
+</Step>
+
+<Step title="使用 Frame.io 工具">
+
+连接后，用自然语言让 Claude 执行 Frame.io 任务。Claude 会自动调出连接器的工具，并为每个请求选择合适的工具。
+
+</Step>
+
+</Steps>
+
+<Tip>
+
+要确认连接是否正常，可以问 Claude：*"List my Frame.io accounts."*
+
+</Tip>
+
+</Tab>
+
+<Tab title="ChatGPT">
+
+## 连接到 ChatGPT {#connecting-to-chatgpt}
+
+以下步骤适用于 ChatGPT 桌面应用。ChatGPT Web 和 ChatGPT iOS 也支持 Frame.io MCP 工具。请参阅 [OpenAI 帮助中心关于 ChatGPT 中应用的说明](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt)，确认您所使用平台的设置步骤。
+
+<Steps>
+
+<Step title="添加服务器">
+
+在 ChatGPT 中，打开 **Settings** 并选择 **Plugins**（位于左侧菜单的 **Integrations** 下）。在右上角打开 **Add** 菜单并选择 **Add MCP Server**。将类型设置为 **Streamable HTTP**，并填写：
+
+```
+ Name: Frame.io
+ URL: https://mcp.frame.io/v1/mcp
+```
+
+点击 **Save**。Frame.io 会被添加到服务器表中，并带有一个 **Authenticate** 按钮。
+
+</Step>
+
+<Step title="进行身份验证">
+
+点击 Frame.io 旁边的 **Authenticate** 以开始 Adobe 登录。使用与您的 Frame.io 账户关联的 Adobe ID 登录并授权访问。
+
+</Step>
+
+<Step title="检查工具权限">
+
+ChatGPT 会根据操作类型和应用权限，在执行某些操作前请求确认。在更改这些默认设置之前，请阅读[工具审批设置](#tool-approval-settings)部分。写入和删除类工具（例如上传、移动文件、删除和更改分享）值得在自动化之前仔细检查。
+
+在受管理的工作区中，您可用的操作也可能由工作区管理员控制。
+
+</Step>
+
+<Step title="使用 Frame.io 工具">
+
+在相关情况下让 ChatGPT 使用 Frame.io，从编辑框中选择 **Frame.io**，或使用 **@Frame.io** 直接提及它。
+
+<Tip>
+
+要确认连接是否正常，可以问：*"@Frame.io List my Frame.io accounts."*
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="VS Code">
+
+## 连接到 VS Code {#connecting-to-vs-code}
+
+点击下方按钮，打开已准备好添加 Frame.io MCP 的 VS Code。点击 **Install**，然后在出现提示时使用您的 Adobe 账户登录。
+
+[在 VS Code 中安装](vscode:mcp/install?%7B%22name%22%3A%22frameio%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.frame.io%2Fv1%2Fmcp%22%7D)
+
+<Tip>
+
+要确认连接是否正常，可以问：*"List my Frame.io accounts."*
+
+</Tip>
+
+<AccordionGroup>
+
+<Accordion title="手动配置">
+
+<Steps>
+
+<Step title="添加服务器">
+
+使用 `Cmd+Shift+P`（macOS）或 `Ctrl+Shift+P`（Windows、Linux）打开命令面板，并运行 **MCP: Add Server**。出现提示时：
+
+1. 选择 **HTTP (HTTP or Server-Sent Events)**
+2. 输入 URL：`https://mcp.frame.io/v1/mcp`
+3. 输入名称：`frameio-mcp`
+4. 选择 **Global**，使该服务器在所有工作区中可用
+
+VS Code 会自动写入服务器配置。
+
+</Step>
+
+<Step title="进行身份验证">
+
+浏览器窗口会打开 Adobe IMS。使用与您的 Frame.io 账户关联的 Adobe ID 登录并授权访问。
+
+</Step>
+
+<Step title="检查工具权限">
+
+首次运行 Frame.io 工具时，VS Code 会要求您确认信任该服务器。之后，默认情况下它会在每次调用工具前进行提示。使用 Chat 视图中的 **Configure Tools** 按钮启用或禁用单个 Frame.io 工具，并从命令面板运行 **MCP: Reset Trust** 以重新确认服务器。在预先批准任何操作之前，请阅读下方的[工具审批设置](#tool-approval-settings)部分。
+
+有关更多详细信息，请参阅 VS Code 关于[管理审批和权限](https://code.visualstudio.com/docs/agents/run/approvals)的文档。
+
+</Step>
+
+<Step title="在 Chat 视图中使用 Frame.io 工具">
+
+打开 **Chat view**（`Ctrl+Alt+I` / `⌃⌘I`）并切换到 **Agent mode**，即可使用 Frame.io 的工具。用自然语言提问，VS Code 会为请求选择合适的工具。
+
+</Step>
+
+</Steps>
+
+</Accordion>
+
+</AccordionGroup>
+
+</Tab>
+
+<Tab title="Cursor">
+
+## 连接到 Cursor {#connecting-to-cursor}
+
+点击下方按钮，打开已准备好添加 Frame.io MCP 的 Cursor。点击 **Install** 以添加 MCP。然后在出现提示时点击 **Authenticate**，使用您的 Adobe 账户登录。
+
+[在 Cursor 中安装](cursor://anysphere.cursor-deeplink/mcp/install?name=frame-io-mcp&config=eyJ1cmwiOiJodHRwczovL21jcC5mcmFtZS5pby92MS9tY3AiLCJ0eXBlIjoiaHR0cCJ9)
+
+<Tip>
+
+要确认连接是否正常，可以问：*"List my Frame.io accounts."*
+
+</Tip>
+
+<AccordionGroup>
+
+<Accordion title="手动配置" id="configure-manually-1">
+
+Cursor 通过 JSON 配置文件支持 MCP 服务器。您需要 Cursor 0.45 或更高版本。
+
+<Steps>
+
+<Step title="添加 mcp.json">
+
+创建 `~/.cursor/mcp.json`，内容如下：
+
+```json
+{
+  "mcpServers": {
+    "frameio-mcp": {
+      "url": "https://mcp.frame.io/v1/mcp"
+    }
+  }
+}
+```
+
+这是全局配置，可使该服务器在所有项目中可用。键 `frameio-mcp` 是本地标识符，可以重命名为任意名称。
+
+</Step>
+
+<Step title="打开 MCP 设置">
+
+使用 `Cmd+,`（macOS）或 `Ctrl+,`（Windows、Linux）打开 Cursor Settings，并导航到 **Features > MCP**。`frameio-mcp` 将出现在服务器列表中。
+
+</Step>
+
+<Step title="进行身份验证">
+
+点击 `frameio-mcp` 旁边的 **Enable**。Cursor 会打开一个浏览器窗口进入 Adobe IMS。使用与您的 Frame.io 账户关联的 Adobe ID 登录并授权访问。
+
+</Step>
+
+<Step title="检查工具权限">
+
+默认情况下，Cursor 的 **Auto-review** 模式会在执行有风险的工具调用前请求批准。在 **Settings > Agents > Approvals & Execution** 下切换到 **Allowlist** 或 **Run Everything**，或将 Frame.io 工具添加到允许列表之前，请阅读下方的[工具审批设置](#tool-approval-settings)部分。
+
+有关更多详细信息，请参阅 Cursor 关于 [Run Modes](https://cursor.com/docs/agent/security/run-modes) 的文档。
+
+</Step>
+
+<Step title="在 Cursor 中使用 Frame.io 工具">
+
+打开 **Composer** 窗口，即可使用 Frame.io 的工具。用自然语言提问，Cursor 会为请求选择合适的工具。
+
+</Step>
+
+</Steps>
+
+</Accordion>
+
+</AccordionGroup>
+
+</Tab>
+
+<Tab title="GitHub Copilot CLI">
+
+## 连接到 GitHub Copilot CLI {#connecting-to-the-github-copilot-cli}
+
+以下步骤假定您已安装 GitHub Copilot CLI。请参阅 [GitHub 的 Copilot CLI 文档](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli)进行设置。
+
+<Steps>
+
+<Step title="添加服务器">
+
+在活动的 Copilot CLI 会话中运行：
+
+```
+/mcp add frameio
+```
+
+CLI 会引导您逐个字段填写一个简短的表单：
+
+```
+Type: HTTP
+URL: https://mcp.frame.io/v1/mcp
+HTTP Headers: leave blank
+Tools: * to enable all of Frame.io's tools
+Defer Tools: Auto
+```
+
+**Tools** 控制服务器的哪些工具可用。`*` 会启用全部工具。如果只想启用特定工具，请列出以逗号分隔的工具名称。
+
+**Defer Tools** 控制这些工具的加载方式。`Auto` 通过工具搜索按需加载工具，因此在需要之前，其定义不会占用上下文窗口，这非常适合像 Frame.io 这样的大型工具集。`Never` 会预先加载所有工具。在这里，`Auto` 是更好的默认选项。
+
+</Step>
+
+<Step title="进行身份验证">
+
+填写完表单后，CLI 会输出 `Server Saved` 和 `OAuth authentication is required`。
+
+按 Enter 进行身份验证，浏览器窗口将打开 Adobe 登录页面。使用与您的 Frame.io 账户关联的 Adobe ID 登录并授权访问。
+
+成功后，CLI 会输出 `Successfully authenticated with frameio`，并返回活动 MCP 服务器列表。
+
+</Step>
+
+<Step title="使用 Frame.io 工具">
+
+用自然语言向 Copilot 提问，当您的请求需要时，它会使用 Frame.io 工具。运行 `/mcp show frameio` 或 `/mcp list` 以确认服务器显示为已连接。
+
+<Tip>
+
+要确认连接是否正常，可以问：*"List my Frame.io accounts."*
+
+</Tip>
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## 可用工具 {#available-tools}
+
+Frame.io MCP 中可用工具的参考。如果缺少您需要的工具或功能，请告诉我们。
+
+<Tip>
+
+**关于命名的说明**
+
+此 MCP 将文件、文件夹和版本堆栈的列出功能整合到了 `read_assets` 中。元数据值直接在文件和文件夹对象上内联读取，而不是通过专门的读取工具。
+
+</Tip>
+
+可用工具分为 **Setup**、**Read**、**Write**、**Delete** 和 **Feedback** 几类。
+
+**Read** 工具检索数据而不进行更改。**Write** 工具创建、更新、移动或恢复内容。**Delete** 工具删除内容。已删除的文件和文件夹可以恢复，但其他资源类型的删除是永久性的。
+
+下方每个工具旁都列出了其类别。<br />
+<br />
+**浏览工具：**[设置与导航](#setup-and-navigation) · [资源与结构](#assets-and-structure) · [评论](#comments) · [元数据](#metadata) · [分享](#sharing) · [成员](#membership) · [上传](#uploads) · [删除与诊断](#deletion-and-diagnostics)
+
+---
+
+### 工具审批设置 {#tool-approval-settings}
+
+连接任何 MCP 服务器（不仅仅是这个）都会让您的 AI 智能体使用您的访问权限和凭据执行操作。请像对待任何可以访问您账户或文件的集成一样谨慎对待它。
+
+在更改任何权限设置的默认值之前，请先了解工具执行的工作方式。
+
+当某个工具类别设置为 **Always allow** 时，您的 AI 智能体会自动调用这些工具，不会进行确认，也不会预览即将发生的操作。这对于只读查询来说没有问题。但这意味着像 *"把这些整理到正确的文件夹中"* 这样的提示词，可能会在您有机会检查文件去向之前就把文件移到错误的位置。
+
+**推荐的默认设置：**
+
+| 工具类型 | 推荐处理方式 |
+| --- | --- |
+| Read | 如果您的客户端支持，可以放心自动批准 |
+| Write | 在每次调用运行前进行检查 |
+| Delete | 在每次调用运行前进行检查，这些操作会删除内容 |
+
+<Tip>
+
+**只读工具**
+
+只读工具带有标准的 `readOnlyHint` 注解，Claude、ChatGPT、VS Code 和 Cursor 会据此将读取操作识别为非修改性操作，通常会将其单独分组或跳过审批提示。具体处理方式因客户端而异。
+
+</Tip>
+
+每个客户端实现审批的方式都不同。没有任何一个设置在所有地方都以相同方式工作：
+
+- **Claude Desktop：**在连接器的设置面板中，按工具类别设置权限，或通过 **Custom** 设置按单个工具设置权限。请参阅 Claude 关于[连接器权限](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)的文档
+- **ChatGPT：**默认情况下，在执行某些操作前会请求确认。您可以在当前对话的剩余部分记住某个选择，但开始新对话时会重置。有关更多详细信息，请参阅 [OpenAI 帮助中心关于 ChatGPT 中应用的说明](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt)。
+- **VS Code：**首次出现提示时确认您信任该服务器，然后在工具调用运行时进行批准。使用 Chat 视图中的 **Configure Tools** 按钮启用或禁用单个工具，并从命令面板运行 **MCP: Reset Trust** 以重新确认服务器。有关更多详细信息，请参阅 VS Code 关于[管理审批和权限](https://code.visualstudio.com/docs/agents/run/approvals)的文档。
+- **Cursor：**在 **Settings > Agents > Approvals & Execution** 下选择 Run Mode。Auto-review（默认）会在执行有风险的调用前询问。Allowlist 和 Run Everything 会完全跳过审批。有关更多详细信息，请参阅 Cursor 关于 [Run Modes](https://cursor.com/docs/agent/security/run-modes) 的文档。
+- **GitHub Copilot CLI：**Copilot 会在运行工具前进行提示，并提供仅允许一次或在整个会话中允许的选项。运行 `/mcp` 可查看已配置的服务器及其工具。
+
+如有疑问，请保留客户端的默认审批行为。它只会增加一个确认步骤，却能帮助您在错误发生之前发现它。
+
+---
+
+### 设置与导航 {#setup-and-navigation}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `mandatory_init` | Setup | 加载 Frame.io 使用指南，并默认列出您可以访问的账户的第一页。 |
+| `read_context` | Read | 显示已登录的用户，并帮助您浏览账户、工作区和项目。您可以选择要查看的内容，或按 ID 打开特定的账户、工作区或项目。 |
+| `search_assets` | Read | 按名称或内容在账户中搜索项目、文件夹、文件和版本堆栈。 |
+
+### 资源与结构 {#assets-and-structure}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `read_assets` | Read | 显示文件、文件夹或版本堆栈，或列出文件夹的内容或堆栈中的版本。文件和版本详细信息中可能包含媒体链接。 |
+| `manage_assets` | Write | 移动或复制文件、文件夹和版本堆栈。将文件移入版本堆栈会将其添加为新版本。 |
+| `manage_versions` | Write | 从同一文件夹中的 2–10 个文件创建版本堆栈，或更改现有堆栈中版本的顺序。 |
+| `change_structure` | Write | 创建工作区、项目和文件夹；重命名工作区、文件夹和文件；或更新项目的名称、状态或访问限制。 |
+| `list_recently_deleted` | Read | 列出项目中最近删除的文件、文件夹和版本堆栈。 |
+| `restore_assets` | Write | 将最近删除的文件、文件夹或版本堆栈恢复到其原始位置。 |
+
+### 评论 {#comments}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `read_comments` | Read | 显示文件的评论和回复，或特定评论的详细信息。 |
+| `write_comments` | Write | 添加或更新评论、将其标记为已完成或重新打开，或附加文件。评论可以锚定到视频时间码、PDF 页面或图像位置。 |
+
+### 元数据 {#metadata}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `list_metadata_fields` | Read | 列出账户的自定义元数据字段，包括其类型和可用选项。 |
+| `change_metadata` | Write | 创建或重命名自定义元数据字段，或在文件上设置元数据值。一次元数据更新会将相同的值应用于同一项目中所有选定的文件。 |
+
+### 分享 {#sharing}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `read_shares` | Read | 列出项目的分享，或显示分享的详细信息、内容或审阅者。 |
+| `manage_shares` | Write | 创建或更新分享，或向其中添加或移除内容。公开分享可供任何拥有链接的人访问。 |
+| `manage_reviewers` | Write | 列出、邀请或移除安全分享中的审阅者。邀请审阅者时会向其发送电子邮件。 |
+
+### 成员 {#membership}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `read_members` | Read | 列出账户、工作区、项目或文件夹级别的人员及其角色。 |
+| `manage_members` | Write | 在账户、工作区、项目或文件夹级别更改成员的角色或移除其直接成员身份。 |
+
+### 上传 {#uploads}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `upload_media` | Write | 从您的计算机上传文件，或让 Frame.io 从公开网络链接获取文件。 |
+| `get_upload_status` | Read | 检查文件的上传进度和处理状态。 |
+
+### 删除与诊断 {#deletion-and-diagnostics}
+
+| 工具 | 类型 | 说明 |
+| --- | --- | --- |
+| `delete_resources` | Delete | 删除文件、文件夹、项目、工作区、分享、评论或元数据字段。已删除的文件和文件夹可以恢复；其他列出的资源会被永久删除。 |
+| `read_audit_logs` | Read | 显示账户活动，包括谁在何时更改了资源。结果可以按日期、事件或资源进行筛选。 |
+| `report_tool_issue` | Feedback | 就这些工具的问题或难以完成的工作流向 Frame.io MCP 团队发送反馈。 |
+
+---
+
+## 示例 {#examples}
+
+### 审计日志与报告 {#audit-logs-+-reporting}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+生成一份在过去某段时间内登录过我的 Frame.io 账户的所有人员列表，并附上他们登录的日期和时间。
+
+</Card>
+
+<Card title="">
+
+生成一份过去某段时间内创建的所有 Frame.io 分享链接的报告，包括创建日期和时间、包含哪些资源、谁访问了该链接，以及它是公开分享还是安全分享。
+
+</Card>
+
+<Card title="">
+
+我的 Frame.io 账户中每个工作区和每个项目当前的存储使用情况是多少？
+
+</Card>
+
+<Card title="">
+
+生成一份向我的 Frame.io 账户上传过内容的所有用户的报告，包括每个文件的名称、文件类型，以及它被上传到哪个项目或工作区。
+
+</Card>
+
+<Card title="">
+
+生成一份过去某段时间内所有已批准文件的报告，包括谁发表了评论、谁批准了每个文件，以及这些文件位于哪个项目或工作区。
+
+</Card>
+
+</CardGroup>
+
+### 分享以供审阅 {#share-for-review}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+将我的资源上传到 Frame.io，生成分享链接，并请求以下人员进行审阅。
+
+</Card>
+
+<Card title="">
+
+获取我的分享上的所有评论。
+
+</Card>
+
+<Card title="">
+
+上传我的资源的新版本，并更新同一个分享链接。
+
+</Card>
+
+</CardGroup>
+
+### 浏览与发现 {#browse-+-discover}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+显示我的主工作区中的所有项目。
+
+</Card>
+
+<Card title="">
+
+在我的整个账户中查找名称中包含"rough"、"draft"或"wip"的所有文件。
+
+</Card>
+
+<Card title="">
+
+在"Fall Campaign"项目中找到"Final Delivery"文件夹，并列出其中的所有内容。
+
+</Card>
+
+<Card title="">
+
+"Q3 Campaign"项目的"Final Deliverables"文件夹中所有内容的上传和处理状态如何？
+
+</Card>
+
+</CardGroup>
+
+### 跨账户概览 {#cross-account-overview}
+
+<CardGroup cols={2}>
+
+<Card title="">
+
+在过去两周内，我的各个账户中有哪些项目有上传或评论？
+
+</Card>
+
+<Card title="">
+
+我所有账户中每个活跃项目的状态如何？请按工作区分组。
+
+</Card>
+
+</CardGroup>
+
+---
+
+## 断开连接 {#disconnecting}
+
+每个客户端都有各自断开或移除 Frame.io MCP 的具体方法：
+
+- **Claude Desktop：**前往 **Customize > Connectors**，找到 Frame.io 并将其移除。有关更多详细信息，请参阅 Claude 关于[连接器](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)的文档。
+- **ChatGPT：**有两种选择。要**断开连接**（保留已安装的插件但停止其访问），请打开 **Settings > Plugins > Frame.io** 并将其关闭；重新打开即可恢复连接。要完全移除，请在侧边栏中打开 **Plugins**，在 **Installed** 下选择 **Frame.io**，然后选择 **Uninstall**。如需再次使用，您需要从插件目录重新安装。有关更多详细信息，请参阅 [OpenAI 帮助中心关于 ChatGPT 中应用的说明](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt)。
+- **VS Code：**从您的 MCP 配置中移除 Frame.io 条目。有关更多详细信息，请参阅 VS Code 关于[管理 MCP 服务器](https://code.visualstudio.com/docs/agent-customization/mcp-servers)的文档。
+- **Cursor：**从 `~/.cursor/mcp.json`（即添加时使用的同一文件）中移除 `frameio-mcp` 条目。
+- **GitHub Copilot CLI：**运行 `/mcp delete [server-name]` 以移除服务器。
+
+---
+
+## 故障排除 {#troubleshooting}
+
+### 在 2026 年 10 月 7 日之前配置了 Frame.io MCP {#configured-the-frame-io-mcp-before-october-7-2026}
+
+检查其服务器 URL 是否与当前的 V1 URL 一致：**`https://mcp.frame.io/v1/mcp`**
+
+如有需要请更新，然后重启或重新连接 MCP 服务器。
+
+### OAuth 循环或身份验证失败 {#oauth-loop-or-authentication-failure}
+
+使用与您的 Frame.io 账户关联的 Adobe ID 登录。如果您有多个 Adobe 账户，请确认使用的是正确的账户。在客户端中移除并重新添加 Frame.io MCP 会启动一个新的 OAuth 会话。
+
+### AMA 多账户身份验证错误 {#ama-multi-account-authentication-errors}
+
+如果 Adobe IMS 静默复用了现有的浏览器会话，您可能会在未被提示选择的情况下通过身份验证进入错误的组织。解决方法是清除被复用的 Adobe 会话。在重新连接之前，清除浏览器中 Adobe 登录域的 Cookie，或在同一浏览器中打开一个单独的 Adobe 标签页并从中完全退出登录。清除之前的会话后，您将在身份验证时看到配置文件选择选项，从而可以选择正确的组织。
+
+### 添加后 Frame.io MCP 不可见或无法连接 {#frame-io-mcp-not-visible-or-not-connecting-after-adding}
+
+确认 URL 完全为 `https://mcp.frame.io/v1/mcp`。添加后可能需要重启客户端。
+
+### 对话中没有可用工具 {#tools-not-available-in-conversation}
+
+确认 Frame.io MCP 在您的客户端中显示为已连接。如果已连接但工具仍然缺失，请检查权限中的工具类别是否未被设置为 **Blocked**。
+
+此外，
+
+### 连接成功但未显示任何工作区或项目 {#connected-successfully-but-no-workspaces-or-projects-appear}
+
+您已通过身份验证，但所连接的账户中可能没有工作区，或者您可能完全处于错误的账户中。请先让您的 AI 智能体列出所有账户。如果您可以访问多个账户，可能需要指定其他账户 ID。AMA 用户还应确认自己是在正确的 Adobe 组织下进行的身份验证（见上文）。
+
+### 特定工具出现权限错误 {#permission-errors-on-specific-tools}
+
+工具调用反映的是您的 Frame.io 账户权限。上传需要 Contributor 访问权限。有关详细信息，请参阅[管理用户权限](/cn/platform/docs/guides/managing-user-permissions)。
+
+### 上传停滞或资源卡在处理中 {#upload-stalled-or-asset-stuck-in-processing}
+
+让您的 AI 智能体直接检查状态：*"我最近上传的文件的上传状态如何？"* 它会调用 `get_upload_status`。大型或高分辨率文件可能需要几分钟才能完成转码。
+
+---

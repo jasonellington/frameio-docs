@@ -1,0 +1,225 @@
+---
+title: "Asset を検索する"
+---
+
+# 概要 {#overview}
+
+Frame.io の API は、Web アプリケーションの機能と同様に、Account 全体にわたる Asset の詳細なファセット検索をサポートしています。最もよく使われるフィルターは Team、Project、Status ですが、フィルターと並べ替えを独自の方法で組み合わせることで、API 主導の非常に具体的な結果セットを作成できます。一般に、`account_id`、`q`(クエリ)、`sort` 以外のすべてのフィルターは同じ構造に従います。以下で、それぞれについて説明します。
+
+![search-filters.png](/images/platform/v2/search-for-assets/d468e3a3b48184af611e5af020bee1474a328ab3fc5090df704dfd6c9b603ba7.webp)
+
+<Warning>
+
+**要求したページサイズと返されるページサイズの不一致**
+
+2022 年 3 月時点で、検索 API のページング機能に影響する既知のバグがあります。このバグが修正されるまでは、要求したページサイズが実際に返される Asset 数と一致しない可能性があるため、検索 API を使って複数ページの結果(つまり 100 件を超える Asset)を反復処理することはお勧めしません。
+
+</Warning>
+
+## デフォルト値 {#defaults}
+
+検索を実行するための API リクエストは常に同じです。
+
+常に同じリクエストです
+
+`https://api.frame.io/v2/search/library` に `POST` します
+
+明示的に指定しない場合、検索の調整に関するデフォルト値は次のとおりです。
+
+| 属性 | デフォルト値 | 説明 |
+| :--- | :--- | :--- |
+| `page_size` | 10 | 1 ページあたり 10 件の Asset が返されます。 |
+| `page` | 1 | クエリはレスポンスの最初のページを返します。 |
+| `sort` | `relevance` | 「Relevance(関連性)」は、特別に調整された属性セットに基づいて Asset を並べようとします。クエリがない場合、関連性はアップロードの新しさに大きく偏ります。 |
+
+## このガイドについて {#about-this-guide}
+
+このガイドでは、次の条件に一致する検索クエリを作成する手順を説明します。
+
+- Account 内の Asset であること
+- クエリ `"moon"` に一致すること
+- 特定の Project 内にあること
+- 2020 年 4 月 1 日から 30 日の間にアップロードされたこと
+- 「Approved」になっていること
+
+最終的に、検索のボディは次のようになります。
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-30T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    },
+    "page_size": 10,
+    "page": 1
+}
+```
+
+### Account、クエリ、並べ替え {#account-query-and-sort}
+
+Account(`account_id`)、クエリ(`q`)、`sort` は、検索クエリ内でどの `filter` 属性にも含まれない、最も基本的な 3 つの構成要素です。
+
+#### Account のコンテキスト {#account-context}
+
+技術的には、検索を実行するのに必要な属性は `account_id` だけです。これだけを指定すると、Account 上のすべての Asset(フォルダーを含む)が、デフォルトのページネーション値(1 ページあたり 10 件の Asset、1 ページ目から)で取得されます。
+
+```json
+{
+    "account_id": "<account_id>"
+}
+```
+
+#### 検索クエリ {#search-query}
+
+次によく使われる(そして便利な)属性は、クエリそのものです。注: Frame.io の API 検索は null のクエリを受け付けるため、ワイルドカード(`*`)のクエリは必要ありません。何かを検索するか、Account 内のすべての Asset を(必要に応じてフィルターをかけて)並べ替えて要求するかのどちらかです。
+
+この例では、「moon」という語句を検索します。
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon"
+}
+```
+
+### 並べ替え {#sorting}
+
+![sort.png](/images/platform/v2/search-for-assets/bd057586bfc5499df0b46d41ae74d90e53beb6500bb87f639a730545ccb3f1c8.webp)
+
+Frame.io は、さまざまな並べ替えオプションをサポートしています。並び順の構文は、どのオプションでも同様です。
+
+- デフォルトの並べ替え方向があります
+- その方向を逆にするには、並べ替えの値の前にマイナス記号 `-` を付けます
+
+たとえば、アルファベットの逆順(Z から A)で並べ替えるには、`"sort": "-name"` と宣言します。
+
+デフォルトの並べ替え操作は「Relevance(関連性)」です。そのため宣言する必要はなく、`sort` 属性が指定されていない場合はこれが適用されます。
+
+| 並べ替えオプション | 属性 | デフォルトの方向 |
+| :--- | :--- | :--- |
+| **Relevance(関連性)** | n/a | n/a |
+| **Date uploaded(アップロード日)** | `inserted_at` | 古い順 |
+| **Name(名前)** | `name` | A から Z |
+| **Size(サイズ)** | `filesize` | 小さい順 |
+| **Uploader(アップロード者)** | `creator.name` | A から Z |
+
+それでは、クエリの作成を進めて、`name` での A から Z の `sort` を追加しましょう。
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name"
+}
+```
+
+### フィルターとページネーション {#filters-and-pagination}
+
+フィルターは、Frame.io の Asset 検索で最も扱いが難しく、同時に最も強力な機能です。フィルターは単一の `filter` オブジェクト内に記述し、すべて操作(`op`)と `value` という同じパターンに従います。フィルターでは次の一般的な略語を使用します。「equals」以外の比較オプションは、日付とサイズのクエリ専用です。
+
+- `eq` — 等しい
+- `lt` — より小さい
+- `gt` — より大きい
+- `lte` — 以下
+- `gte` — 以上
+- `match` — 完全一致。Uploader と Filetype のフィルターでのみ使用します
+
+たとえば、既知の `project_id` に一致させる `filter` は次のように作成します。
+
+```json
+{
+    "filter": {
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        }
+    }
+}
+```
+
+### オプションと操作 {#options-and-operations}
+
+次の表は、各フィルタータイプに関連するオプションと操作を示しています。
+
+| フィルターオプション | 属性 | サポートされる操作 | サポートされる値 |
+| :--- | :--- | :--- | :--- |
+| **Archived(アーカイブ済み)** | `archived` | `eq` | `true`, `false` |
+| **Date uploaded(アップロード日)** | `inserted_at` | `eq`, `lt`, `gt`, `lte`, `gte` | `<datetime>`(ISO-8601、UTC) |
+| **Deleted(削除済み)** | `deleted` | `eq` | `true`, `false` |
+| **File type(ファイル形式)** | `filetype` | `match` | `<MIME type>` |
+| **Private(非公開)** | `private` | `eq` | `true`, `false` |
+| **Project** | `project_id` | `eq` | `<project_id>` |
+| **Size(サイズ)** | `filesize` | `eq`, `lt`, `gt`, `lte`, `gte` | `size`(バイト単位) |
+| **Status(ステータス)** | `label` | `eq` | `none`, `in_progress`, `needs_review`, `approved` |
+| **Team** | `team_id` | `eq` | `<team_id>` |
+| **Type(タイプ)** | `asset_type` | `eq` | `audio`, `document`, `folder`, `image`, `other`, `stream`, `video` |
+| **Uploader(アップロード者)** | `creator.name` | `match` | `<name>` |
+
+<Warning>
+
+**インデックスに反映されるには、アップロード者がアクティブな Account Member である必要があります**
+
+User Search インデックスに含まれなくなっているため、アカウントのメンバーではなくなった作成者を検索しても機能しません。
+
+</Warning>
+
+クエリの作成を続けて、次の条件に当てはまる Asset のフィルターを追加しましょう。
+
+- 特定の Project 内にある
+- 2020 年 4 月 1 日から 30 日の間にアップロードされた
+- 「Approved」としてマークされている
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-28T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    }
+}
+```
+
+<Note>
+
+**ページネーション**
+
+検索エンドポイントは、リクエストボディの最も外側の階層にある `page_size` 属性と `page` 属性を使って、他のエンドポイントとまったく同じようにページネーションを行います。ページネーションの詳細については、[こちら](/ja/platform/v2/key-concepts#pagination)の別のガイドを参照してください。
+
+</Note>

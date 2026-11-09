@@ -1,0 +1,599 @@
+---
+title: "Guide pratique : importation (avancé)"
+sidebarTitle: "Importation (avancé)"
+---
+
+## Introduction {#introduction}
+
+L’importation fiable d’assets est la fonction centrale de toute intégration C2C. Ce guide présente des techniques avancées et des bonnes pratiques pour créer un système d’importation robuste, résilient et efficace, qui fonctionne bien même dans des environnements difficiles.
+
+## Prérequis {#prerequisites}
+
+Si ce n’est pas déjà fait, veuillez consulter le guide [Implémenter C2C : configuration](/fr/camera-to-cloud/implementing-c2c-setting-up) avant de continuer.
+
+Vous aurez besoin de l’`access_token` obtenu lors du [processus d’authentification et d’autorisation](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Nous continuerons d’utiliser le [même asset de test](https://f.io/Rq1q5CzB) que dans le [guide des importations de base](/fr/camera-to-cloud/how-to-basic-upload).
+
+## Paramètres d’asset avancés {#advanced-asset-parameters}
+
+Lors de la création d’assets dans Frame.io, vous pouvez utiliser plusieurs paramètres avancés pour personnaliser le comportement de l’importation. Le paramètre `offset` est particulièrement important pour une intégration correcte.
+
+### Offset : gérer les appareils en pause {#offset---handling-paused-devices}
+
+Il est essentiel de fournir une valeur `offset` précise. Ce paramètre indique quand un média a été créé et garantit que votre appareil n’importe pas de contenu qui ne devrait pas être partagé. Lorsqu’un appareil est mis en pause dans Frame.io, l’utilisateur indique que les médias créés pendant la pause ne doivent pas être importés. Pour plus de détails, consultez notre [guide sur la fonctionnalité de pause](/fr/camera-to-cloud/how-to-heartbeats-connection-info-and-status#managing-the-paused-status).
+
+### Autres avantages du paramètre offset {#additional-benefits-of-the-offset-parameter}
+
+Le paramètre `offset` offre un autre avantage important pour l’organisation des médias dans Frame.io. Lors de l’importation d’un contenu capturé à une date antérieure (par exemple, lorsqu’un utilisateur sélectionne pendant la lecture une photo prise la semaine précédente), le paramètre `offset` garantit que ce média apparaît dans les dossiers correspondant à sa date de capture d’origine plutôt qu’à la date d’importation actuelle.
+
+Cette organisation chronologique préserve une chronologie logique dans la structure du projet Frame.io. Sans le paramètre `offset`, les médias plus anciens apparaîtraient à tort regroupés avec le contenu du jour, ce qui pourrait semer la confusion chez les monteurs et les autres collaborateurs.
+
+Vous pouvez choisir de laisser ce choix aux utilisateurs dans votre interface. Si les utilisateurs préfèrent organiser toutes les importations selon la date du jour, quelle que soit la date de capture du média, il vous suffit d’omettre le paramètre `offset`, qui vaut `0` par défaut lorsqu’il n’est pas spécifié.
+
+La conception de notre API évite à votre appareil d’avoir à suivre l’état de pause. Lors de l’importation d’un fichier, vous indiquez simplement il y a combien de secondes le fichier a été créé. Notre serveur compare cette valeur aux fenêtres de pause et rejette l’importation si le fichier a été créé pendant une pause.
+
+Pour illustrer cette fonctionnalité, mettez votre appareil en pause depuis le menu à trois points de l’onglet C2C Connections.
+
+Essayez maintenant d’importer un asset :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 0
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation de `/v2/devices/assets` est [disponible ici](/fr/camera-to-cloud/api-reference/device-asset-create).
+
+</Info>
+
+Vous recevrez cette erreur :
+
+```json
+{
+    "code": 409,
+    "errors": [
+        {
+            "code": 409,
+            "detail": "The channel you're uploading from is currently paused.",
+            "status": 409,
+            "title": "Channel Paused"
+        }
+    ],
+    "message": "Channel Paused"
+}
+```
+
+Si vous réactivez l’appareil et relancez la même requête, l’asset sera créé.
+
+En revanche, si l’asset a été créé pendant la fenêtre de pause, vous devez définir `offset` de manière à refléter le moment où il a réellement été créé :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 60
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Cela indique à Frame.io que l’asset a été créé il y a 60 secondes (pendant la pause), ce qui déclenche correctement l’erreur `Channel Paused`.
+
+*Des valeurs `offset` précises sont essentielles* pour éviter d’importer, contre la volonté de l’utilisateur, des contenus sensibles, notamment de la propriété intellectuelle protégée, des images sensibles ou d’autres contenus soumis à restriction.
+
+<Danger>
+
+**Offset et relances**
+
+Lorsque vous relancez un appel de création d’asset ayant échoué, pensez à mettre à jour la valeur `offset`. Pendant des périodes de relance prolongées, un offset statique risque de sortir de la fenêtre de pause concernée, ce qui pourrait autoriser des importations qui devraient être bloquées.
+
+</Danger>
+
+### Importer vers un canal spécifique {#uploading-to-a-specific-channel}
+
+Si votre appareil dispose de plusieurs canaux, vous pouvez indiquer celui à utiliser :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": -10,
+            "channel": 2
+        }
+__JSON__
+} | python -m json.tool
+```
+
+S’il n’est pas spécifié, le canal par défaut est `0`. La plupart des intégrations n’auront pas besoin de modifier cette valeur.
+
+### Demander un nombre de chunks personnalisé {#requesting-a-custom-chunk-count}
+
+Par défaut, le backend de Frame.io divise les fichiers en chunks d’environ 25 Mo. Sur des réseaux très encombrés, vous préférerez peut-être des chunks plus petits. Vous pouvez demander un nombre précis de chunks avec le paramètre `parts` :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "name": "C2C_TEST_CLIP.mp4",
+            "filetype": "video/mp4",
+            "filesize": 21136250,
+            "offset": 0,
+            "parts": 4
+        }
+__JSON__
+} | python -m json.tool
+```
+
+La réponse inclura quatre URL d’importation :
+
+```json
+{
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-01-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-02-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-03-path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-04-path]"
+    ],
+    ...
+}
+```
+
+La taille des chunks sera :
+
+```python title="Python"
+math.ceiling(float(21136250) / float(4))
+# 5284063 bytes
+```
+
+Le dernier chunk fera 5 284 061 octets (calculé ainsi : `21136250 - 5284063 * 3`).
+
+Lorsque vous demandez un nombre de chunks personnalisé, tenez compte des [limitations de l’importation multipart d’AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html) :
+
+- Chaque partie doit faire au moins 5 Mio (5 242 880 octets), à l’exception de la dernière
+- Il ne peut pas y avoir plus de 10 000 parties
+
+Si votre requête enfreint ces contraintes, vous recevrez une erreur `500: INTERNAL SERVER ERROR` :
+
+```
+{
+    "code": 500,
+    "errors": [
+        {
+            "code": 500,
+            "detail": "There was a problem with your request",
+            "status": 500,
+            "title": "Something went wrong"
+        }
+    ],
+    "message": "Something went wrong"
+}
+```
+
+Vérifiez toujours que votre nombre de parties personnalisé respecte les exigences de S3.
+
+## Importer efficacement {#uploading-efficiently}
+
+Les appareils C2C fonctionnent souvent dans des environnements réseau difficiles : l’efficacité est donc cruciale. Voici des stratégies pour maximiser le débit.
+
+### Réutilisation et pooling des connexions TCP {#tcp-connection-reuse/pooling}
+
+L’établissement de connexions chiffrées implique une négociation coûteuse. Pour un fonctionnement efficace, réutilisez les connexions TCP lorsque vous effectuez plusieurs requêtes. La plupart des bibliothèques HTTP proposent une abstraction `Client` ou `Session` qui maintient des connexions persistantes.
+
+La négociation d’une nouvelle connexion HTTPS comprend des échanges cryptographiques (handshakes) et la validation de certificats. En réutilisant les connexions, vous ne subissez ce coût qu’une seule fois au lieu de le subir à chaque requête.
+
+<Info>
+
+**Référence sur le handshake TCP**
+
+Pour les détails techniques des processus de handshake TLS, consultez [l’explication de Cloudflare](https://www.cloudflare.com/learning/ssl/what-happens-in-a-tls-handshake/).
+
+</Info>
+
+Pour illustrer la réutilisation des connexions avec `curl`, commencez par créer un nouvel asset dans Frame.io comme décrit dans le [guide d’importation de base](/fr/camera-to-cloud/how-to-basic-upload#step-1-creating-an-asset).
+
+Ensuite, divisez le fichier en chunks distincts pour les tests :
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk01"
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 > "C2C_TEST_CLIP-Chunk02"
+```
+
+Importez maintenant les deux chunks via une seule connexion TCP à l’aide du paramètre `--next` de curl :
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+Comparez avec des connexions séparées :
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+&& curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02
+```
+
+<Info>
+
+**Réutiliser les URL de chunks**
+
+Vous pouvez importer plusieurs fois vers la même URL de chunk : n’hésitez donc pas à réutiliser les URL d’un exemple à l’autre.
+
+</Info>
+
+Lors des tests, la réutilisation des connexions améliore généralement les performances de 15 à 20 % pour les importations séquentielles.
+
+### Importations parallèles {#parallel-uploads}
+
+Pour un débit encore plus élevé, importez plusieurs chunks simultanément :
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-1-path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part-2-path]\
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+Avec une bande passante suffisante, les importations parallèles se terminent approximativement dans le temps de l’importation individuelle la plus lente.
+
+Pour un parallélisme optimal, une bonne règle empirique consiste à prévoir deux importations simultanées par cœur de processeur. Au-delà de ce ratio, vous risquez une contention des ressources et des gains décroissants.
+
+<Warning>
+
+**Vitesse des importations parallèles**
+
+Les conditions réseau influent fortement sur les performances des importations parallèles. Dans certains environnements, les importations séquentielles peuvent être plus rapides que les importations parallèles. Les implémentations avancées peuvent surveiller le débit et ajuster dynamiquement le niveau de concurrence. Mesurez toujours les performances dans votre environnement de production réel plutôt que de vous fier aux durées des exemples.
+
+</Warning>
+
+### Combiner les deux approches {#combining-both-approaches}
+
+Pour une efficacité maximale, combinez le pooling de connexions et les importations parallèles. Créez plusieurs processus, chacun utilisant le pooling de connexions pour sa propre séquence d’importations :
+
+```shell
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset01-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+& \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk01] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk01 \
+--next -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[asset02-chunk02] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @C2C_TEST_CLIP-Chunk02 \
+&
+```
+
+<Info>
+
+**Fonctionnalités des bibliothèques HTTP**
+
+La plupart des bibliothèques HTTP proposent des abstractions pour le pooling de connexions et les requêtes parallèles. Testez les options de votre bibliothèque pour déterminer la configuration optimale pour votre environnement.
+
+</Info>
+
+## Suivre la progression des importations {#tracking-upload-progress}
+
+Votre intégration doit fournir aux utilisateurs une indication de progression de base. Une granularité au niveau des chunks est acceptable : pour une importation en trois chunks, la progression peut passer de 0 % → 33 % → 66 % → 100 % à mesure que chaque chunk se termine.
+
+Un suivi de progression plus fin dépend des capacités de votre bibliothèque HTTP. Contactez notre équipe si vous avez besoin de conseils pour implémenter un suivi de progression plus détaillé.
+
+## Importer de manière fiable {#uploading-reliably}
+
+Pour une gestion robuste des erreurs, consultez notre [guide des erreurs](/fr/camera-to-cloud/how-to-handle-errors). Les sections suivantes supposent que vous avez implémenté les stratégies de gestion des erreurs qui y sont décrites.
+
+Créer un outil d’importation de qualité production exige de prendre en compte d’autres aspects que la seule gestion des erreurs de requêtes individuelles.
+
+### Créer une file d’attente d’importation {#creating-an-upload-queue}
+
+Dans des scénarios réels, votre appareil peut générer des médias plus vite qu’il ne peut les importer, ou subir des interruptions de connexion prolongées. La mise en place d’un système de files d’attente dissocie la création des médias de la gestion des importations.
+
+Envisagez une architecture à deux files d’attente :
+
+1. Une **file de médias** pour enregistrer les fichiers locaux auprès de Frame.io
+2. Une **file de chunks** pour importer les chunks de fichiers individuels
+
+Voici une implémentation simplifiée :
+
+```python title="Python"
+# Where we are going to queue new files.
+FILE_QUEUE = Queue()
+
+# Where we are going to queue new chunks.
+CHUNK_QUEUE = Queue()
+
+# The http session that will handle TCP 
+# connection pooling for us.
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Snaps a picture for the user."""
+
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+    FILE_QUEUE.add(file_path)
+
+def task_register_assets():
+    """
+    Pulls snapped pictures from the FILE_QUEUE, registers
+    with Frame.io, and adds the chunks to the CHUNK_QUEUE.
+    """
+    while True:
+        # Get the latest file added to the queue and register 
+        # a C2C Asset for it.
+        new_file = FILE_QUEUE.get()
+        asset = c2c.crete_asset_for_file(HTTP_SESSION, new_file)
+
+        # Calculate the size for each chunk
+        chunk_size = c2c.calculate_chunk_size(asset, new_file)
+
+        # Create a message for each chunk with it's parameters 
+        # and add it to the 
+        # queue.
+        chunk_start = 0
+        for chunk_url in asset.upload_urls:
+            message = {
+                "file_path": new_file,
+                "chunk_url": chunk_url,
+                "chunk_start": chunk_start,
+                "chunk_size": chunk_size,
+            }
+
+            # Put the message in the queue and 
+            CHUNK_QUEUE.put(message)
+            chunk_start += chunk_size
+
+def task_upload_chunk():
+    """Takes a chunks and uploads them."""
+
+    while True:
+        info = CHUNK_QUEUE.get()
+        c2c.upload_chunk(HTTP_SESSION, info)
+
+def launch_upload_tasks():
+    """Lauches our Frame.io upload tasks."""
+    # Create a list to hold all of our tasks.
+    tasks = list()
+
+    # Create one task for registering assets.
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Create 2 tasks per CPU core for uploading chunks.
+    for _ in range(0, GET_CPU_COUNT() * 2):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run these tasks until shutdown
+    run_forever(tasks)
+```
+
+<Warning>
+
+**Gestion des erreurs**
+
+Dans l’exemple ci-dessus, nous supposons que les fonctions appelées pour les appels c2c gèrent les erreurs comme indiqué dans le [guide des erreurs](/fr/camera-to-cloud/how-to-handle-errors).
+
+</Warning>
+
+### File d’attente persistante entre les redémarrages {#persistent-queuing-across-power-cycles}
+
+L’approche de file d’attente en mémoire fonctionne bien tant que l’appareil reste sous tension, mais que se passe-t-il en cas de coupure de courant avant la fin des importations ? Pour créer une intégration réellement résiliente, nous devons nous assurer que l’appareil peut reprendre là où il s’était arrêté après un redémarrage.
+
+Cela nécessite de conserver l’état de la file d’attente sur un support de stockage entre deux mises sous tension. Une base de données embarquée telle que [SQLite](https://www.sqlite.org/index.html) constitue une excellente base pour cette fonctionnalité.
+
+Votre implémentation de file d’attente persistante doit prendre en charge les opérations clés suivantes :
+
+- Ajouter les fichiers nouvellement créés à la file d’importation
+- Suivre la création réussie des assets dans Frame.io
+- Enregistrer les échecs de création d’assets dus à des erreurs
+- Stocker les informations sur les chunks de fichiers pour les tâches d’importation
+- Récupérer le prochain chunk à importer
+- Marquer les chunks comme importés avec succès
+- Journaliser les échecs d’importation de chunks
+- Fournir des informations sur l’état des fichiers à afficher pour l’utilisateur
+
+Voici comment adapter l’exemple précédent pour utiliser un système de stockage persistant :
+
+```python title="Python"
+# Our persistence layer for queuing uploads, potentially using SQLite 
+# or another embedded database
+C2C_UPLOAD_STORE = NewC2CUploadStore()
+
+# HTTP session for connection pooling
+HTTP_SESSION = http.Session()
+
+def take_picture():
+    """Captures an image and adds it to the upload queue."""
+    image = MY_DEVICE.capture()
+    file_path = MY_DEVICE.write_image(image)
+
+    # Register the file with our persistent store
+    C2C_UPLOAD_STORE.add_file(file_path)
+
+def task_register_assets():
+    """
+    Processes files from persistent storage and registers
+    them with Frame.io for upload.
+    """
+    while True:
+        # Get the next available file from our store
+        file_record = C2C_UPLOAD_STORE.get_file()
+
+        try:
+            # Register the asset with Frame.io
+            asset = c2c.create_asset_for_file(HTTP_SESSION, file_record)
+            chunk_size = c2c.calculate_chunk_size(asset, file_record)
+
+            # Create entries for each chunk in our persistent store
+            chunk_start = 0
+            for chunk_url in asset.upload_urls:
+                message = {
+                    "file_path": file_record,
+                    "chunk_url": chunk_url,
+                    "chunk_start": chunk_start,
+                    "chunk_size": chunk_size,
+                }
+                
+                C2C_UPLOAD_STORE.new_chunk(message)
+                chunk_start += chunk_size
+                
+        except BaseException as error:
+            # Record the error in our persistent store
+            C2C_UPLOAD_STORE.file_asset_create_error(file_record, error)
+        else:
+            # Mark the asset as successfully created
+            C2C_UPLOAD_STORE.file_asset_created(file_record)
+
+def task_upload_chunk():
+    """Uploads individual file chunks from the persistent queue."""
+    while True:
+        # Get the next chunk, marking it as "in progress" to prevent 
+        # other tasks from processing it simultaneously
+        chunk_record = C2C_UPLOAD_STORE.get_chunk()
+
+        try:
+            c2c.upload_chunk(HTTP_SESSION, chunk_record)
+        except BaseException as error:
+            # Record the error for potential retry
+            C2C_UPLOAD_STORE.chunk_error(chunk_record, error)
+        else:
+            # Mark successful completion
+            C2C_UPLOAD_STORE.chunk_success(chunk_record)
+
+def launch_upload_tasks():
+    """Launches Frame.io upload processing tasks."""
+    tasks = []
+
+    # Asset registration task
+    asset_task = run_task_in_thread(task_register_assets)
+    tasks.append(asset_task)
+
+    # Multiple parallel chunk upload tasks
+    worker_count = GET_CPU_COUNT() * 2
+    for _ in range(worker_count):
+        chunk_task = run_task_in_thread(task_upload_chunk)
+        tasks.append(chunk_task)
+
+    # Run indefinitely
+    run_forever(tasks)
+```
+
+Grâce à cette approche de stockage persistant, votre intégration devient résiliente aux coupures de courant. Au redémarrage, l’appareil reprend simplement le traitement à partir du dernier état enregistré. Cette architecture constitue également la base pour implémenter des fonctionnalités plus avancées, comme le suivi des erreurs et la détection des importations bloquées.
+
+### Suivre les erreurs d’importation {#tracking-upload-errors}
+
+Un système d’importation robuste doit suivre les erreurs avec soin. Après avoir relancé une opération à l’aide des stratégies du [guide des erreurs](/fr/camera-to-cloud/how-to-handle-errors), enregistrez ces échecs dans votre stockage persistant. Cela permet à votre système de :
+
+1. Réduire la priorité des importations problématiques pour éviter qu’elles ne bloquent toute la file d’attente
+2. Fournir aux utilisateurs des informations d’état précises
+3. Permettre une intervention administrative en cas de problème persistant
+
+Lorsqu’une erreur fatale se produit, marquez l’élément afin d’éviter des tentatives de relance inutiles.
+
+### Gérer les importations bloquées {#managing-stalled-uploads}
+
+Mettez en place des garde-fous contre les importations bloquées indéfiniment. Définissez une durée maximale (par exemple, 30 minutes) au-delà de laquelle une tâche d’importation de chunk doit être interrompue et redémarrée. Cela évite que tous les workers d’importation se retrouvent bloqués par des opérations qui ne répondent pas.
+
+### Récupérer après des échecs silencieux {#recovering-from-silent-failures}
+
+Les plantages du système, les coupures de courant ou l’arrêt d’un processus peuvent empêcher le signalement normal des erreurs. Lorsque vous récupérez des éléments de votre file d’attente, enregistrez l’heure de prise en charge. Si un élément reste à l’état « en cours » au-delà d’un seuil raisonnable (par exemple, 30 minutes) sans signaler de réussite ni d’échec, remettez-le automatiquement dans le pool disponible pour qu’un autre worker le traite.
+
+### Limiter les importations empoisonnées {#mitigating-poisoned-uploads}
+
+Un élément de file d’attente « empoisonné » échoue systématiquement en raison de problèmes inhérents aux données ou à l’environnement. Si ces éléments sont continuellement remis en file d’attente, ils peuvent bloquer l’ensemble de votre système d’importation. Envisagez les stratégies suivantes pour gérer ces cas :
+
+- Après plusieurs échecs, réduisez la priorité de l’élément afin que les contenus plus récents puissent avancer
+- Suivez à la fois les erreurs explicites et le nombre de tentatives de traitement
+- Suivez les bonnes pratiques de connexion et d’autorisation pour distinguer les problèmes environnementaux passagers des problèmes intrinsèques aux fichiers
+- Mettez en place des limites de relance progressives (par exemple, relancer chaque opération 10 fois au sein de chacune des 3 tentatives de tâche, soit 30 tentatives au total)
+- Proposez une interface utilisateur permettant de réinitialiser manuellement les importations problématiques une fois les problèmes environnementaux résolus
+
+Les importations empoisonnées peuvent résulter :
+
+- De données de fichier corrompues provoquant des erreurs d’E/S
+- De défaillances catastrophiques de processus empêchant le signalement des erreurs
+- D’erreurs normalement relançables déclenchées par des conditions sous-jacentes permanentes
+
+### Relancer après un redémarrage du système {#retry-after-system-restart}
+
+Avant d’abandonner définitivement des importations problématiques, signalez-les pour une dernière tentative après le prochain redémarrage du système. Cela couvre les cas où les importations échouent en raison de problèmes temporaires liés à l’état du système (mémoire, pilotes ou allocation des ressources). Si une importation continue d’échouer après un redémarrage propre, vous pouvez la marquer avec davantage de certitude comme définitivement problématique.
+
+## Vider votre file d’attente {#clearing-your-queue}
+
+Pensez à retirer de votre file d’attente les fichiers qui ne sont plus disponibles. Lorsqu’un support est physiquement retiré ou que des fichiers sont supprimés, purgez les entrées correspondantes de votre file d’importation afin d’éviter des erreurs inutiles.
+
+*Point important : vous devez vider votre file d’importation lors de la connexion à un nouveau projet.* Les médias mis en file d’attente pour un projet ne doivent jamais apparaître dans un autre. Lorsqu’un utilisateur associe l’appareil à un autre projet, vérifiez si le projet a changé et, le cas échéant, videz entièrement la file d’attente existante.
+
+## Étapes suivantes {#next-steps}
+
+Nous vous encourageons à contacter notre équipe pour toute question et à poursuivre avec le [guide des importations avancées](/fr/camera-to-cloud/how-to-advanced-uploads). Nous serons ravis de vous accompagner dans la progression de votre intégration.

@@ -1,0 +1,82 @@
+---
+title: "Lavorare con i link di revisione"
+---
+
+## Panoramica {#overview}
+
+I link di revisione (Review Links) sono una funzionalità fondamentale di Frame.io che permette di raccogliere asset e inviarli per ricevere feedback tramite un unico URL, senza richiedere un accesso esplicito al team o al progetto. In sostanza, sono una rappresentazione di asset provenienti da un singolo progetto, quindi questa guida presuppone che:
+
+1. Tu abbia già degli asset a disposizione, oppure che tu sappia come [caricare asset tramite API](/it/platform/v2/uploading-assets).
+2. Tu conosca l'ID del progetto in cui desideri creare il link di revisione.
+3. Il tuo obiettivo sia ottenere un URL da distribuire al di fuori di Frame.io (ad es. tramite email, chat o altri canali).
+
+### Concetti fondamentali {#core-concepts}
+
+I link di revisione appartengono strettamente ai progetti, e un asset in un link di revisione è rappresentato da un tipo di risorsa speciale chiamato **Review Link Item**, che contiene sempre il `review_link_id` e l'`asset_id` che collega, oltre al payload completo dell'asset associato.
+
+Sebbene i Review Link Item non debbano essere tracciati o gestiti singolarmente, sono una struttura utile per comprendere il flusso di lavoro completo descritto in questa guida. Di conseguenza, la gerarchia di un link di revisione è la seguente:
+
+Progetto > Link di revisione > Review Link Item > Riferimento all'asset
+
+### Scope richiesti {#required-scopes}
+
+Prima di iniziare questa guida, assicurati di disporre di un token che includa almeno i seguenti scope:
+
+| Scope | Motivo |
+| --- | --- |
+| **Projects:** Read | Non strettamente obbligatorio, ma necessario per recuperare il `root_asset_id` di un progetto. |
+| **Assets:** Read | Non strettamente obbligatorio, ma necessario per raggiungere gli `asset_ids` tramite API. |
+| **Review Links:** Create, Read, Update | Creare il link di revisione, aggiungere asset e recuperare informazioni (soprattutto se vengono tracciate in un altro sistema). |
+
+## 1. Raccogli gli ID {#1-gather-your-ids}
+
+Per creare un link di revisione, dovrai raccogliere:
+
+1. L'ID di un progetto
+2. Gli ID di uno o più asset in quel progetto
+
+Se non hai a portata di mano l'ID del progetto, ma hai accesso a Frame.io e sai quale progetto vuoi utilizzare, puoi vedere l'ID nella barra degli indirizzi quando apri il progetto: `https://app.frame.io/projects/<project-id>`.
+
+Allo stesso modo, se non hai a portata di mano gli ID degli asset, apri gli asset desiderati e ricava gli ID dalla barra degli indirizzi del browser: `https://app.frame.io/player/<asset-id>`.
+
+## 2. Crea il link di revisione {#2-create-the-review-link}
+
+Per creare la base del tuo link, dovrai stabilire le opzioni desiderate per il link di revisione e inserirle in un payload JSON. Come minimo, dovrai scegliere un `name`.
+
+Ecco un payload di esempio: per comodità, mostra i valori predefiniti di ciascun campo, nel caso in cui tu scelga di generare il link solo con un `name`:
+
+```json
+{    
+    "name": "New Review Link",
+    "allow_approvals": true,
+    "current_version_only": false,
+    "enable_downloading": true,
+    "expires_at": null,
+    "has_password": false
+}
+```
+
+Ora esegui una richiesta `POST` autorizzata a `https://api.frame.io/v2/projects/:id/review_links`, utilizzando il tuo payload come corpo della richiesta.
+
+Congratulazioni! Hai appena creato un link di revisione. Nel corpo della risposta vedrai due attributi importanti:
+
+- **`id`**: è il riferimento al contenitore del link. Conservalo, perché ti servirà per aggiungere gli asset nel passaggio successivo.
+- **`short_url`**: è l'URL del link di revisione che alla fine distribuirai. Avrà un aspetto simile a `https://f.io/_aBcDeF`
+
+## 3. Aggiungi gli asset al link di revisione {#3-add-the-assets-to-the-review-link}
+
+Ora che hai un link di revisione, è il momento di aggiungervi degli asset. Inizia preparando un payload JSON con un array di stringhe contenente gli `id` dei tuoi asset:
+
+```json
+{
+    "asset_ids":[
+        "<asset-id-1>",
+        "<asset-id-2>",
+        "<asset-id-3>"
+    ]
+}
+```
+
+Ora esegui una richiesta `POST` autorizzata a `https://api.frame.io/v2/review_links/:id/assets`, utilizzando nel percorso l'`id` del link di revisione ottenuto nel passaggio 2 e gli `id` degli asset nel corpo della richiesta.
+
+Fatto! Ora sei pronto a distribuire il tuo `short_url`.

@@ -1,0 +1,4245 @@
+---
+title: "Referencia del SDK de Python"
+---
+
+### Instalación {#installation}
+
+```bash
+pip install frameio
+```
+
+---
+
+### Uso {#usage}
+
+Crea una instancia del cliente y úsalo de la siguiente manera:
+
+```python
+from frameio import (
+    Frameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateFieldDefinitionParamsData_Select(
+        field_configuration=SelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Fields definition name",
+    ),
+)
+```
+
+---
+
+### Cliente asíncrono {#async-client}
+
+El SDK también exporta un cliente asíncrono para que puedas realizar llamadas no bloqueantes a nuestra API. Ten en cuenta que, si construyes una clase de cliente httpx asíncrono para pasarla a este cliente, debes usar httpx.AsyncClient() en lugar de httpx.Client() (por ejemplo, para el parámetro httpx_client de este cliente).
+
+```python
+import asyncio
+
+from frameio import (
+    AsyncFrameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = AsyncFrameio(
+    token="YOUR_TOKEN",
+)
+
+
+async def main() -> None:
+    await client.metadata_fields.metadata_field_definitions_create(
+        account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+        data=CreateFieldDefinitionParamsData_Select(
+            field_configuration=SelectDefinitionParamsFieldConfiguration(
+                enable_add_new=False,
+                options=[
+                    SelectDefinitionParamsFieldConfigurationOptionsItem(
+                        display_name="Option 1",
+                    ),
+                    SelectDefinitionParamsFieldConfigurationOptionsItem(
+                        display_name="Option 2",
+                    ),
+                ],
+            ),
+            name="Fields definition name",
+        ),
+    )
+
+
+asyncio.run(main())
+```
+
+---
+
+### Manejo de excepciones {#exception-handling}
+
+Cuando la API devuelve un código de estado de error (respuesta 4xx o 5xx), se lanzará una subclase del siguiente error.
+
+```python
+from frameio.core.api_error import ApiError
+
+try:
+    client.metadata_fields.metadata_field_definitions_create(...)
+except ApiError as e:
+    print(e.status_code)
+    print(e.body)
+```
+
+---
+
+### Paginación {#pagination}
+
+Las solicitudes paginadas devolverán un SyncPager o un AsyncPager, que pueden usarse como generadores del objeto subyacente.
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.project_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+---
+
+### Avanzado {#advanced}
+
+#### Acceder a los datos de respuesta sin procesar {#access-raw-response-data}
+
+El SDK proporciona acceso a los datos de respuesta sin procesar, incluidos los encabezados, a través de la propiedad .with_raw_response. La propiedad .with_raw_response devuelve un cliente “sin procesar” que puede usarse para acceder a los atributos .headers y .data.
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+)
+response = (
+    client.metadata_fields.with_raw_response.metadata_field_definitions_create(
+        ...
+    )
+)
+print(response.headers)  # access the response headers
+print(response.data)  # access the underlying object
+pager = client.project_permissions.index(...)
+print(pager.response.headers)  # access the response headers for the first page
+for item in pager:
+    print(item)  # access the underlying object(s)
+for page in pager.iter_pages():
+    print(page.response.headers)  # access the response headers for each page
+    for item in page:
+        print(item)  # access the underlying object(s)
+```
+
+---
+
+#### Reintentos {#retries}
+
+El SDK incluye reintentos automáticos con retroceso exponencial. Una solicitud se reintentará siempre que se considere reintentable y el número de reintentos no haya superado el límite de reintentos configurado (valor predeterminado: 2).<br />
+Una solicitud se considera reintentable cuando se devuelve cualquiera de los siguientes códigos de estado HTTP:
+
+- 408 (Tiempo de espera agotado)
+- 429 (Demasiadas solicitudes)
+- 5XX (Errores internos del servidor)
+
+<br />
+
+Usa la opción de solicitud `max_retries` para configurar este comportamiento.
+
+```python
+client.metadata_fields.metadata_field_definitions_create(..., request_options={
+    "max_retries": 1
+})
+```
+
+---
+
+#### Tiempos de espera {#timeouts}
+
+El SDK usa de forma predeterminada un tiempo de espera de 60 segundos. Puedes configurarlo con la opción timeout a nivel de cliente o de solicitud.
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+    timeout=20.0,
+)
+
+
+# Override timeout for a specific method
+client.metadata_fields.metadata_field_definitions_create(..., request_options={
+    "timeout_in_seconds": 1
+})
+```
+
+---
+
+#### Cliente personalizado {#custom-client}
+
+Puedes reemplazar el cliente httpx para personalizarlo según tu caso de uso. Algunos casos de uso habituales incluyen la compatibilidad con proxies y transportes.
+
+```python
+import httpx
+from frameio import Frameio
+
+client = Frameio(
+    ...,
+    httpx_client=httpx.Client(
+        proxy="http://my.test.proxy.example.com",
+        transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+    ),
+)
+```
+
+---
+
+### Referencia {#reference}
+
+#### Permisos de la cuenta {#account-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.account_permissions.index(...) -> AsyncPager[AccountUserRole, AccountUserRolesResponse]">
+
+Lista los roles de usuario de una cuenta determinada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.account_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`include_deactivated`: typing.Optional\[bool\] — Permite incluir usuarios desactivados en la respuesta. El valor predeterminado es false.
+
+`sort`: typing.Optional\[AccountPermissionsIndexRequestSort\] — Ordena los usuarios de la cuenta según los parámetros de consulta
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Cuentas {#accounts}
+
+<AccordionGroup>
+
+<Accordion title="client.accounts.index(...) -> AsyncPager[Account, AccountsResponse]">
+
+Lista las cuentas del usuario actual.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.accounts.index(
+    sort="display_name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`sort`: typing.Optional\[AccountsIndexRequestSort\] — Ordena las cuentas según los parámetros de consulta
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.accounts.auditlog_index(...) -> AsyncPager[AuditLog, AuditLogsWithIncludesResponse]">
+
+Lista los registros de auditoría con opciones de filtrado mediante parámetros de consulta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.accounts.auditlog_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="user",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+    api_version="4.0",
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`api_version`: `typing.Literal["4.0"]` —
+
+`include`: `typing.Optional[typing.Literal["user"]]` —
+
+`filters`: `typing.Optional[Filters]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Autenticación {#auth}
+
+<AccordionGroup>
+
+<Accordion title="frameio.auth.ServerToServerAuth(*, client_id, client_secret, ...)" defaultOpen={true}>
+
+Autentícate mediante la concesión client_credentials de OAuth 2.0. Este flujo no involucra a un usuario y no devuelve un token de actualización. Cuando el token de acceso caduca, el SDK solicita automáticamente uno nuevo con las credenciales del cliente. Para uso asíncrono, usa `AsyncServerToServerAuth`.
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+
+auth = ServerToServerAuth(client_id="YOUR_CLIENT_ID", client_secret="YOUR_CLIENT_SECRET")
+client = Frameio(token=auth.get_token)
+```
+
+**Parámetros**
+
+`client_id`: `str` — ID de cliente OAuth de Adobe IMS.
+
+`client_secret`: `str` — Secreto de cliente OAuth de Adobe IMS.
+
+`scopes`: `str` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749). El valor predeterminado es `openid AdobeID frame.s2s.all`.
+
+`ims_base_url`: `str` — URL base de IMS para entornos de staging o alternativos. El valor predeterminado es producción.
+
+`http_client`: `typing.Optional[httpx.Client]` — httpx.Client opcional para proxy, TLS o agrupación de conexiones.
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — Callback opcional que se ejecuta después de cada obtención del token.
+
+`timeout`: `float` — Tiempo de espera de la solicitud HTTP en segundos. El valor predeterminado es 30.
+
+`max_retries`: `int` — Número máximo de reintentos ante errores transitorios. El valor predeterminado es 2.
+
+`refresh_buffer`: `int` — Segundos antes de la caducidad para activar la actualización proactiva. El valor predeterminado es 60.
+
+**Métodos**
+
+`get_token() -> str` — Devuelve un token de acceso válido y lo actualiza si es necesario. Pasa la referencia a este método (no una llamada) al SDK: `Frameio(token=auth.get_token)`.
+
+`authenticate() -> dict[str, Any]` — Obtiene explícitamente un nuevo token de acceso. Devuelve el dict de respuesta del token con `access_token`, `expires_in`, etc.
+
+`revoke() -> None` — Revoca ambos tokens en el servidor y borra el estado local.
+
+`export_tokens() -> dict[str, Any]` — Exporta el estado actual de los tokens para su persistencia.
+
+`import_tokens(data: dict[str, Any]) -> None` — Restaura el estado de los tokens a partir de un dict exportado previamente.
+
+</Accordion>
+
+<Accordion title="frameio.auth.WebAppAuth(*, client_id, client_secret, redirect_uri, ...)">
+
+Autentícate mediante la concesión authorization_code de OAuth 2.0. Úsala para aplicaciones del lado del servidor que puedan almacenar de forma segura un secreto de cliente. Para uso asíncrono, usa `AsyncWebAppAuth`.
+
+```python title="usage"
+
+import secrets
+from frameio import Frameio
+from frameio.auth import WebAppAuth
+
+auth = WebAppAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+    redirect_uri="https://myapp.com/callback",
+)
+url = auth.get_authorization_url(state=secrets.token_urlsafe(32))
+# redirect user to url ...
+auth.exchange_code(code="CODE_FROM_CALLBACK")
+client = Frameio(token=auth.get_token)
+```
+
+**Parámetros**
+
+`client_id`: `str` — ID de cliente OAuth de Adobe IMS.
+
+`client_secret`: `str` — Secreto de cliente OAuth de Adobe IMS.
+
+`redirect_uri`: `str` — URI de redirección registrada.
+
+`scopes`: `str` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749).
+
+`ims_base_url`: `str` — URL base de IMS para entornos de staging o alternativos. El valor predeterminado es producción.
+
+`http_client`: `typing.Optional[httpx.Client]` — httpx.Client opcional para proxy, TLS o agrupación de conexiones.
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — Callback opcional que se ejecuta después de cada actualización del token.
+
+`timeout`: `float` — Tiempo de espera de la solicitud HTTP en segundos. El valor predeterminado es 30.
+
+`max_retries`: `int` — Número máximo de reintentos ante errores transitorios. El valor predeterminado es 2.
+
+`refresh_buffer`: `int` — Segundos antes de la caducidad para activar la actualización proactiva. El valor predeterminado es 60.
+
+**Métodos**
+
+`get_token() -> str` — Devuelve un token de acceso válido y lo actualiza si es necesario. Pasa la referencia a este método al SDK: `Frameio(token=auth.get_token)`.
+
+`get_authorization_url(state: str) -> str` — Construye la URL de autorización de Adobe IMS. Pasa un valor opaco de CSRF/state que se devolverá tal cual.
+
+`exchange_code(code: str) -> dict[str, Any]` — Intercambia un código de autorización por tokens de acceso y de actualización.
+
+`refresh() -> dict[str, Any]` — Activa manualmente una actualización del token.
+
+`revoke() -> None` — Revoca ambos tokens en el servidor y borra el estado local.
+
+`export_tokens() -> dict[str, Any]` — Exporta el estado actual de los tokens para su persistencia.
+
+`import_tokens(data: dict[str, Any]) -> None` — Restaura el estado de los tokens a partir de un dict exportado previamente.
+
+</Accordion>
+
+<Accordion title="frameio.auth.SPAAuth(*, client_id, redirect_uri, ...)">
+
+Autentícate mediante authorization_code + PKCE (sin secreto de cliente). Úsalo para aplicaciones basadas en navegador o nativas que no puedan almacenar de forma segura un secreto de cliente. Para uso asíncrono, usa `AsyncSPAAuth`.
+
+```python title="usage"
+
+import secrets
+from frameio import Frameio
+from frameio.auth import SPAAuth
+
+auth = SPAAuth(client_id="YOUR_CLIENT_ID", redirect_uri="https://myapp.com/cb")
+result = auth.get_authorization_url(state=secrets.token_urlsafe(32))
+# redirect user to result.url, store result.code_verifier
+auth.exchange_code(code="CODE_FROM_CALLBACK", code_verifier=result.code_verifier)
+client = Frameio(token=auth.get_token)
+```
+
+**Parámetros**
+
+`client_id`: `str` — ID de cliente OAuth de Adobe IMS.
+
+`redirect_uri`: `str` — URI de redirección registrada.
+
+`scopes`: `str` — Ámbitos separados por espacios (OAuth 2.0 RFC 6749).
+
+`ims_base_url`: `str` — URL base de IMS para entornos de staging o alternativos. El valor predeterminado es producción.
+
+`http_client`: `typing.Optional[httpx.Client]` — httpx.Client opcional para proxy, TLS o agrupación de conexiones.
+
+`on_token_refreshed`: `typing.Optional[typing.Callable[[dict[str, Any]], None]]` — Callback opcional que se ejecuta después de cada actualización del token.
+
+`timeout`: `float` — Tiempo de espera de la solicitud HTTP en segundos. El valor predeterminado es 30.
+
+`max_retries`: `int` — Número máximo de reintentos ante errores transitorios. El valor predeterminado es 2.
+
+`refresh_buffer`: `int` — Segundos antes de la caducidad para activar la actualización proactiva. El valor predeterminado es 60.
+
+**Métodos**
+
+`get_token() -> str` — Devuelve un token de acceso válido y lo actualiza si es necesario. Pasa la referencia a este método al SDK: `Frameio(token=auth.get_token)`.
+
+`get_authorization_url(state: str) -> AuthorizationUrlResult` — Construye la URL de autorización de Adobe IMS con el desafío PKCE. Devuelve un `AuthorizationUrlResult` con los atributos `url` y `code_verifier`.
+
+`exchange_code(code: str, code_verifier: str) -> dict[str, Any]` — Intercambia un código de autorización + verificador PKCE por tokens.
+
+`refresh() -> dict[str, Any]` — Activa manualmente una actualización del token.
+
+`revoke() -> None` — Revoca ambos tokens en el servidor y borra el estado local.
+
+`export_tokens() -> dict[str, Any]` — Exporta el estado actual de los tokens para su persistencia.
+
+`import_tokens(data: dict[str, Any]) -> None` — Restaura el estado de los tokens a partir de un dict exportado previamente.
+
+</Accordion>
+
+<Accordion title="frameio.auth.AuthorizationUrlResult">
+
+Dataclass inmutable devuelta por `SPAAuth.get_authorization_url()` y `AsyncSPAAuth.get_authorization_url()`. Contiene la URL de autorización y el verificador de código PKCE.
+
+**Atributos**
+
+`url`: `str` — La URL de autorización completa a la que se debe redirigir al usuario.
+
+`code_verifier`: `str` — El verificador de código PKCE que se debe almacenar y pasar a `exchange_code()`.
+
+</Accordion>
+
+<Accordion title="frameio.auth.close_clients() / aclose_clients()">
+
+Cierra los clientes HTTP a nivel de módulo que usa el módulo de autenticación. Llama a `close_clients()` en código síncrono o a `await aclose_clients()` en código asíncrono durante el cierre de la aplicación para liberar las conexiones.
+
+```python title="usage"
+
+from frameio.auth import close_clients
+
+# During application shutdown
+close_clients()
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Excepciones de autenticación {#auth-exceptions}
+
+Todas las excepciones de autenticación heredan de `FrameioAuthError`.
+
+| Excepción | Descripción |
+| --- | --- |
+| `FrameioAuthError` | Excepción base para todos los errores de `frameio.auth`. |
+| `AuthenticationError` | Falló el intercambio o la actualización del token. Tiene los atributos `error_code` y `error_description`. |
+| `TokenExpiredError` | El token de actualización ha caducado; es necesario volver a autenticarse. |
+| `ConfigurationError` | Falta una configuración obligatoria o no es válida. |
+| `NetworkError` | Falló la solicitud de red (tiempo de espera agotado, error de conexión, etc.). |
+| `RateLimitError` | La API devolvió 429 y se agotaron los reintentos. Tiene el atributo `retry_after`. |
+| `PKCEError` | Falló la verificación PKCE. |
+
+#### Colecciones {#collections}
+
+<AccordionGroup>
+
+<Accordion title="client.collections.index(...) -> AsyncHttpResponse[CollectionsResponse]">
+
+Lista las colecciones de un proyecto.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.collections.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator,project",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`include`: `typing.Optional[CollectionInclude]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.collections.show(...) -> AsyncHttpResponse[CollectionResponse]">
+
+Muestra los detalles de la colección.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.collections.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    collection_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator,project",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`collection_id`: `Uuid` —
+
+`include`: `typing.Optional[CollectionInclude]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Comentarios {#comments}
+
+<AccordionGroup>
+
+<Accordion title="client.comments.show(...) -> AsyncHttpResponse[CommentWithIncludesResponse]">
+
+Muestra un único comentario de un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    include="owner",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`include`: typing.Optional\[CommentsShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.comments.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina un comentario de un recurso.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.comments.update(...) -> AsyncHttpResponse[CommentResponse]">
+
+Actualiza un comentario en el recurso indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.comments import UpdateCommentParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    data=UpdateCommentParamsData(
+        annotation='[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed=False,
+        page=4,
+        text="This is great!",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`comment_id`: Uuid —
+
+`data`: UpdateCommentParamsData
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.comments.index(...) -> AsyncPager[CommentWithIncludes, CommentsWithIncludesResponse]">
+
+Lista los comentarios de un recurso determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.comments.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    include="owner",
+    sort="owner_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`file_id`: Uuid —
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`include`: typing.Optional\[CommentInclude\] —
+
+`sort`: typing.Optional\[CommentsIndexRequestSort\] — Ordena los comentarios según los parámetros de consulta
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.comments.create(...) -> AsyncHttpResponse[CommentResponse]">
+
+Crea un comentario en un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.comments import CreateCommentParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    timestamp_as_timecode=True,
+    data=CreateCommentParamsData(
+        annotation='[{"tool":"rect","color":"#F22237","size":8,"x":0.277726001863933,"y":0.12909555568499534,"w":0.3153168321877913,"h":0.5308131407269339,"ix":0.277726001863933,"iy":0.12909555568499534,"radius":8}]',
+        completed=False,
+        page=4,
+        text="This is great!",
+        timestamp="00:00:02:12",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`file_id`: Uuid —
+
+`data`: CreateCommentParamsData
+
+`timestamp_as_timecode`: typing.Optional\[bool\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.comments.create_attachment(...) -> AsyncHttpResponse[CommentAttachmentResponse]">
+
+Crea un archivo adjunto para un comentario existente.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import AttachmentInput, Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.create_attachment(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AttachmentInput(
+        file_size=1024000,
+        media_type="image/png",
+        name="screenshot.png",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`comment_id`: `Uuid` —
+
+`data`: `AttachmentInput`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.comments.delete_attachment(...) -> AsyncHttpResponse[None]">
+
+Elimina un archivo adjunto de un comentario.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.comments.delete_attachment(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    comment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    attachment_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`comment_id`: `Uuid` —
+
+`attachment_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Acciones personalizadas {#custom-actions}
+
+<AccordionGroup>
+
+<Accordion title="client.custom_actions.actions_index(...) -> AsyncHttpResponse[ActionsWithIncludesResponse]">
+
+Lista las acciones de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_show(...) -> AsyncHttpResponse[ActionWithIncludesResponse]">
+
+Muestra los detalles de la acción personalizada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_create(...) -> AsyncHttpResponse[ActionCreateResponse]">
+
+Crea una acción personalizada en un espacio de trabajo.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.custom_actions import ActionCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ActionCreateParamsData(
+        description="customizing our workflow",
+        event="my.event",
+        name="First Custom Action",
+        timeout=7,
+        url="https://example.com/custom-action",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`data`: `ActionCreateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_update(...) -> AsyncHttpResponse[ActionResponse]">
+
+Actualiza los detalles de la acción personalizada.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.custom_actions import ActionUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ActionUpdateParamsData(
+        active=True,
+        description="customizing our workflow",
+        event="my.event",
+        multi_asset=True,
+        name="First Custom Action",
+        timeout=7,
+        url="https://example.com/custom-action",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`data`: `ActionUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.custom_actions.actions_delete(...) -> AsyncHttpResponse[None]">
+
+Elimina una acción personalizada.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.custom_actions.actions_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    action_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`action_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Archivos {#files}
+
+<AccordionGroup>
+
+<Accordion title="client.files.list(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+Lista los archivos de una carpeta determinada.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`include`: `typing.Optional[FilesListRequestInclude]` —
+
+`sort`: `typing.Optional[FilesListRequestSort]` — Ordena los archivos según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[AssetRequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.create(...) -> AsyncHttpResponse[FileWithUploadUrlsResponse]">
+
+Crea un archivo nuevo en la carpeta principal. `Create file (local upload)` y `Create file (remote upload)` han reemplazado este endpoint.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateParamsData(
+        file_size=1137444,
+        media_type="image/png",
+        name="asset.png",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.show(...) -> AsyncHttpResponse[FileWithIncludesResponse]">
+
+Muestra los detalles del archivo.
+Usa el parámetro de consulta include para incluir de forma selectiva propiedades adicionales en la respuesta.
+
+<Note>
+
+Si incluyes `media_links.original` y el usuario no tiene permiso para descargar el archivo, este endpoint responderá con un error `403 Forbidden`. Si el contenido no es accesible porque se requiere una marca de agua para este usuario y los media_links solicitados no la admiten, la solicitud se completará correctamente, pero los enlaces multimedia no admitidos tendrán el valor null. Del mismo modo, si un enlace de transcodificación solicitado no existe para un archivo concreto (por ejemplo, al incluir `media_links.video_h264_180` en un archivo de imagen estática) o el proceso de transcodificación no ha finalizado (es decir, el estado del archivo es “uploaded” en lugar de “transcoded”), el enlace también tendrá el valor null en la carga útil de la respuesta. En resumen, el cliente debe gestionar correctamente los enlaces multimedia con valor null.
+
+</Note>
+
+Límites de frecuencia: 10 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`include`: `typing.Optional[FilesShowRequestInclude]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina un archivo por ID.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.update(...) -> AsyncHttpResponse[FileResponse]">
+
+Actualiza los detalles del archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileUpdateParamsData(
+        name="asset.png",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`data`: `FileUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.copy(...) -> AsyncHttpResponse[FileCopyResponse]">
+
+Copia un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    copy_comments="none",
+    data=FileCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`copy_metadata`: `typing.Optional[bool]` — Indica si se deben copiar los valores de metadatos junto con el archivo
+
+`copy_comments`: `typing.Optional[FilesCopyRequestCopyComments]` — Qué comentarios se deben copiar junto con el archivo
+
+`data`: `typing.Optional[FileCopyParamsData]`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.create_remote_upload(...) -> AsyncHttpResponse[FileRemoteUploadResponse]">
+
+Crea un archivo nuevo en la carpeta principal mediante carga remota.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateRemoteUploadParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create_remote_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateRemoteUploadParamsData(
+        name="asset.png",
+        source_url="https://upload.wikimedia.org/wikipedia/commons/e/e1/White_Pixel_1x1.png",
+    ),
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateRemoteUploadParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.move(...) -> AsyncHttpResponse[FileResponse]">
+
+Mueve un archivo a una carpeta o a una version_stack.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`data`: `FileMoveParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.create_local_upload(...) -> AsyncHttpResponse[FileWithUploadUrlsResponse]">
+
+Crea un archivo nuevo en la carpeta principal mediante carga local.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.create_local_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateLocalUploadParamsData(
+        file_size=1137444,
+        name="asset.png",
+    ),
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileCreateLocalUploadParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.show_file_upload_status(...) -> AsyncHttpResponse[FileUploadStatusResponse]">
+
+Muestra los detalles del estado de carga del archivo.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.show_file_upload_status(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.files.import_file(...) -> AsyncHttpResponse[FileResponse]">
+
+Importa un archivo desde una ubicación de almacenamiento configurada en la cuenta.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileImportParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.files.import_file(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileImportParamsData(
+        key="uploads/08091b0f-a541-42f5-a059-5e8c4afecc12/original.png",
+        name="asset.png",
+        storage_location="123e4567-e89b-12d3-a456-426614174000",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`data`: `FileImportParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Permisos de carpetas {#folder-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.folder_permissions.folder_user_roles_index(...) -> AsyncHttpResponse[UserRolesResponse]">
+
+Lista los roles de usuario de una carpeta determinada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.folder_user_roles_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`include_deactivated`: `typing.Optional[bool]` — Permite incluir usuarios desactivados en la respuesta. El valor predeterminado es false.
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folder_permissions.folder_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+Actualiza los roles de usuario de la carpeta indicada si el usuario ya se ha añadido a la carpeta. Si el usuario no se ha añadido a la carpeta, se añadirá con el rol indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.folder_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`data`: `UpdateUserRolesParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folder_permissions.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina a un usuario de una carpeta determinada.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folder_permissions.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`folder_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Carpetas {#folders}
+
+<AccordionGroup>
+
+<Accordion title="client.folders.show(...) -> AsyncHttpResponse[FolderWithIncludesResponse]">
+
+Muestra los detalles de la carpeta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina una carpeta por id.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.update(...) -> AsyncHttpResponse[FolderResponse]">
+
+Actualiza los detalles de la carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderUpdateParamsData(
+        name="Folder name",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderUpdateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.index(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+Lista los elementos secundarios de la carpeta indicada.
+Usa el parámetro de consulta include para incluir de forma selectiva propiedades adicionales en la respuesta.
+
+<Note>
+
+si incluyes `media_links.original` y el usuario no tiene permiso para descargar archivos en el proyecto correspondiente, este endpoint responderá con un error 403 Forbidden. Si el contenido no es accesible porque se requiere una marca de agua para este usuario y los media_links solicitados no la admiten, la solicitud se completará correctamente, pero los enlaces multimedia no admitidos tendrán el valor null. Del mismo modo, si un enlace de transcodificación solicitado no existe para un archivo concreto (por ejemplo, al incluir `media_links.video_h264_180` en un archivo de imagen estática) o el proceso de transcodificación no ha terminado (es decir, el estado del archivo es “uploaded” en lugar de “transcoded”), el enlace multimedia también tendrá el valor null en la carga útil de la respuesta. En resumen, el cliente debe gestionar correctamente los enlaces multimedia con valor null.
+
+</Note>
+
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    type="file,folder,version_stack",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersIndexRequestInclude\] —
+
+`type`: typing.Optional\[ChildrenType\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.copy(...) -> AsyncHttpResponse[FolderCopyResponse]">
+
+Copia una carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    data=FolderCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`copy_metadata`: typing.Optional\[bool\] — Indica si se deben copiar los valores de metadatos junto con la carpeta
+
+`data`: typing.Optional\[FolderCopyParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.list(...) -> AsyncHttpResponse[FoldersWithIncludesResponse]">
+
+Lista las carpetas de una carpeta determinada.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[FoldersListRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.create(...) -> AsyncHttpResponse[FolderResponse]">
+
+Crea una carpeta nueva dentro del parámetro de ruta folder_id indicado.<br />
+Límites de frecuencia: 3 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderCreateParamsData(
+        name="Folder name",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.folders.move(...) -> AsyncHttpResponse[FolderResponse]">
+
+Mueve una carpeta a otra carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.folders import FolderMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.folders.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FolderMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: FolderMoveParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Grupos {#groups}
+
+<AccordionGroup>
+
+<Accordion title="client.groups.index(...) -> AsyncHttpResponse[GroupsWithIncludesResponse]">
+
+Lista los grupos de la cuenta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="creator_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`sort`: `typing.Optional[GroupsIndexRequestSort]` — Ordena los grupos según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.groups.show(...) -> AsyncHttpResponse[GroupWithIncludesResponse]">
+
+Muestra los detalles del grupo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    group_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`group_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["creator"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.groups.create(...) -> AsyncHttpResponse[GroupResponse]">
+
+Crea un grupo para la cuenta actual.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.groups import CreateGroupParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateGroupParamsData(
+        emoji="smile",
+        name="group-1",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`data`: `CreateGroupParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.groups.update(...) -> AsyncHttpResponse[GroupResponse]">
+
+Actualiza los detalles del grupo.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.groups import UpdateGroupParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.groups.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    group_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateGroupParamsData(
+        emoji="smile",
+        name="group-1",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`group_id`: `Uuid` —
+
+`data`: `UpdateGroupParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Metadatos {#metadata}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata.bulk_update(...) -> AsyncHttpResponse[None]" defaultOpen={true}>
+
+Actualiza valores de metadatos en varios archivos.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.metadata import (
+    BulkUpdateMetadataParamsData,
+    BulkUpdateMetadataParamsDataValuesItem,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata.bulk_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=BulkUpdateMetadataParamsData(
+        file_ids=[
+            "09b31c2a-04de-464a-a593-643a36ef0d98",
+            "b967fc36-4e18-4b48-a3ab-c790100e2baa",
+        ],
+        values=[
+            BulkUpdateMetadataParamsDataValuesItem(
+                field_definition_id="ff41ce50-269b-4624-8306-aac10e28ab94",
+                value=[
+                    {
+                        "id": "e60f47b4-cf8e-4273-96d5-3258a830a0aa",
+                        "type": "user",
+                    },
+                    {
+                        "id": "24eeaf7e-ce27-4555-bc77-cce39900626d",
+                        "type": "account_user_group",
+                    },
+                ],
+            )
+        ],
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`data`: `BulkUpdateMetadataParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.metadata.show(...) -> AsyncHttpResponse[MetadataResponse]">
+
+Muestra los metadatos de un archivo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    file_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    show_null=True,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`file_id`: `Uuid` —
+
+`show_null`: `typing.Optional[bool]` —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Campos de metadatos {#metadata-fields}
+
+<AccordionGroup>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_delete(...) -> AsyncHttpResponse[None]">
+
+Elimina definiciones de campos personalizados a nivel de cuenta.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    field_definition_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`field_definition_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_update(...) -> AsyncHttpResponse[FieldDefinitionResponse]">
+
+Actualiza las definiciones de campos personalizados a nivel de cuenta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import (
+    Frameio,
+    UpdateSelectDefinitionParamsFieldConfiguration,
+    UpdateSelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import UpdateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    field_definition_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateFieldDefinitionParamsData_Select(
+        field_configuration=UpdateSelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                UpdateSelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                UpdateSelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Updated-Field-Name",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`field_definition_id`: Uuid —
+
+`data`: typing.Optional\[UpdateFieldDefinitionParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_index(...) -> AsyncHttpResponse[FieldDefinitionsWithIncludesResponse]">
+
+Lista las definiciones de campos a nivel de cuenta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`sort`: typing.Optional\[MetadataFieldDefinitionsIndexRequestSort\] — Ordena las definiciones de campos según los parámetros de consulta
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.metadata_fields.metadata_field_definitions_create(...) -> AsyncHttpResponse[FieldDefinitionResponse]">
+
+Crea definiciones de campos a nivel de cuenta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import (
+    Frameio,
+    SelectDefinitionParamsFieldConfiguration,
+    SelectDefinitionParamsFieldConfigurationOptionsItem,
+)
+from frameio.metadata_fields import CreateFieldDefinitionParamsData_Select
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.metadata_fields.metadata_field_definitions_create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateFieldDefinitionParamsData_Select(
+        field_configuration=SelectDefinitionParamsFieldConfiguration(
+            enable_add_new=False,
+            options=[
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 1",
+                ),
+                SelectDefinitionParamsFieldConfigurationOptionsItem(
+                    display_name="Option 2",
+                ),
+            ],
+        ),
+        name="Fields definition name",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`data`: typing.Optional\[CreateFieldDefinitionParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Permisos de proyectos {#project-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.project_permissions.index(...) -> AsyncPager[UserRole, UserRolesResponse]">
+
+Lista los roles de usuario de un proyecto determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.project_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`include_deactivated`: typing.Optional\[bool\] — Permite incluir usuarios desactivados en la respuesta. El valor predeterminado es false.
+
+`sort`: typing.Optional\[ProjectPermissionsIndexRequestSort\] — Ordena los usuarios según los parámetros de consulta
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+NOTA: este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.project_permissions.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina a un usuario de un proyecto determinado.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.project_permissions.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`user_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.project_permissions.project_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+Actualiza los roles de usuario del proyecto indicado si el usuario ya se ha añadido al proyecto. Si el usuario no se ha añadido al proyecto, se añadirá con el rol indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.project_permissions.project_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`project_id`: Uuid —
+
+`user_id`: Uuid —
+
+`data`: UpdateUserRolesParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Proyectos {#projects}
+
+<AccordionGroup>
+
+<Accordion title="client.projects.show(...) -> AsyncHttpResponse[ProjectWithIncludesResponse]">
+
+Muestra los detalles del proyecto.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.projects.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina un proyecto.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.projects.update(...) -> AsyncHttpResponse[ProjectResponse]">
+
+Actualiza los detalles del proyecto.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.projects import ProjectUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ProjectUpdateParamsData(
+        name="Project Name",
+        restricted=True,
+        status="active",
+    ),
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid` —
+
+`data`: `ProjectUpdateParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.projects.index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+Lista los proyectos de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[ProjectsIndexRequestSort]` — Ordena los proyectos según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+` `include_total_count`: `typing.Optional\[IncludeTotalCount\]\` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.projects.create(...) -> AsyncHttpResponse[ProjectResponse]">
+
+Crea un proyecto en un espacio de trabajo determinado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.projects import ProjectParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.projects.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=ProjectParamsData(
+        name="Project Name",
+        restricted=True,
+    ),
+)
+```
+
+**Parámetros**
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`data`: `ProjectParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.projects.account_projects_index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+Lista todos los proyectos de la cuenta especificada a los que tiene acceso el usuario autenticado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.account_projects_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[AccountProjectsIndexRequestSort]` — Ordena los proyectos según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.projects.invited_projects_index(...) -> AsyncPager[ProjectWithIncludes, ProjectsWithIncludesResponse]">
+
+Lista los proyectos de la cuenta especificada a los que se ha invitado al usuario actual, pero a cuyo espacio de trabajo no tiene acceso. Son proyectos en los que el usuario tiene acceso como colaborador específico del proyecto, sin permisos más amplios de equipo o espacio de trabajo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.projects.invited_projects_index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="owner",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`include`: `typing.Optional[typing.Literal["owner"]]` —
+
+`sort`: `typing.Optional[InvitedProjectsIndexRequestSort]` — Ordena los proyectos según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Búsqueda {#search}
+
+<AccordionGroup>
+
+<Accordion title="client.search.search(...) -> AsyncHttpResponse[SearchResponse]">
+
+Busca en recursos, carpetas y proyectos dentro de una cuenta.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.search import SearchParamsFilters
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.search.search(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    engine="nlp",
+    query="red car driving on highway",
+    filters=SearchParamsFilters(
+        files_and_version_stacks=True,
+        folders=False,
+        projects=False,
+    ),
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`engine`: `SearchParamsEngine` — Motor de búsqueda que se va a usar. Motores disponibles: lexical, nlp.
+
+`query`: `str` — El texto de la consulta de búsqueda
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`filters`: `typing.Optional[SearchParamsFilters]` — Filtros para controlar qué tipos de resultados se devuelven
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Elementos compartidos {#shares}
+
+<AccordionGroup>
+
+<Accordion title="client.shares.show(...) -> AsyncHttpResponse[ShareResponse]">
+
+Muestra un único elemento compartido.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina un elemento compartido.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.update(...) -> AsyncHttpResponse[ShareResponse]">
+
+Actualiza un elemento compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+import datetime
+
+from frameio import Frameio
+from frameio.shares import UpdateShareParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateShareParamsData(
+        access="public",
+        description="A descriptive summary of the share",
+        downloading_enabled=True,
+        expiration=datetime.datetime.fromisoformat(
+            "2026-01-22 17:04:53+00:00",
+        ),
+        name="Share Name",
+        passphrase="as!dfj39sd(*",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `UpdateShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.list_reviewers(...) -> AsyncPager[User, ShareReviewersResponse]">
+
+Lista los revisores de un elemento compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.shares.list_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`sort`: `typing.Optional[SharesListReviewersRequestSort]` — Ordena los revisores del elemento compartido según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.add_reviewers(...) -> AsyncHttpResponse[None]">
+
+Añade revisores a un elemento compartido seguro mediante tres tipos de identificador: `adobe_user_id`, `email` y `user_id`.
+Una solicitud solo puede incluir un parámetro de tipo de identificador.
+`email` es el único identificador que permite añadir a un elemento compartido revisores que no son miembros de la cuenta de Frame a la que pertenece el elemento compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import (
+    AddReviewersToShareParamsData,
+    AddReviewersToShareParamsDataReviewers,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.add_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AddReviewersToShareParamsData(
+        message="Please join my share!",
+        reviewers=AddReviewersToShareParamsDataReviewers(
+            emails=["email1@domain.com", "email2@domain.com"],
+        ),
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `AddReviewersToShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.remove_reviewers(...) -> AsyncHttpResponse[None]">
+
+Elimina revisores de un elemento compartido seguro mediante tres tipos de identificador: `adobe_user_id`, `email` y `user_id`.
+Una solicitud solo puede incluir un parámetro de tipo de identificador.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import (
+    RemoveReviewerParamsData,
+    RemoveReviewerParamsDataReviewers,
+)
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.remove_reviewers(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=RemoveReviewerParamsData(
+        reviewers=RemoveReviewerParamsDataReviewers(
+            adobe_user_ids=[
+                "2A3C1A3D66C621B20A494021@176719f5667c82b4499999.e"
+            ],
+        ),
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `RemoveReviewerParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.remove_asset(...) -> AsyncHttpResponse[RemoveAssetResponse]">
+
+Elimina de un elemento compartido un recurso que se encuentra actualmente en él.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.remove_asset(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    asset_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`asset_id`: `Uuid`—
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.add_asset(...) -> AsyncHttpResponse[AddAssetResponse]">
+
+Añade un recurso nuevo a un elemento compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.shares import AddAssetParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.add_asset(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    share_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=AddAssetParamsData(
+        asset_id="0cc1cb59-1d7c-4176-8532-afe099897318",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`share_id`: `Uuid`—
+
+`data`: `AddAssetParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.index(...) -> AsyncPager[Share, SharesResponse]">
+
+Lista los elementos compartidos de un proyecto.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.shares.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid`—
+
+`sort`: `typing.Optional[SharesIndexRequestSort]` — Ordena los elementos compartidos según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.shares.create(...) -> AsyncHttpResponse[ShareResponse]">
+
+Crea un elemento compartido.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+import datetime
+
+from frameio import Frameio, AssetShareParamsSortBy
+from frameio.shares import CreateShareParamsData_Asset
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.shares.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    project_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=CreateShareParamsData_Asset(
+        card_info_enabled=True,
+        enabled=True,
+        access="public",
+        theme="dark",
+        editable_fields_enabled=False,
+        asset_ids=[
+            "12eb1446-5736-4f93-85fc-3b636f156211",
+            "f23a3b3e-7b1f-4655-b91a-acf0566e5bb9",
+        ],
+        card_aspect_ratio="square",
+        commenting_enabled=True,
+        passphrase="as!dfj39sd(*",
+        sort_by=AssetShareParamsSortBy(
+            direction="asc",
+            field_definition_id="c11f3f0a-9744-474d-b6e5-63894c1b5397",
+        ),
+        forensic_watermark_enabled=False,
+        name="Share Name",
+        card_size="medium",
+        drm_enabled=False,
+        captions_enabled=True,
+        transcripts_enabled=True,
+        watermark_enabled=True,
+        featured_field_definition_id="f8db45bb-bf52-446e-8216-7d4efb5ea396",
+        open_in_viewer_enabled=True,
+        downloading_enabled=True,
+        accent_color="#FF6600",
+        layout="grid",
+        show_all_asset_versions=True,
+        thumbnail_scale="fill",
+        title_line_count=1,
+        expiration=datetime.datetime.fromisoformat(
+            "2026-01-22 17:04:53+00:00",
+        ),
+        visible_field_definition_ids=[
+            "c36ec769-8144-48b6-bc8f-da799a849197"
+        ],
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`project_id`: `Uuid`—
+
+`data`: `CreateShareParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Carga {#upload}
+
+<AccordionGroup>
+
+<Accordion title="frameio.upload.FrameioUploader(asset, file, ...)" defaultOpen={true}>
+
+Carga un archivo local en Frame.io mediante las URL prefirmadas que devuelve `client.files.create_local_upload(...)`. `FrameioUploader` es un contenedor ligero que lee `upload_urls`, `file_size` y `media_type` de la respuesta `FileWithUploadUrls` y realiza una carga a S3 por fragmentos y multihilo.
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.files.create_local_upload(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=FileCreateLocalUploadParamsData(
+        file_size=1137444,
+        name="asset.png",
+    ),
+)
+with open("asset.png", "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+**Parámetros**
+
+`asset`: `FileWithUploadUrls` — Una instancia de `FileWithUploadUrls` devuelta por `client.files.create_local_upload(...)`.
+
+`file`: `typing.BinaryIO` — Un objeto de tipo archivo abierto en modo de lectura binaria (`"rb"`).
+
+`max_workers`: `int` — Concurrencia del grupo de hilos que se transmite al cargador subyacente. El valor predeterminado es 5.
+
+`headers`: `typing.Optional[typing.Dict[str, str]]` — Encabezados adicionales que se combinan en cada solicitud PUT a S3. El valor predeterminado es `{"x-amz-acl": "private"}`, tal como exige Frame.io.
+
+`max_retries`: `int` — Número de reintentos por fragmento. El valor predeterminado es 3.
+
+`on_progress`: `typing.Optional[typing.Callable[[int, int], None]]` — Callback opcional que se invoca después de cada fragmento con `(bytes_uploaded_so_far, total_bytes)`.
+
+**Métodos**
+
+`upload() -> None` — Carga el archivo. Bloquea la ejecución hasta completarse o lanza una excepción si se produce un error.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Usuarios {#users}
+
+<AccordionGroup>
+
+<Accordion title="client.users.show() -> AsyncHttpResponse[ProfileResponse]">
+
+Consulta los detalles del usuario asociado al token de portador.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.users.show()
+```
+
+**Parámetros**
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Pilas de versiones {#version-stacks}
+
+<AccordionGroup>
+
+<Accordion title="client.version_stacks.index(...) -> AsyncHttpResponse[AssetsWithIncludesResponse]">
+
+Lista los elementos secundarios (archivos) de una pila de versiones determinada.
+Usa el parámetro de consulta include para incluir de forma selectiva propiedades adicionales en la respuesta.
+
+<Note>
+
+Si incluyes `media_links.original` y el usuario no tiene permiso para descargar archivos en el proyecto correspondiente, este endpoint responderá con un error `403 Forbidden`. Si el contenido no es accesible porque se requiere una marca de agua para este usuario y los media_links solicitados no la admiten, la solicitud se completará correctamente, pero los enlaces multimedia no admitidos tendrán el valor null. Del mismo modo, si un enlace de transcodificación solicitado no existe para un archivo concreto (por ejemplo, al incluir `media_links.video_h264_180` en un archivo de imagen estática) o el proceso de transcodificación no ha terminado (es decir, el estado del archivo es “uploaded” en lugar de “transcoded”), el enlace multimedia también tendrá el valor null en la carga útil de la respuesta. En resumen, el cliente debe gestionar correctamente los enlaces multimedia con valor null.
+
+</Note>
+
+.
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksIndexRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.version_stacks.show(...) -> AsyncHttpResponse[VersionStackWithIncludesResponse]">
+
+Muestra los detalles de la pila de versiones.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksShowRequestInclude\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.version_stacks.copy(...) -> AsyncHttpResponse[VersionStackCopyResponse]">
+
+Copia una pila de versiones.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+Actualmente, no se admite copiar pilas de versiones entre proyectos respaldados por el almacenamiento de Adobe. El método admitido actualmente para copiar pilas de versiones en estos proyectos es copiar los archivos individuales de una pila de versiones y luego volver a apilarlos.
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackCopyParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.copy(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    copy_metadata=True,
+    data=VersionStackCopyParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`copy_metadata`: typing.Optional\[bool\] — Indica si se deben copiar los valores de metadatos junto con la pila de versiones
+
+`data`: typing.Optional\[VersionStackCopyParamsData\]
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.version_stacks.list(...) -> AsyncHttpResponse[VersionStacksWithIncludesResponse]">
+
+Lista las pilas de versiones de una carpeta determinada.<br />
+Límites de frecuencia: 5 llamadas por 1 segundo(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.list(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="media_links.original",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`include`: typing.Optional\[VersionStacksListRequestInclude\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[AssetRequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.version_stacks.create(...) -> AsyncHttpResponse[VersionStackWithIncludesResponse]">
+
+Crea una nueva pila de versiones en la carpeta principal.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    folder_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=VersionStackCreateParamsData(
+        file_ids=[
+            "dd2a3cdd-fc90-41bd-a7b8-8a0447aec6d4",
+            "79fed48a-8372-496e-8dcb-5e959b9b9fcf",
+        ],
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`folder_id`: Uuid —
+
+`data`: VersionStackCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.version_stacks.move(...) -> AsyncHttpResponse[VersionStackResponse]">
+
+Mueve una pila de versiones a una carpeta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.version_stacks import VersionStackMoveParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.version_stacks.move(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    version_stack_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=VersionStackMoveParamsData(
+        parent_id="2e426fe0-f965-4594-8b2b-b4dff1dc00ec",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`version_stack_id`: Uuid —
+
+`data`: VersionStackMoveParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Webhooks {#webhooks}
+
+<AccordionGroup>
+
+<Accordion title="client.webhooks.index(...) -> AsyncPager[WebhookWithIncludes, WebhooksWithIncludesResponse]">
+
+Lista los webhooks del espacio de trabajo indicado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.webhooks.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.webhooks.create(...) -> AsyncHttpResponse[WebhookCreateResponse]">
+
+Crea un único webhook con secreto.
+
+Eventos válidos:
+
+`file.created`,<br />
+`file.deleted`,<br />
+`file.ready`,
+`file.updated`,
+`file.upload.completed`,
+`file.versioned`,
+`file.copied`,
+`folder.created`,
+`folder.deleted`,
+`folder.updated`,
+`folder.copied`,
+`comment.completed`,
+`comment.created`,
+`comment.deleted`,
+`comment.uncompleted`,
+`comment.updated`,
+`customfield.created`,
+`customfield.updated`,
+`customfield.deleted`,
+`metadata.value.updated`,
+`project.created`,
+`project.deleted`,
+`project.updated`,
+`collection.created`,
+`collection.updated`,
+`collection.deleted`,
+`share.created`,
+`share.updated`,
+`share.deleted`,
+`share.viewed`.
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.webhooks import WebhookCreateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WebhookCreateParamsData(
+        events=[
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name="New Webhook",
+        url="https://url.example.com",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`data`: WebhookCreateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.webhooks.show(...) -> AsyncHttpResponse[WebhookWithIncludesResponse]">
+
+Muestra los detalles del webhook.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.webhooks.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina un webhook.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.webhooks.update(...) -> AsyncHttpResponse[WebhookResponse]">
+
+Actualiza los detalles del webhook.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+from frameio.webhooks import WebhookUpdateParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.webhooks.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    webhook_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WebhookUpdateParamsData(
+        active=True,
+        events=[
+            "file.created",
+            "file.deleted",
+            "file.ready",
+            "file.updated",
+            "file.upload.completed",
+            "file.versioned",
+            "file.copied",
+            "folder.created",
+            "folder.deleted",
+            "folder.updated",
+            "folder.copied",
+            "comment.completed",
+            "comment.created",
+            "comment.deleted",
+            "comment.uncompleted",
+            "comment.updated",
+            "customfield.created",
+            "customfield.updated",
+            "customfield.deleted",
+            "metadata.value.updated",
+            "project.created",
+            "project.deleted",
+            "project.updated",
+            "collection.created",
+            "collection.updated",
+            "collection.deleted",
+            "share.created",
+            "share.updated",
+            "share.deleted",
+            "share.viewed",
+        ],
+        name="Updated Webhook",
+        url="https://url.example.com",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`webhook_id`: Uuid —
+
+`data`: WebhookUpdateParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Permisos de espacios de trabajo {#workspace-permissions}
+
+<AccordionGroup>
+
+<Accordion title="client.workspace_permissions.index(...) -> AsyncPager[UserRole, UserRolesResponse]">
+
+Lista los roles de usuario de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.workspace_permissions.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include_deactivated=True,
+    sort="role_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`include_deactivated`: `typing.Optional[bool]` — Permite incluir usuarios desactivados en la respuesta. El valor predeterminado es false.
+
+`sort`: `typing.Optional[WorkspacePermissionsIndexRequestSort]` — Ordena los usuarios según los parámetros de consulta
+
+`after`: `typing.Optional[RequestAfterOpaqueCursor]`
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: `typing.Optional[RequestPageSize]` —
+
+`include_total_count`: `typing.Optional[IncludeTotalCount]` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.workspace_permissions.workspace_user_roles_delete(...) -> AsyncHttpResponse[None]">
+
+Elimina a un usuario de un espacio de trabajo determinado.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspace_permissions.workspace_user_roles_delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid` —
+
+`user_id`: `Uuid` —
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.workspace_permissions.workspace_user_roles_update(...) -> AsyncHttpResponse[UpdateUserRolesResponse]">
+
+Actualiza los roles de usuario del espacio de trabajo indicado si el usuario ya se ha añadido al espacio de trabajo. Si el usuario no se ha añadido al espacio de trabajo, se añadirá con el rol indicado.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio, UpdateUserRolesParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspace_permissions.workspace_user_roles_update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    user_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=UpdateUserRolesParamsData(
+        role="editor",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: `Uuid` —
+
+`workspace_id`: `Uuid`—
+
+`user_id`: `Uuid` —
+
+`data`: `UpdateUserRolesParamsData`
+
+`request_options`: `typing.Optional[RequestOptions]` — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+#### Espacios de trabajo {#workspaces}
+
+<AccordionGroup>
+
+<Accordion title="client.workspaces.show(...) -> AsyncHttpResponse[WorkspaceWithIncludesResponse]">
+
+Muestra los detalles del espacio de trabajo.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.show(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“creator”\]\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.workspaces.delete(...) -> AsyncHttpResponse[None]">
+
+Elimina un espacio de trabajo de la cuenta.<br />
+Límites de frecuencia: 60 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.delete(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.workspaces.update(...) -> AsyncHttpResponse[WorkspaceResponse]">
+
+Actualiza un espacio de trabajo.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+
+from frameio import Frameio, WorkspaceParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.update(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    workspace_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WorkspaceParamsData(
+        name="My Workspace",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`workspace_id`: Uuid —
+
+`data`: WorkspaceParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.workspaces.index(...) -> AsyncPager[WorkspaceWithIncludes, WorkspacesWithIncludesResponse]">
+
+Lista los espacios de trabajo de una cuenta determinada.<br />
+Límites de frecuencia: 100 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+response = client.workspaces.index(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    include="creator",
+    sort="name_asc",
+    after="<opaque_cursor>",
+    page_size=10,
+    include_total_count=False,
+)
+for item in response:
+    yield item
+# alternatively, you can paginate page-by-page
+for page in response.iter_pages():
+    yield page
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`include`: typing.Optional\[typing.Literal\[“owner”\]\] —
+
+`sort`: typing.Optional\[WorkspacesIndexRequestSort\] — Ordena los espacios de trabajo según los parámetros de consulta
+
+`after`: typing.Optional\[RequestAfterOpaqueCursor\]
+
+Parámetro de consulta de cursor opaco para solicitudes que devuelven resultados paginados.
+
+<Tip>
+
+Este valor se genera automáticamente y se incluye como parte de los enlaces de una respuesta anterior. No está pensado para que lo lean personas.
+
+</Tip>
+
+`page_size`: typing.Optional\[RequestPageSize\] —
+
+`include_total_count`: typing.Optional\[IncludeTotalCount\] —
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+<Accordion title="client.workspaces.create(...) -> AsyncHttpResponse[WorkspaceResponse]">
+
+Crea un espacio de trabajo en una cuenta.<br />
+Límites de frecuencia: 10 llamadas por 1.00 minuto(s) por account_user
+
+```python title="usage"
+from frameio import Frameio, WorkspaceParamsData
+
+client = Frameio(
+    token="YOUR_TOKEN",
+)
+client.workspaces.create(
+    account_id="b2702c44-c6da-4bb6-8bbd-be6e547ccf1b",
+    data=WorkspaceParamsData(
+        name="My Workspace",
+    ),
+)
+```
+
+**Parámetros**
+
+`account_id`: Uuid —
+
+`data`: WorkspaceParamsData
+
+`request_options`: typing.Optional\[RequestOptions\] — Configuración específica de la solicitud.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+### PyPI {#pypi}
+
+<Info>
+
+Ver en [PyPI](https://pypi.org/project/frameio/)
+
+</Info>
+
+---

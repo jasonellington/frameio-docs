@@ -1,0 +1,185 @@
+---
+title: "ファイルツリーを読み取る"
+---
+
+## 概要 {#overview}
+
+最終的な目的が公開、編集、あるいはワークフローの段階を通じて Asset を進めることのいずれであっても、Frame.io とのより深いインテグレーションの多くでは、ユーザーのコンテキストを一覧表示し、最終的にはディレクトリビューを作成することになります。
+
+Frame.io 内のリソース(またはファイル)の基本的な階層は次のとおりです。
+
+#### Account > Team > Project > Assets {#account->-team->-project->-assets}
+
+この記事では、API 呼び出しを順番に行ってファイルツリーを操作する方法を説明します。ファイルを扱う一般的な方法は、まず Project にアクセスしてフォルダーを一覧表示し、その中に含まれる Asset とバージョンスタックを操作するというものです。
+
+## 重要な概念 {#important-concepts}
+
+### すべての Project には固有のルート Asset がある {#every-project-has-a-unique-root-asset}
+
+RESTful API では通常、一意の識別子を使ってリソースを表します。`root_asset_id` は、Project の Asset ツリーの一意の識別子です。これは Project のルートノードとして機能する特別な構造として扱ってください。残りの Asset は、ルートの下に下向きのツリーとして積み重なります。
+![root-asset-id](/images/platform/v2/reading-the-file-tree/ea24ed6ff53d93cf1dab9e154c289f816238abca823e8127f367cdee1eb2a8cc.webp)
+一般的なワークフローでは、API ユーザーはファイル階層のより深い場所にある Asset を操作するために、ツリーを下へとたどる必要があります。
+
+### コラボレーターと共有プロジェクト {#collaborators-and-shared-projects}
+
+**コラボレーター**は Frame.io における主要なユーザーロールの 1 つです。このようなユーザーは Project のワークスペースにアクセスできますが、その Project を包括する Account に属していない場合があります。
+
+[コラボレーターと Team Member](https://support.frame.io/en/articles/6067-difference-between-team-members-vs-collaborators) の権限の違いはさておき、主な違いは、*コラボレーターのメンバーシップは厳密に Project に対するものであり、Team とは関係がない場合がある*という点です。
+
+このため、ディレクトリの一覧表示が重要なワークフローでは、ちょっとした注意点が生じます。上記の基本的な階層(Account > Team > Project > Assets)はほとんどのユースケースで機能しますが、認証済みユーザーがコラボレーターではあっても Team Member ではない Project は表現できません。ディレクトリを一覧表示する際にこれを回避するには、次のいずれかを行います。
+
+- User の共有プロジェクトを取得し、Team と Account の階層を展開して、すべてをまとめる
+- User の共有プロジェクトを取得し、別のコンテキストとしてまとめて一覧表示する
+
+どちらの方法でもかまいません。後者のほうが少し簡単ですが、前者のほうが Frame.io の Web アプリにおける同様の情報の表示方法に近くなります。いずれにしても、このガイドで説明する方法はどちらにも当てはまります。
+
+## ディレクトリを一覧表示する {#listing-a-directory}
+
+### 1. User の Account を取得する {#1-fetch-the-user’s-accounts}
+
+`GET https://api.frame.io/v2/accounts`
+
+有効な bearer トークンを使って上記の呼び出しを行い、User の Account を取得します。ユーザーが Team Member、Team Manager、または Admin のステータスを持つすべての Account が返されます。ユーザーが請求/Admin の権限を持っていても Team へのアクセス権はない Team が返される場合もありますが、これはまれであり、次のステップで除外されます。
+
+Account のリクエストのペイロードはかなり冗長です。レスポンスから取得するとよい重要なデータの概要を次に示します。
+
+- `id`
+- `display_name`
+- `owner`(`email`、`name`)
+- (任意)`image`
+
+<Info>
+
+**Account の画像は一時的な URL です**
+
+*注:* API が返す Account の画像は事前署名付きの S3 キーであるため、返される URL は約 1 日で「無効」になります。これに対処するには、サービスが読み込まれるたびに画像を再取得するか、理想的にはローカルに保存してください。
+
+</Info>
+
+ユーザーアカウントで必須のフィールドは `id` と `owner.email` だけである点に注意してください。別のアプリでユーザーを表示する場合は、ユーザーの Account を表示するための条件付きロジックを書くことを検討してください。推奨される方法は、次の優先順位で値を確認し、*null* でなければその内容で Account を表示することです。
+
+1. 「`display_name`」
+2. 「`owner.name` の Account」
+3. 「`owner.email` の Account」
+
+ユーザーが Account を選択したら、次は Team を表示することになるでしょう。これには追加の API リクエストが必要です。
+
+### 2. Account 内の Team を取得する {#2-fetch-teams-within-the-account}
+
+`GET https://api.frame.io/v2/accounts/{{account_id}}/teams`
+
+Frame.io の Team は「パブリック」(つまり Account 内のどの Team Member からも見つけられる)または「プライベート」(特定の Team Member のみが見つけられる)のいずれかです。コンテキストは API が処理するため、上記のリクエストで `account_id` を指定して有効な呼び出しを行うだけで済みます。
+
+<Info>
+
+**ページネーションを忘れずに**
+
+ユーザーが数個を超える Account に存在することはまれですが、Team は急速に増える可能性のあるリソースです。Frame.io の API レート制限はかなり高めですが、常にレスポンスヘッダーを確認し、必要に応じてページネーションを行うことをお勧めします。
+
+</Info>
+
+ページネーションの詳細については、[Pagination and Errors](https://developer.frame.io/docs/troubleshooting/troubleshooting) をご覧ください。
+
+**各 Team から次の属性を取得します:**
+
+- `id`
+- `name`
+- (任意)`team_image`
+
+Team が選択されたら、その Team を構成する Project を表示することになります。
+
+**注**: 必要に応じて、ユーザーに対して `GET https://api.frame.io/v2/teams` を呼び出すこともできます。この場合、API は Account のコンテキストに関係なく、ユーザーが所属するすべての Team を返します。技術的にはこれでも機能しますが、次のような追加の手順を踏まない限り、コンテキストが失われるおそれがあります。
+
+1. 各 Team の横に Account 名を表示してコンテキストを再確立する
+2. ユーザーがリストのテキストを検索できるようにする
+
+Account レベルから下に向かって共有 Project を一覧表示する場合は、追加で `GET https://api.frame.io/v2/projects/shared` を呼び出す必要があります。レスポンスで返される各 Project には次の属性が含まれており、ディレクトリを構築する際に引き継いで使用できます。
+
+- `id`(Project 自体の id)
+- `team_id`
+- `team.account_id`
+
+あるいは、選択された任意の Account コンテキストに「Team」として追加するだけで、「共有プロジェクト」の入り口を用意することもできます。その場合は、共有プロジェクトと本来の Team スコープの Project を視覚的に区別すると、エンドユーザーにとってわかりやすくなります。単一の共有プロジェクトのリストには、内部的に多数の異なる本来の Account と Team のコンテキストが含まれている可能性があるためです。
+
+### 3. Team の Project を取得する {#3-fetch-the-team’s-projects}
+
+`GET https://api.frame.io/v2/teams/{{team_id}}/projects`
+
+次に、上記の呼び出しを行い、Team 内のすべての Project を取得します。
+
+**各 Project について、次の値を取得します:**
+
+- `id`
+- `name`
+- `root_asset_id`
+- (任意)`private`。UI でユーザーに区別して表示したい場合に使用します
+
+この記事の冒頭で説明したように、`root_asset_id` は Project 内のファイルとフォルダーのディレクトリをたどることを可能にするため、Frame.io のリソースアーキテクチャにおいて重要な要素です。
+
+<Info>
+
+**フォルダーと Asset を一覧表示する**
+
+ここまでの作業を簡単に振り返りましょう。次の要素を組み合わせたコンテキストを確立しました。
+
+</Info>
+
+| \* Account
+| \* Team
+| \* Team の Project(と root_asset_id)
+| \* 共有 Project(と root_asset_id)
+| Asset の作成や取得に必要なのはこれだけです。
+
+## フォルダーと Asset を一覧表示する {#listing-folders-and-assets}
+
+### 4. 初期のフォルダー構造を構築する {#4-build-the-initial-folder-structure}
+
+`GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+これにより、`root_asset_id` から始めて、プロジェクト内のすべてのフォルダーが一覧表示されます。フォルダーがない場合は、空のリストが返されます。ファイルとフォルダーの両方を含めたい場合(例: 次のステップで Frame.io から Asset を `GET` する場合)は、クエリ文字列パラメーターを省略してください。
+
+type パラメーターで使用できるその他 2 つのフィルターオプションは、file と version_stack です。3 つのフィルターはすべて相互に排他的であり、フィルターを指定しない呼び出しでは 3 つのタイプすべてが混在して返されます。
+
+### 5. ディレクトリツリーを掘り下げる {#5-dig-through-the-directory-tree}
+
+**返された各フォルダーについて、次の値を取得する必要があります:**
+
+- `id`
+- `name`
+
+各フォルダーは Asset であるため、フォルダー構造を掘り下げていくワークフローは次のようになります。
+
+1. `GET https://api.frame.io/v2/assets/{{root_asset_id}}/children?type=folder`
+
+   1. フォルダー名をリストとして表示します
+   2. ユーザーがフォルダーをクリックしたら、そのフォルダーの id を次のクエリに渡します:
+
+2. `GET https://api.frame.io/v2/assets/{{folder_id}}/children?type=folder`
+
+### 6. 作成とアップロード {#6-create-and-upload}
+
+**フォルダーにアップロードする場合:**
+`POST https://api.frame.io/v2/{{folder_id}}/children`
+
+アップロード先のフォルダーの id がわかったら、リソースのドキュメントとガイドに従って、その children に `POST` するだけです。これによりプレースホルダーの Asset が作成され、(選択した方法に応じて)次の値が返されます。
+
+- トラッキング用途を想定した `uuid`
+- ファイルを Frame.io のバックエンドのデータストレージに直接 PUT するために使用できる upload_urls のリスト
+
+**バージョンスタックにアップロードする場合:**
+バージョンスタックのワークフローも同様ですが、[こちらのガイド](/ja/platform/v2/manage-version-stacks)で説明しているステップが 1 つ追加されます。以下にその概要を示します。重要なのは、バージョンスタックは Asset のように見えてもフォルダーのように動作するコンテナーであること、そして最初に Asset をアップロードし、その後で別のアクションとしてバージョンスタックにスタックする必要があることを覚えておくことです。
+
+したがって、**Asset をバージョンスタックにアップロードしたい場合は、次の値が必要です:**
+
+- バージョンスタックの `id`
+- バージョンスタックの `parent_id`(例: それを含むフォルダーまたは Project ルート)
+
+まず、`POST https://api.frame.io/v2/assets/{{parent_id}}/children` で新しい Asset を作成します。レスポンスで新しい `id` を取得します。
+
+次に、新しい Asset の id を使い、次のボディペイロードで `POST https://api.frame.io/v2/assets/{{version_stack_id}}/version` を呼び出します。
+
+```json
+{
+  "next_asset_id": "<new-asset-id>"
+}
+```

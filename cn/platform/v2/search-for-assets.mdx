@@ -1,0 +1,225 @@
+---
+title: "搜索 Assets"
+---
+
+# 概述 {#overview}
+
+Frame.io 的 API 支持在整个 Account 范围内对 Assets 进行深度分面搜索，与 Web 应用中的功能一致。虽然最常用的筛选条件是 Team、Project 和 Status，但筛选和排序可以通过独特的方式组合，生成极其具体的、由 API 驱动的结果集。一般来说，除 `account_id`、`q`（查询）和 `sort` 之外，所有筛选条件都遵循相同的结构，下文将对它们逐一进行说明。
+
+![search-filters.png](/images/platform/v2/search-for-assets/d468e3a3b48184af611e5af020bee1474a328ab3fc5090df704dfd6c9b603ba7.webp)
+
+<Warning>
+
+**请求的页面大小与返回的页面大小不一致**
+
+截至 2022 年 3 月，存在一个影响搜索 API 分页功能的已知 bug。在此 bug 修复之前，我们不建议使用搜索 API 遍历多页结果（即超过 100 个 assets），因为请求的页面大小可能与实际返回的 asset 数量不一致。
+
+</Warning>
+
+## 默认值 {#defaults}
+
+触发搜索的 API 请求始终相同：
+
+始终是同一个请求
+
+`POST` 到 `https://api.frame.io/v2/search/library`
+
+如果未明确提供，搜索调优的默认值如下：
+
+| 属性 | 默认值 | 描述 |
+| :--- | :--- | :--- |
+| `page_size` | 10 | 每页返回 10 个 Assets。 |
+| `page` | 1 | 查询将返回响应的第一页。 |
+| `sort` | `relevance` | “Relevance”会尝试根据一组经过专门调优的属性对 assets 进行排序。在没有查询的情况下，相关性在很大程度上偏向于上传时间的远近。 |
+
+## 关于本指南 {#about-this-guide}
+
+本指南将逐步介绍如何构建一个满足以下条件的搜索查询：
+
+- 位于某个 Account 内的 Assets
+- 与查询 `"moon"` 匹配
+- 位于特定 Project 中
+- 于 2020 年 4 月 1 日至 30 日之间上传
+- 并且已被标记为“Approved”
+
+我们的搜索正文最终将如下所示：
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-30T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    },
+    "page_size": 10,
+    "page": 1
+}
+```
+
+### Account、查询与排序 {#account-query-and-sort}
+
+Account（`account_id`）、查询（`q`）和 `sort` 是三个最基本的构建模块，在搜索查询中位于任何 `filter` 属性之外。
+
+#### Account 上下文 {#account-context}
+
+从技术上讲，执行搜索唯一需要的属性是 `account_id`。仅提供该属性时，只会按默认分页值（每页 10 个 Assets，从第 1 页开始）拉取该 Account 上的所有 Asset（包括文件夹）。
+
+```json
+{
+    "account_id": "<account_id>"
+}
+```
+
+#### 搜索查询 {#search-query}
+
+下一个最常用（也最有用）的属性是查询本身。注意：由于 Frame.io 的 API 搜索接受空查询，因此无需使用通配符（`*`）查询。您要么是在搜索某些内容，要么是在请求对 Account 中所有 Assets 进行（可能经过筛选的）排序。
+
+在我们的示例中，我们将搜索词语“moon”。
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon"
+}
+```
+
+### 排序 {#sorting}
+
+![sort.png](/images/platform/v2/search-for-assets/bd057586bfc5499df0b46d41ae74d90e53beb6500bb87f639a730545ccb3f1c8.webp)
+
+Frame.io 支持多种不同的排序选项。各选项的排序顺序语法类似：
+
+- 每个选项都有默认的排序方向
+- 要反转该方向，请在排序值前加上负号 `-`
+
+例如，要按字母倒序（Z 到 A）排序，可以声明 `"sort": "-name"`。
+
+默认排序操作是“Relevance”。因此，无需声明该选项；如果未提供 `sort` 属性，将默认使用该选项。
+
+| 排序选项 | 属性 | 默认方向 |
+| :--- | :--- | :--- |
+| **Relevance** | 不适用 | 不适用 |
+| **上传日期** | `inserted_at` | 最早的在前 |
+| **名称** | `name` | A 到 Z |
+| **大小** | `filesize` | 最小的在前 |
+| **上传者** | `creator.name` | A 到 Z |
+
+因此，在构建查询时，我们现在可以添加按 `name` 从 A 到 Z 的 `sort`：
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name"
+}
+```
+
+### 筛选与分页 {#filters-and-pagination}
+
+筛选条件是 Frame.io Asset 搜索中最棘手也最强大的功能。筛选条件写在单个 `filter` 对象中，并且都遵循相同的模式：一个操作（`op`）和一个 `value`。筛选条件使用以下常见缩写，其中除“等于”之外的比较选项仅用于日期和大小查询：
+
+- `eq` — 等于
+- `lt` — 小于
+- `gt` — 大于
+- `lte` — 小于或等于
+- `gte` — 大于或等于
+- `match` — 精确匹配，仅用于 Uploader 和 Filetype 筛选条件
+
+例如，用于匹配已知 `project_id` 的 `filter` 构造如下：
+
+```json
+{
+    "filter": {
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        }
+    }
+}
+```
+
+### 选项与操作 {#options-and-operations}
+
+下表介绍了与每种筛选类型相关的选项和操作。
+
+| 筛选选项 | 属性 | 支持的操作 | 支持的值 |
+| :--- | :--- | :--- | :--- |
+| **已归档** | `archived` | `eq` | `true`, `false` |
+| **上传日期** | `inserted_at` | `eq`, `lt`, `gt`, `lte`, `gte` | `<datetime>`（ISO-8601，UTC） |
+| **已删除** | `deleted` | `eq` | `true`, `false` |
+| **文件类型** | `filetype` | `match` | `<MIME type>` |
+| **私有** | `private` | `eq` | `true`, `false` |
+| **Project** | `project_id` | `eq` | `<project_id>` |
+| **大小** | `filesize` | `eq`, `lt`, `gt`, `lte`, `gte` | `size`（以字节为单位） |
+| **状态** | `label` | `eq` | `none`, `in_progress`, `needs_review`, `approved` |
+| **Team** | `team_id` | `eq` | `<team_id>` |
+| **类型** | `asset_type` | `eq` | `audio`, `document`, `folder`, `image`, `other`, `stream`, `video` |
+| **上传者** | `creator.name` | `match` | `<name>` |
+
+<Warning>
+
+**上传者必须是活跃的 Account 成员才能填充索引**
+
+搜索已不再是该账户成员的创建者将不起作用，因为该用户已不在 User Search 索引中。
+
+</Warning>
+
+为继续构建查询，我们现在可以为满足以下条件的 Assets 添加筛选条件：
+
+- 位于特定 Project 中
+- 于 2020 年 4 月 1 日至 30 日之间上传
+- 被标记为“Approved”
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-28T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    }
+}
+```
+
+<Note>
+
+**分页**
+
+搜索端点的分页方式与其他任何端点完全相同，均通过位于请求正文最外层的 `page_size` 和 `page` 属性实现。有关分页的更多详细信息，请参阅[此处](/cn/platform/v2/key-concepts#pagination)的单独指南。
+
+</Note>

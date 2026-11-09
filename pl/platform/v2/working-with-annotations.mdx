@@ -1,0 +1,294 @@
+---
+title: "Praca z adnotacjami"
+---
+
+# Przegląd {#overview}
+
+Adnotacje we Frame.io są reprezentowane jako zserializowany blob JSON zawierający obiekty rysunkowe wraz z ich kolorami, współrzędnymi i rozmiarami. W tym blobie wszystkie cudzysłowy poza zewnętrzną parą są poprzedzone ukośnikami (np. `\"key\":\"value\"`).
+
+Istnieją trzy podstawowe kształty — **arrow**, **rect** i **line** — a także rysunek odręczny, który wykracza poza zakres tego przewodnika, ale opiera się na tych samych podstawowych zasadach zserializowanych danych współrzędnych.
+
+## Układ współrzędnych {#the-coordinate-system}
+
+Wszystkie kształty są umieszczane w kartezjańskim układzie współrzędnych z początkiem w lewym górnym rogu i skalą od 0 do 1 na każdej osi.
+
+![coordinate_plane.png](/images/platform/v2/working-with-annotations/099478340a4f8604fd4389c5d431ec9e9321f509f2d6055b0c92dd62e4e36147.webp)
+
+## Podstawowe dane kształtów {#basic-shape-data}
+
+Wszystkie kształty są umieszczane na powyższej płaszczyźnie za pomocą kombinacji współrzędnych i danych stylu. Każdy kształt ma pewne wspólne atrybuty, a ponadto każdy w nieco inny sposób korzysta z układu współrzędnych.
+
+Wszystkie atrybuty odległości/szerokości/wysokości używają tej samej skali od 0 do 1 co główna siatka współrzędnych, ale zazwyczaj są mierzone od punktu początkowego kształtu.
+
+Innymi słowy, jeśli wideo jest wyświetlane w obszarze 640x480, `x=1` będzie w tym kontekście odpowiadać bezwzględnej wartości 640 px. Dzięki temu adnotacje płynnie się skalują, zachowując swoją względną pozycję przy zmianie ekranu, rozmiaru i kontekstu wyświetlania.
+
+**Uwaga**: początkiem kształtu *rect* jest zawsze lewy górny róg kształtu, niezależnie od punktu, od którego rozpoczęto rysowanie.
+
+### Wspólne atrybuty {#common-attributes}
+
+| Atrybut | Opis |
+| --- | --- |
+| `tool` | *arrow*, *rect* lub *line*. Określa, jaki kształt jest tworzony. |
+| `color` | Sześciocyfrowy kolor szesnastkowy kształtu. |
+| `size` | Grubość linii kształtu w pikselach. W przypadku strzałek dotyczy to tylko początku linii, ponieważ szerokość końcowa jest ustalana programowo. |
+
+### Arrow {#arrow}
+
+| Atrybut | Opis |
+| :--- | :--- |
+| `x` | Współrzędna x początku strzałki. |
+| `y` | Współrzędna y początku strzałki. |
+| `w` | Różnica położenia strzałki na osi y od początku do końca, względem początku strzałki. |
+| `h` | Różnica położenia strzałki na osi x od początku do końca, względem początku strzałki. |
+
+### Rect {#rect}
+
+| Atrybut | Opis |
+| :--- | :--- |
+| `x` | Współrzędna x lewego górnego rogu prostokąta. |
+| `y` | Współrzędna y lewego górnego rogu prostokąta. |
+| `w` | Szerokość prostokąta względem jego lewego górnego rogu. |
+| `h` | Wysokość prostokąta względem jego lewego górnego rogu. |
+| `ix` | Współrzędna x punktu, od którego rozpoczęto rysowanie prostokąta. (Opcjonalne). |
+| `iy` | Współrzędna y punktu, od którego rozpoczęto rysowanie prostokąta. (Opcjonalne). |
+| `radius` | Promień zaokrąglenia narożników prostokąta. Musi być dodatni. Wartości powyżej 150 są wizualnie nierozróżnialne. |
+
+### Line {#line}
+
+| Atrybut | Opis |
+| :--- | :--- |
+| `x1` | Współrzędna x początku linii. |
+| `y1` | Współrzędna y początku linii. |
+| `x2` | Współrzędna x końca linii. Wartość bezwzględna na płaszczyźnie obrazu. |
+| `y2` | Współrzędna y końca linii. Wartość bezwzględna na płaszczyźnie obrazu. |
+
+## Prosty przykład: płaszczyzna współrzędnych {#simple-example-the-coordinate-plane}
+
+![plane-example.png](/images/platform/v2/working-with-annotations/99384da1b5af9a10636927f13840b9554fa518600b181af4f71f094dab50861c.webp)
+
+```text
+{"annotation": "[{\"tool\":\"line\",\"color\":\"#E74A3C\",\"size\":3,\"x1\":0.0028530670470756064,\"y1\":0.012680297987002695,\"x2\":0.9964336661911555,\"y2\":0.9903312727849104},{\"tool\":\"line\",\"color\":\"#34A3DB\",\"size\":3,\"x1\":0.004992867332382311,\"y1\":0.98779521318751,\"x2\":0.9942938659058488,\"y2\":0.012680297987002695}]}
+```
+
+```json
+{
+    "annotation": [
+        {
+            "tool": "line",
+            "color": "#E74A3C",
+            "size": 3,
+            "x1": 0.0028530670470756064,
+            "y1": 0.012680297987002695,
+            "x2": 0.9964336661911555,
+            "y2": 0.9903312727849104
+        },
+        {
+            "tool": "line",
+            "color": "#34A3DB",
+            "size": 3,
+            "x1": 0.004992867332382311,
+            "y1": 0.98779521318751,
+            "x2": 0.9942938659058488,
+            "y2": 0.012680297987002695
+        }
+    ]
+}
+```
+
+### Omówienie {#breakdown}
+
+![blue-plane.png](/images/platform/v2/working-with-annotations/ced74a7487e5331393af727a794384e9e3294d7f048fda4c64e73b4ba32b4445.webp)
+
+```json
+{
+   "tool":"line",
+   "color":"#34A3DB",
+   "size":3,
+   "x1":0.004992867332382311,
+   "y1":0.98779521318751,
+   "x2":0.9942938659058488,
+   "y2":0.012680297987002695
+}
+```
+
+![plane-example-red.png](/images/platform/v2/working-with-annotations/35bbbbcbe89e4262ec4e0fedf5e13d48baeceb10421fe48bcb854eb216a28676.webp)
+
+```json
+{
+   "tool":"line",
+   "color":"#E74A3C",
+   "size":3,
+   "x1":0.0028530670470756064,
+   "y1":0.012680297987002695,
+   "x2":0.9964336661911555,
+   "y2":0.9903312727849104
+}
+```
+
+## Złożony przykład: wiele prostokątów {#complex-example-lots-of-boxes}
+
+![lots-of-boxes.png](/images/platform/v2/working-with-annotations/9241b75e4785251c5c42b5b11306370df8d0510932e1537e20dbcde58977fea3.webp)
+
+```text
+{"annotation": "[{\"tool\":\"rect\",\"color\":\"#34A3DB\",\"size\":3,\"x\":0.008426966292134831,\"y\":0.02663337494798169,\"w\":0.0702247191011236,\"h\":0.10986267166042447,\"ix\":0.008426966292134831,\"iy\":0.02663337494798169,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#1ABCA1\",\"size\":3,\"x\":0.8932584269662921,\"y\":0.0449438202247191,\"w\":0.08895131086142327,\"h\":0.35122763212650854,\"ix\":0.8932584269662921,\"iy\":0.0449438202247191,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#E67422\",\"size\":3,\"x\":0.023408239700374533,\"y\":0.7873491468997087,\"w\":0.1254681647940075,\"h\":0.2047440699126093,\"ix\":0.023408239700374533,\"iy\":0.7873491468997087,\"radius\":8},{\"tool\":\"rect\",\"color\":\"#E74A3C\",\"size\":3,\"x\":0.6919475655430711,\"y\":0.5409904286308781,\"w\":0.29868913857677903,\"h\":0.4427798585101955,\"ix\":0.6919475655430711,\"iy\":0.5409904286308781,\"radius\":8},{\"tool\":\"arrow\",\"color\":\"#E74A3C\",\"size\":3,\"x\":0.25374531835205993,\"y\":0.23137744486059092,\"w\":0.24250936329588013,\"h\":0}]}"
+```
+
+```json
+{
+    "annotation": [
+        {
+            "tool": "rect",
+            "color": "#34A3DB",
+            "size": 3,
+            "x": 0.008426966292134831,
+            "y": 0.02663337494798169,
+            "w": 0.0702247191011236,
+            "h": 0.10986267166042447,
+            "ix": 0.008426966292134831,
+            "iy": 0.02663337494798169,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#1ABCA1",
+            "size": 3,
+            "x": 0.8932584269662921,
+            "y": 0.0449438202247191,
+            "w": 0.08895131086142327,
+            "h": 0.35122763212650854,
+            "ix": 0.8932584269662921,
+            "iy": 0.0449438202247191,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#E67422",
+            "size": 3,
+            "x": 0.023408239700374533,
+            "y": 0.7873491468997087,
+            "w": 0.1254681647940075,
+            "h": 0.2047440699126093,
+            "ix": 0.023408239700374533,
+            "iy": 0.7873491468997087,
+            "radius": 8
+        },
+        {
+            "tool": "rect",
+            "color": "#E74A3C",
+            "size": 3,
+            "x": 0.6919475655430711,
+            "y": 0.5409904286308781,
+            "w": 0.29868913857677903,
+            "h": 0.4427798585101955,
+            "ix": 0.6919475655430711,
+            "iy": 0.5409904286308781,
+            "radius": 8
+        },
+        {
+            "tool": "arrow",
+            "color": "#E74A3C",
+            "size": 3,
+            "x": 0.25374531835205993,
+            "y": 0.23137744486059092,
+            "w": 0.24250936329588013,
+            "h": 0
+        }
+    ]
+}
+```
+
+### Omówienie {#breakdown-1}
+
+Mając to wszystko na uwadze, warto rozłożyć na części każdy element powyższego obrazu, aby lepiej zrozumieć układ współrzędnych adnotacji. Zwróć uwagę, że `size` i `radius` każdego z prostokątów w tym przykładzie mają wartości domyślne z interfejsu Frame.io.
+
+#### Niebieski rect {#blue-rect}
+
+![blue-box.png](/images/platform/v2/working-with-annotations/ccc803531559e559395c2811d2be436316bbce6249c89b4af0b366efcf6b4d27.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#34A3DB",
+   "size":3,
+   "x":0.008426966292134831,
+   "y":0.02663337494798169,
+   "w":0.0702247191011236,
+   "h":0.10986267166042447,
+   "ix":0.008426966292134831,
+   "iy":0.02663337494798169,
+   "radius":8
+}
+```
+
+#### Zielony rect {#green-rect}
+
+![box-green.png](/images/platform/v2/working-with-annotations/4ce987f7843bf36e865fe0ceb6ae0ebbfa383cf719018754070a489fb3e3f17a.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#1ABCA1",
+   "size":3,
+   "x":0.8932584269662921,
+   "y":0.0449438202247191,
+   "w":0.08895131086142327,
+   "h":0.35122763212650854,
+   "ix":0.8932584269662921,
+   "iy":0.0449438202247191,
+   "radius":8
+}
+```
+
+#### Czerwony rect {#red-rect}
+
+![red-box.png](/images/platform/v2/working-with-annotations/61638bc1073613b5456b11ac4ce287447c3aaade152c0e6faf7699d995b11b31.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#E74A3C",
+   "size":3,
+   "x":0.6919475655430711,
+   "y":0.5409904286308781,
+   "w":0.29868913857677903,
+   "h":0.4427798585101955,
+   "ix":0.6919475655430711,
+   "iy":0.5409904286308781,
+   "radius":8
+}
+```
+
+#### Pomarańczowy rect {#orange-rect}
+
+![orange-box.png](/images/platform/v2/working-with-annotations/b7a8f7c7feb18d0439ef14f7fe71441d3cada3f551dda44c9e69ef9c8b34a8d4.webp)
+
+```json
+{
+   "tool":"rect",
+   "color":"#E67422",
+   "size":3,
+   "x":0.023408239700374533,
+   "y":0.7873491468997087,
+   "w":0.1254681647940075,
+   "h":0.2047440699126093,
+   "ix":0.023408239700374533,
+   "iy":0.7873491468997087,
+   "radius":8
+}
+```
+
+#### Czerwona strzałka {#red-arrow}
+
+![red-arrow.png](/images/platform/v2/working-with-annotations/1f3e9db0880bf0bef5aa305de38471893b8ae9901226383441ff08c317087160.webp)
+
+```json
+{
+   "tool":"arrow",
+   "color":"#E74A3C",
+   "size":3,
+   "x":0.25374531835205993,
+   "y":0.23137744486059092,
+   "w":0.24250936329588013,
+   "h":0
+}
+```

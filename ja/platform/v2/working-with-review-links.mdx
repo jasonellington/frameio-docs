@@ -1,0 +1,82 @@
+---
+title: "レビューリンクの操作"
+---
+
+## 概要 {#overview}
+
+レビューリンク (Review Link) は Frame.io の中核機能の 1 つで、Asset をまとめ、明示的なチームやプロジェクトへのアクセス権を必要とせずに、単一の URL を通じてフィードバックのために共有できます。基本的には単一のプロジェクト内の Asset を表すものであるため、本ガイドでは次のことを前提としています。
+
+1. Asset がすでに手元にあるか、[API による Asset のアップロード](/ja/platform/v2/uploading-assets)について理解していること。
+2. レビューリンクを作成したいプロジェクトの ID を把握していること。
+3. Frame.io の外部 (例: メール、チャット、その他の配信手段) に配布できる URL を取得することが目的であること。
+
+### 基本概念 {#core-concepts}
+
+レビューリンクは厳密にプロジェクトに属します。レビューリンク内の Asset は **Review Link Item** と呼ばれる特別なリソースタイプとして表されます。Review Link Item には、結び付けている `review_link_id` と `asset_id` に加え、関連する Asset の完全なペイロードが常に含まれます。
+
+Review Link Item を個別に追跡・管理する必要はありませんが、本ガイドで扱うワークフロー全体を理解するうえで役立つ構造です。レビューリンクの階層構造は次のようになります。
+
+Project > Review Link > Review Link Item > Asset reference
+
+### 必要なスコープ {#required-scopes}
+
+本ガイドを始める前に、少なくとも次のスコープを含むトークンを用意してください。
+
+| スコープ | 理由 |
+| --- | --- |
+| **Projects:** Read | 厳密には必須ではありませんが、プロジェクトの `root_asset_id` を取得するために必要です。 |
+| **Assets:** Read | 厳密には必須ではありませんが、API で `asset_ids` にたどり着くために必要です。 |
+| **Review Links:** Create, Read, Update | レビューリンクの作成、Asset の追加、情報の取得 (特に別のシステムで追跡する場合) に使用します。 |
+
+## 1. ID を収集する {#1-gather-your-ids}
+
+レビューリンクを作成するには、次のものを収集する必要があります。
+
+1. プロジェクト ID
+2. そのプロジェクト内の 1 つまたは複数の Asset の ID
+
+プロジェクト ID が手元にない場合でも、Frame.io にアクセスでき、使用したいプロジェクトがわかっていれば、そのプロジェクトに移動したときのアドレスバーで ID を確認できます: `https://app.frame.io/projects/<project-id>`。
+
+同様に、Asset ID が手元にない場合は、目的の Asset に移動し、ブラウザーのアドレスバーから ID を取得します: `https://app.frame.io/player/<asset-id>`。
+
+## 2. レビューリンクを作成する {#2-create-the-review-link}
+
+リンクの土台を作るには、希望するレビューリンクのオプションを決め、それを JSON ペイロードにまとめる必要があります。最低限、`name` を決める必要があります。
+
+以下はペイロードの例です。参考までに、`name` のみを指定して作成した場合の各フィールドのデフォルト値を示しています。
+
+```json
+{    
+    "name": "New Review Link",
+    "allow_approvals": true,
+    "current_version_only": false,
+    "enable_downloading": true,
+    "expires_at": null,
+    "has_password": false
+}
+```
+
+次に、このペイロードをリクエストボディとして使用し、認証済みの `POST` `https://api.frame.io/v2/projects/:id/review_links` を実行します。
+
+おめでとうございます! これでレビューリンクが作成されました。レスポンスボディには、重要な属性が 2 つ含まれています。
+
+- **`id`**: リンクコンテナーへの参照です。次のステップで Asset を追加する際に必要になるため、控えておいてください。
+- **`short_url`**: 最終的に配布するレビューリンクの URL です。`https://f.io/_aBcDeF` のような形式になります。
+
+## 3. レビューリンクに Asset を追加する {#3-add-the-assets-to-the-review-link}
+
+レビューリンクができたので、Asset を追加しましょう。まず、Asset の `id` を文字列の配列として含む JSON ペイロードを用意します。
+
+```json
+{
+    "asset_ids":[
+        "<asset-id-1>",
+        "<asset-id-2>",
+        "<asset-id-3>"
+    ]
+}
+```
+
+次に、パスにはステップ 2 で取得したレビューリンクの `id` を、リクエストボディには Asset の `id` を使用して、`https://api.frame.io/v2/review_links/:id/assets` に認証済みの `POST` を実行します。
+
+これで完了です! `short_url` を配布する準備が整いました。

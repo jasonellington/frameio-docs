@@ -1,0 +1,287 @@
+---
+title: "Checklist de l’intégrateur"
+---
+
+## Exigences d’intégration C2C {#c2c-integration-requirements}
+
+Cette checklist présente les bonnes pratiques et les exigences pour rejoindre l’écosystème C2C. Bien que tous les éléments ne s’appliquent pas à chaque appareil ou application C2C, l’équipe C2C Partnerships travaillera avec vous pour définir les exigences spécifiques dans le cadre du programme de certification C2C.
+
+## Exigences d’intégration de base {#basic-integration-requirements}
+
+Toutes les intégrations doivent inclure :
+
+<CardGroup cols={2}>
+
+<Card title="Code utilisateur" icon="keyboard" iconType="solid">
+
+Afficher un code à 6 chiffres à l’utilisateur. Pour les interfaces web ou les appareils capables d’afficher un QR code, utilisez `verification_url_complete` afin de proposer aux utilisateurs un lien hypertexte pour se connecter et sélectionner un projet auquel se connecter.
+
+</Card>
+
+<Card title="Affichage du projet" icon="folder" iconType="solid">
+
+Affiche le nom du projet connecté afin que les utilisateurs puissent vérifier rapidement leur connexion sans avoir à chercher dans l’interface de [Frame.io](http://frame.io/)
+
+</Card>
+
+<Card title="État du téléversement" icon="upload" iconType="solid">
+
+Des indicateurs clairs pour :
+
+- Le nombre de fichiers restants
+- La taille totale des fichiers restants
+- La progression du téléversement du fichier en cours
+- L’état des téléversements terminés, en file d’attente et en échec
+
+</Card>
+
+<Card title="État du réseau" icon="network-wired" iconType="solid">
+
+Affichage de l’état de la connexion réseau et actualisation automatique de l’access token après 8 heures, sans interaction ni alerte pour l’utilisateur (sauf en cas d’erreur d’actualisation)
+
+</Card>
+
+</CardGroup>
+
+Exigences supplémentaires :
+
+- Flux d’autorisation annulable à chaque étape
+- État du socket pour la communication en temps réel
+- En-tête de version du firmware dans tous les appels aux endpoints HTTPS
+
+## Exigences de sécurité {#security-requirements}
+
+Chez [Frame.io](http://frame.io/), la sécurité est primordiale. Nos exigences incluent :
+
+<CardGroup cols={2}>
+
+<Card title="HTTPS & connexion directe" icon="shield-halved" iconType="solid">
+
+- Requêtes HTTPS uniquement (les requêtes HTTP sont rejetées)
+- Connexion directe de l’appareil/de l’application à [Frame.io](http://frame.io/) (sans service intermédiaire)
+
+</Card>
+
+<Card title="Protection des identifiants" icon="lock" iconType="solid">
+
+- `client_secret` et `client_id` protégés (non accessibles à l’utilisateur)
+- Identifiants `access_token` et `refresh_token` protégés
+- Stockage chiffré des secrets et des tokens (facultatif mais recommandé)
+
+</Card>
+
+</CardGroup>
+
+## Exigences du module de téléversement {#uploader-requirements}
+
+Un téléversement fiable des médias est essentiel, en particulier dans des conditions difficiles. Les intégrations doivent :
+
+<CardGroup cols={2}>
+
+<Card title="Fonctionnalités de téléversement" icon="upload" iconType="solid">
+
+- Prendre en charge les téléversements automatiques, soit en temps réel pendant l’enregistrement (de préférence), soit à la fin de l’écriture du fichier
+- Afficher clairement l’état du téléversement, y compris la file d’attente et les résultats
+- Écrire les fichiers sur un stockage local accessible à l’utilisateur
+
+</Card>
+
+<Card title="Gestion de la file d’attente" icon="list" iconType="solid">
+
+Maintenir une file d’attente de téléversement robuste qui gère :
+
+- Les téléversements simultanés
+- Les interruptions réseau
+- Les cycles d’alimentation
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Gestion des erreurs" icon="triangle-exclamation" iconType="solid">
+
+Implémenter une nouvelle tentative automatique en cas de :
+
+- Problèmes réseau
+- Coupures de courant
+- Erreurs non fatales (délais d’expiration, erreurs réseau, tokens expirés)
+
+</Card>
+
+<Card title="Contrôle du téléversement" icon="play" iconType="solid">
+
+- Reprendre les téléversements à partir du dernier segment réussi
+- Respecter l’état **PAUSED**
+- Gérer les erreurs non fatales d’AWS
+- Gérer les médias corrompus sans bloquer les autres téléversements
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Options de téléversement" icon="sliders" iconType="solid">
+
+Proposer des options de téléversement flexibles :
+
+- Basculer entre téléversement automatique et manuel
+- Sélection de fichiers individuelle ou groupée
+- Priorisation par type de fichier (facultatif)
+- Priorisation de la file d’attente (facultatif)
+- Téléversements parallèles (facultatif)
+- Permettre l’annulation d’un téléversement individuel ou de tous les téléversements
+
+</Card>
+
+</CardGroup>
+
+## Exigences réseau {#networking-requirements}
+
+Les intégrations doivent :
+
+<CardGroup cols={2}>
+
+<Card title="Débit & sécurité" icon="gauge-high" iconType="solid">
+
+- Atteindre un débit de téléversement minimal de 50 Mbit/s (si les conditions réseau le permettent)
+- Prendre en charge la sécurité Wi-Fi WPA2 (Ethernet facultatif mais recommandé)
+
+</Card>
+
+<Card title="Gestion du réseau" icon="network-wired" iconType="solid">
+
+- Gérer le DHCP et les IP statiques
+- Afficher clairement l’état du réseau (type de connexion, débit, santé)
+- Changer de réseau sans réassocier le projet
+- Enregistrer les réseaux Wi-Fi connus
+
+</Card>
+
+</CardGroup>
+
+## Exigences de test {#testing-requirements}
+
+C2C est conçu pour des conditions difficiles, ce qui exige des tests approfondis portant sur :
+
+<CardGroup cols={2}>
+
+<Card title="Configurations réseau" icon="network-wired" iconType="solid">
+
+Tester tous les types de connexion applicables :
+
+- Routeur professionnel avec :
+
+  - WAN filaire
+  - Modem cellulaire agrégé
+  - Modem cellulaire professionnel
+  - Modem de type point d’accès mobile
+
+- Configurations de routeurs maillés (y compris le protocole 802.11r FT)
+
+- Connexions directes à différents types de modems
+
+</Card>
+
+<Card title="Tests de résilience" icon="bolt" iconType="solid">
+
+- Coupures de courant inattendues
+- Déconnexions réseau
+- Problèmes de FAI
+- Gestion des médias corrompus
+- Création d’assets hors ligne et reconnexion
+
+</Card>
+
+</CardGroup>
+
+## Exigences de workflow {#workflow-requirements}
+
+C2C est un écosystème, pas simplement une fonctionnalité. Les exigences propres à chaque appareil/application incluent :
+
+<CardGroup cols={2}>
+
+<Card title="Enregistrement SDI/HDMI" icon="video" iconType="solid">
+
+- Déclenchement automatique de l’enregistrement depuis la caméra
+- Options de caméra flexibles
+- Réglage du décalage de timecode
+- Possibilité d’enregistrement manuel
+- Gestion cohérente des noms de fichiers
+- Synchronisation précise du timecode
+
+</Card>
+
+<Card title="Fichiers proxy" icon="file-video" iconType="solid">
+
+- Nom de fichier/timecode/métadonnées identiques à ceux du fichier principal/OCF
+- Optimisés pour la LTE (débit de 1 à 12 Mbit/s)
+- Prise en charge des codecs standard pour la vidéo et l’audio
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="Exigences générales" icon="list-check" iconType="solid">
+
+- Flux de timecode pour la vidéo/l’audio
+- Prise en charge du téléversement multiformat (Proxy, OCF, LUT, WAV, RAW, JPG, HEIF, TIFF)
+- Gestion des changements de nom de projet (utilisez `project_id` plutôt que des chaînes de nom)
+
+</Card>
+
+</CardGroup>
+
+## Assurance qualité {#quality-assurance}
+
+Chez [Frame.io](http://frame.io/), la qualité est essentielle. Les principaux domaines de test incluent :
+
+<CardGroup cols={2}>
+
+<Card title="Fonctionnalités de base" icon="check" iconType="solid">
+
+- Lancement et fonctionnement stables
+- Connexion au projet
+- Génération du code matériel
+- Possibilité de connexion/déconnexion
+- Affichage des informations du projet/de l’utilisateur
+- Gestion des appareils
+- Téléversement d’assets
+- Prise en charge des formats
+
+</Card>
+
+<Card title="Exigences techniques" icon="gear" iconType="solid">
+
+- Reprise du téléversement après interruption
+- Affichage de la progression
+- Indication de l’état du réseau
+- Persistance de la connexion pendant 8 heures
+- Autorisation annulable
+- Connexion directe à Frame.io
+- Sécurité des identifiants
+- Optimisation du débit réseau
+
+</Card>
+
+</CardGroup>
+
+## Améliorations futures {#future-improvements}
+
+L’API Camera to Cloud de [Frame.io](http://frame.io/) évolue en permanence. Tout en préservant la rétrocompatibilité, nous accueillons volontiers un dialogue continu sur les évolutions futures, afin que notre API reste alignée sur les usages réels.
+
+## C’est tout, les amis ! {#that’s-all-folks}
+
+Félicitations, vous avez terminé l’UC2CIG (University of C2C Integration Guides) ! Nous espérons que ce guide vous a été utile.
+
+N’hésitez pas à nous faire part de vos commentaires sur des informations peu claires ou manquantes, ou à nous contacter pour toute question relative à C2C. Nous sommes là pour vous aider !
+
+Si ce n’est pas déjà fait, veuillez consulter le guide [Implémenter C2C : configuration](/fr/camera-to-cloud/implementing-c2c-setting-up) avant de continuer.
+
+Vous aurez besoin de l’`access_token` obtenu lors du [processus d’authentification et d’autorisation](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Cette checklist s’appuie sur le [guide de téléversement de base](/fr/camera-to-cloud/how-to-basic-upload) et sur le [guide des téléversements avancés](/fr/camera-to-cloud/how-to-advanced-uploads).

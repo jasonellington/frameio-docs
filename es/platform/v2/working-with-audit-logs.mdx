@@ -1,0 +1,134 @@
+---
+title: "Trabajar con registros de auditoría"
+---
+
+## Descripción general {#overview}
+
+Frame.io admite y mantiene registros de auditoría (Audit Logs) para la gran mayoría de las actividades realizadas en sus aplicaciones. Esto incluye tanto las operaciones CRUD básicas sobre los recursos principales como algunas abstracciones especiales (p. ej., `AssetVersioned`).
+
+<Warning>
+
+**Los registros de auditoría se truncan después de 30 días**
+
+Los registros de auditoría de Frame.io están disponibles a través de la API durante un período móvil de 30 días, tras el cual se trasladan a almacenamiento en frío. Por lo tanto, si quieres conservar un historial extenso de eventos de Frame.io, asegúrate de almacenar los datos históricos de los registros de forma independiente.
+
+</Warning>
+
+### Alcance y permisos {#scope-and-permissions}
+
+Solo los administradores de la cuenta (Account Admins) pueden acceder a los registros de auditoría de una cuenta, y todas las llamadas al endpoint de registros de auditoría deben limitarse a un `account_id` de la siguiente manera:
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### Respuestas {#responses}
+
+Todas las respuestas de los registros de auditoría tienen un formato similar:
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**¡No olvides paginar!**
+
+Los datos de respuesta de los registros de auditoría pueden ser bastante extensos, así que asegúrate de conocer bien la [paginación](/es/platform/v2/key-concepts#pagination).
+
+</Info>
+
+## Filtros {#filters}
+
+Los registros de auditoría admiten diversos filtros, incluidos rangos de fechas. A diferencia de los endpoints de [búsqueda](/es/platform/v2/search-for-assets) de Frame.io, los filtros solo pueden enviarse como parámetros de cadena de consulta de `GET`.
+
+Todos los filtros siguen el mismo formato:
+
+### GET + cadena de consulta {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**Un valor por tipo de filtro**
+
+Actualmente, los registros de auditoría admiten un valor por tipo de filtro. Si proporcionas dos filtros del mismo tipo (p. ej., `filter[action]=ActionOne&filter[action]=ActionTwo`), prevalecerá el segundo filtro.
+
+</Info>
+
+### Tipos de filtro principales {#key-filter-types}
+
+Los principales tipos de filtro para depurar y recorrer los registros de auditoría son:
+
+| Tipo de filtro | Descripción | Valores de ejemplo |
+| --- | --- | --- |
+| `item_type` | Filtra todos los recursos de un mismo tipo. | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Filtra un único recurso específico, p. ej., un Asset o una Presentation. | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | Filtra una única acción, normalmente asociada a un `item_type` | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | Filtra por el ID de un usuario (actor) específico. | *&lt;user-id>* |
+| `team_id` | Filtra las actividades asociadas a un único Team. Este filtro solo es útil en cuentas que tienen varios Teams. | *&lt;team-id>* |
+| `inserted_at` | Filtra los eventos de auditoría que se produjeron antes o después de una fecha y hora específicas. Debe estar en formato ISO-8601, en UTC. | *2022-08-25T00:00:00Z* |
+
+### Tipos de elementos y acciones {#item-types-and-actions}
+
+| Recurso | Acciones |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## Ejemplos de filtros {#filter-examples}
+
+Todos los filtros siguen un formato similar, como se describió anteriormente. A continuación encontrarás algunos ejemplos orientados a casos de uso específicos que te ayudarán a empezar.
+
+| Escenario | Cadena de consulta |
+| --- | --- |
+| Acciones realizadas por un único usuario. | `?filter[actor_id]=<user-id>` |
+| Toda la actividad de una Presentation específica. | `?filter[item_id]=<presentation-id>` |
+| Comentarios dejados por un usuario. | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| Toda la actividad de Review Links en un Team. | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## Rangos de fechas {#date-ranges}
+
+Los rangos de fechas son un caso algo especial, ya que es necesario especificar tanto el `value` de fecha y hora de `inserted_at` como la operación (`op`) que se aplicará a esa fecha y hora.
+
+Por consiguiente, las consultas de rangos de fechas siempre tendrán dos elementos de filtro, cada uno de los cuales estará anidado junto a un parámetro `[inserted_at]`.
+
+Las operaciones admitidas incluyen:
+
+- **gt**: mayor que
+- **gte**: mayor o igual que
+- **lt**: menor que
+- **lte**: menor o igual que
+
+### Ejemplos de rangos de fechas {#date-range-examples}
+
+| Escenario | Cadena de consulta |
+| --- | --- |
+| Todos los registros de auditoría a partir de una fecha. | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| Todos los Assets subidos por un usuario específico hasta una fecha. | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

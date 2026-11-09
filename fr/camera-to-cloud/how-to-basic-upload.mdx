@@ -1,0 +1,221 @@
+---
+title: "Guide pratique : import (basique)"
+sidebarTitle: "Import (basique)"
+---
+
+## Introduction {#introduction}
+
+Nous avons maintenant atteint une étape passionnante de notre parcours d’intégration : l’import d’assets dans Frame.io. Ce guide vous accompagne tout au long du processus d’import basique.
+
+## Prérequis {#prerequisites}
+
+Si ce n’est pas déjà fait, consultez le guide [Implementing C2C: Setting Up](/fr/camera-to-cloud/implementing-c2c-setting-up) avant de poursuivre.
+
+Vous aurez besoin de l’`access_token` obtenu lors du [processus d’authentification et d’autorisation](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Pour ce guide, nous utiliserons un asset de test disponible via [ce lien Frame.io](https://f.io/Rq1q5CzB). Téléchargez ce fichier pour suivre nos exemples : vous pourrez ainsi retrouver les mêmes valeurs que dans nos exemples de commandes.
+
+## Étape 1 : créer un asset {#step-1-creating-an-asset}
+
+Importons [notre fichier d’exemple](https://f.io/Rq1q5CzB), en supposant qu’il a été créé il y a 10 secondes. Tout d’abord, nous devons créer une référence d’asset dans Frame.io :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation de `/v2/devices/assets` est [disponible ici](/fr/camera-to-cloud/api-reference/device-asset-create). Bien que l’ancien endpoint `/v2/assets` fonctionne toujours, nous recommandons aux nouvelles intégrations d’utiliser `/v2/devices/assets`.
+
+</Info>
+
+<Info>
+
+**Encodage JSON**
+
+Contrairement aux endpoints d’authentification utilisés précédemment, cet endpoint accepte l’encodage `application/json` plutôt que `form/multipart`. Il accepte également `application/x-www-form-urlencoded`.
+
+</Info>
+
+<Info>
+
+**Syntaxe de la commande**
+
+Cet exemple utilise un [heredoc](https://linuxize.com/post/bash-heredoc/) pour fournir la charge utile JSON à `curl` dans un format multiligne lisible. Le paramètre `--data-binary @-` indique à `curl` de lire les données brutes depuis stdin. Pour en savoir plus sur cette approche, consultez [cette page](https://unix.stackexchange.com/questions/88490/how-do-you-use-output-redirection-in-combination-with-here-documents-and-cat).
+
+</Info>
+
+Examinons les paramètres de la charge utile JSON :
+
+`name` : le nom de l’asset affiché dans Frame.io. Il n’a pas besoin de correspondre au nom du fichier sur le disque.
+
+`filetype` : le [type MIME](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types) du fichier. La plupart des langages de programmation proposent des utilitaires de détection du type MIME (exemples : [Go](https://golangcode.com/get-the-content-type-of-file/), [Python](https://docs.python.org/3/library/mimetypes.html)).
+
+`filesize` : la taille du fichier en octets. Notre fichier d’exemple fait environ 21,1 Mo.
+
+`offset` : le nombre de secondes écoulées depuis la création du fichier. La valeur par défaut est 0 si ce paramètre est omis. Ce paramètre doit être fourni, car il permet de déterminer si des fichiers doivent être rejetés en raison de la mise en pause de l’appareil. Nous aborderons ce point plus en détail dans le [guide d’import avancé](/fr/camera-to-cloud/how-to-advanced-uploads).
+
+La réponse ressemblera à ceci (certains champs sont omis) :
+
+```json
+{
+    "_type": "file",
+    ...
+    "id": "9a280f99-8f4f-46b0-a4b4-ec4c2f95138e",
+    ...
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]",
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ],
+    ...
+}
+```
+
+À ce stade, nous avons seulement informé Frame.io de notre intention d’importer un fichier ; aucune donnée n’a encore été transférée. Si vous consultez le dossier de votre appareil dans votre projet, vous verrez un asset temporaire à l’état « uploading ».
+
+Le champ `upload_urls` contient les URL vers lesquelles nous importerons les fragments de notre fichier. Pour notre fichier de test, nous devrions recevoir deux URL d’import.
+
+## Étape 2 : découper le fichier en fragments {#step-2-splitting-the-file-into-chunks}
+
+La réponse contenait plusieurs URL d’import. Lors d’un import dans Frame.io, nous divisons les fichiers en fragments que nous importons séparément, ce qui présente plusieurs avantages :
+
+- **Fiabilité accrue** : si un fragment échoue, il n’est pas nécessaire de relancer l’import complet
+- **Imports plus rapides** : nous pouvons importer plusieurs fragments en parallèle (voir le [guide d’import avancé](/fr/camera-to-cloud/how-to-advanced-uploads))
+
+Pour déterminer la taille optimale des fragments, utilisez cette formule :
+
+```python title="Python"
+# We use math.ceil() to ensure we get the upper bound in the division
+chunk_size = math.ceil(float(file.size) / float(len(response.upload_urls)))
+```
+
+Pour notre fichier d’exemple, le calcul est le suivant :
+
+```python title="Python"
+math.ceil(21136250 / 2)
+# 10568125
+```
+
+Chaque fragment doit donc faire 10 568 125 octets. Les tailles de fragment visent généralement environ 25 Mo ; les calculs exacts sont détaillés dans le [guide d’import avancé](/fr/camera-to-cloud/how-to-advanced-uploads).
+
+<Info>
+
+**Taille du dernier fragment**
+
+Comme la taille des fichiers se divise rarement de manière exacte, le dernier fragment peut être plus petit que la `chunk_size` calculée. Votre implémentation doit en tenir compte lors de la lecture des fragments du fichier.
+
+</Info>
+
+Pour cette démonstration, nous utiliserons les commandes [head](https://man7.org/linux/man-pages/man1/head.1.html) et [tail](https://man7.org/linux/man-pages/man1/tail.1.html) pour extraire les fragments du fichier.
+
+## Étape 3 : importer les fragments {#step-3-uploading-the-chunks}
+
+Pour importer le premier fragment :
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Info>
+
+**Syntaxe de la commande**
+
+Le paramètre `--data-binary @-` indique à `curl` d’utiliser les données brutes provenant de stdin, issues de la commande `head`.
+
+</Info>
+
+La requête nécessite les en-têtes suivants :
+
+`content-type` : la même valeur de type MIME que celle utilisée lors de la création de l’asset
+
+`x-amz-acl` : pour les permissions AWS S3, toujours défini sur `private`
+
+Un import réussi renvoie :
+
+```text
+HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+...
+```
+
+De la même manière, importez le second fragment :
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+Une fois les deux imports terminés, votre asset devrait être lisible dans Frame.io ! 🎉
+
+<Warning>
+
+**Erreurs d’import**
+
+Lorsque vous importez des fragments, vous envoyez les données directement à AWS S3, et non à l’API de Frame.io. Les réponses d’erreur suivent donc les formats d’AWS S3 plutôt que les erreurs standard de Frame.io. Nous verrons comment gérer les erreurs S3 dans le [guide de gestion des erreurs](/fr/camera-to-cloud/how-to-handle-errors).
+
+</Warning>
+
+<Info>
+
+**Ordre des fragments**
+
+Même s’il est plus simple conceptuellement d’importer les fragments de manière séquentielle, ils peuvent en réalité être importés dans n’importe quel ordre. Le système les assemblera correctement quel que soit l’ordre d’import.
+
+</Info>
+
+## Synthèse {#putting-it-all-together}
+
+Voici un exemple simplifié de pseudo-code de type Python pour le processus d’import complet :
+
+```python title="Python"
+file = open("~/Downloads/C2C_TEST_CLIP.mp4")
+mimetype = mimetypes.for_file("~/Downloads/C2C_TEST_CLIP.mp4")[0]
+created_at = time.ctime(file.stat.ST_CTIME)
+
+asset = c2c.asset_create(
+    name="C2C_TEST_CLIP.mp4", 
+    filetype=mimetype, 
+    filesize=file.size,
+    offset=datetime.now() - created_at,
+    channel=0,
+)
+
+chunk_size = math.ceil(float(file.size) / float(len(asset.upload_urls)))
+
+for chunk_url in asset.upload_urls:
+   chunk = file.read(bytes=chunk_size)
+   c2c.upload_chunk(chunk, chunk_url, mimetype)
+```
+
+Cet exemple illustre le flux de base sans gestion des erreurs ni imports parallèles, qui seront traités dans les guides de [gestion des erreurs](/fr/camera-to-cloud/how-to-handle-errors) et d’[import avancé](/fr/camera-to-cloud/how-to-advanced-uploads).
+
+## Étapes suivantes {#next-steps}
+
+Félicitations, vous avez importé votre premier asset dans Frame.io ! Le [guide d’import avancé](/fr/camera-to-cloud/how-to-advanced-uploads) présente des techniques plus élaborées et les exigences des implémentations prêtes pour la production.
+
+N’hésitez pas à contacter notre équipe pour toute question, puis passez au [guide d’import en temps réel](/fr/camera-to-cloud/how-to-upload-realtime) pour découvrir comment importer des assets au fur et à mesure de leur création.

@@ -1,0 +1,287 @@
+---
+title: "集成方检查清单"
+---
+
+## C2C 集成要求 {#c2c-integration-requirements}
+
+本检查清单概述了加入 C2C 生态系统的最佳实践和要求。虽然并非每一项都适用于所有 C2C 设备或应用程序，但 C2C 合作伙伴团队会在 C2C 认证计划期间与您合作，确定具体的要求。
+
+## 基本集成要求 {#basic-integration-requirements}
+
+所有集成都必须包含：
+
+<CardGroup cols={2}>
+
+<Card title="用户代码" icon="keyboard" iconType="solid">
+
+向用户显示一个 6 位数代码。对于网页界面或支持二维码的设备，请使用 `verification_url_complete` 为用户提供超链接选项，以便登录并选择要连接的项目。
+
+</Card>
+
+<Card title="项目显示" icon="folder" iconType="solid">
+
+显示已连接的项目名称，使用户无需在 [Frame.io](http://frame.io/) 的 UI 中查找即可快速确认其连接
+
+</Card>
+
+<Card title="上传状态" icon="upload" iconType="solid">
+
+清晰地显示以下指示信息：
+
+- 剩余文件数
+- 剩余文件总大小
+- 当前文件的上传进度
+- 已完成、排队中和失败的上传状态
+
+</Card>
+
+<Card title="网络状态" icon="network-wired" iconType="solid">
+
+显示网络连接状态，并在 8 小时后自动刷新访问令牌，无需用户交互或提醒（除非刷新出错）
+
+</Card>
+
+</CardGroup>
+
+其他要求：
+
+- 授权流程的每一步都可以取消
+- 使用 Socket 状态进行实时通信
+- 所有 HTTPS 端点调用中都包含固件版本请求头
+
+## 安全要求 {#security-requirements}
+
+在 [Frame.io](http://frame.io/)，安全至关重要。我们的要求包括：
+
+<CardGroup cols={2}>
+
+<Card title="HTTPS 与直接连接" icon="shield-halved" iconType="solid">
+
+- 仅使用 HTTPS 请求（HTTP 请求会被拒绝）
+- 设备/应用程序直接连接到 [Frame.io](http://frame.io/)（不使用中间服务）
+
+</Card>
+
+<Card title="凭据保护" icon="lock" iconType="solid">
+
+- 保护 `client_secret` 和 `client_id`（用户不可访问）
+- 保护 `access_token` 和 `refresh_token` 凭据
+- 加密存储密钥和令牌（可选，但建议这样做）
+
+</Card>
+
+</CardGroup>
+
+## 上传程序要求 {#uploader-requirements}
+
+可靠的媒体上传至关重要，尤其是在条件恶劣的环境中。集成必须：
+
+<CardGroup cols={2}>
+
+<Card title="上传功能" icon="upload" iconType="solid">
+
+- 支持在录制期间实时自动上传（首选）或在文件完成后自动上传
+- 清晰地显示上传状态，包括队列和结果
+- 将文件写入用户可访问的本地存储
+
+</Card>
+
+<Card title="队列管理" icon="list" iconType="solid">
+
+维护一个稳健的上传队列，能够处理：
+
+- 并发上传
+- 网络中断
+- 断电重启
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="错误处理" icon="triangle-exclamation" iconType="solid">
+
+针对以下情况实现自动重试：
+
+- 网络问题
+- 电源中断
+- 非致命错误（超时、网络错误、令牌过期）
+
+</Card>
+
+<Card title="上传控制" icon="play" iconType="solid">
+
+- 从最后一个成功上传的数据块恢复上传
+- 遵守 **PAUSED** 状态
+- 处理 AWS 非致命错误
+- 处理损坏的媒体，且不阻塞其他上传
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="上传选项" icon="sliders" iconType="solid">
+
+提供灵活的上传选项：
+
+- 切换自动/手动上传
+- 单个/批量选择文件
+- 文件类型优先级（可选）
+- 队列优先级（可选）
+- 并行上传（可选）
+- 允许取消单个或全部上传
+
+</Card>
+
+</CardGroup>
+
+## 网络要求 {#networking-requirements}
+
+集成必须：
+
+<CardGroup cols={2}>
+
+<Card title="速度与安全" icon="gauge-high" iconType="solid">
+
+- 达到至少 50Mbps 的上传速度（在网络条件允许的情况下）
+- 支持 WPA2 WiFi 安全协议（以太网可选，但建议支持）
+
+</Card>
+
+<Card title="网络管理" icon="network-wired" iconType="solid">
+
+- 支持 DHCP 和静态 IP
+- 清晰地显示网络状态（连接类型、速度、健康状况）
+- 切换网络时无需重新配对项目
+- 保存已知的 WiFi 网络
+
+</Card>
+
+</CardGroup>
+
+## 测试要求 {#testing-requirements}
+
+C2C 专为条件恶劣的环境而设计，因此需要在以下方面进行全面测试：
+
+<CardGroup cols={2}>
+
+<Card title="网络配置" icon="network-wired" iconType="solid">
+
+测试所有适用的连接类型：
+
+- 商用路由器，搭配：
+
+  - 有线 WAN
+  - 绑定蜂窝调制解调器
+  - 商用蜂窝调制解调器
+  - 热点式调制解调器
+
+- Mesh 路由器组网（包括 802.11r FT 协议）
+
+- 直接连接到各类调制解调器
+
+</Card>
+
+<Card title="韧性测试" icon="bolt" iconType="solid">
+
+- 意外断电
+- 网络断开
+- ISP 问题
+- 损坏媒体的处理
+- 离线创建资产及重新连接
+
+</Card>
+
+</CardGroup>
+
+## 工作流程要求 {#workflow-requirements}
+
+C2C 是一个生态系统，而不仅仅是一项功能。针对特定设备/应用程序的要求包括：
+
+<CardGroup cols={2}>
+
+<Card title="SDI/HDMI 录制" icon="video" iconType="solid">
+
+- 由摄像机自动触发录制
+- 灵活的摄像机选项
+- 时间码偏移调整
+- 手动录制功能
+- 一致的文件名处理
+- 准确的时间码同步
+
+</Card>
+
+<Card title="代理文件" icon="file-video" iconType="solid">
+
+- 文件名/时间码/元数据与主文件/OCF 一致
+- 针对 LTE 优化（1-12Mbps 比特率）
+- 支持标准的视频和音频编解码器
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={2}>
+
+<Card title="通用要求" icon="list-check" iconType="solid">
+
+- 视频/音频的时间码流
+- 支持多种格式上传（Proxy、OCF、LUT、WAV、RAW、JPG、HEIF、TIFF）
+- 处理项目名称变更（使用 `project_id` 而不是名称字符串）
+
+</Card>
+
+</CardGroup>
+
+## 质量保证 {#quality-assurance}
+
+在 [Frame.io](http://frame.io/)，质量至关重要。主要测试领域包括：
+
+<CardGroup cols={2}>
+
+<Card title="基本功能" icon="check" iconType="solid">
+
+- 稳定启动和运行
+- 项目连接
+- 硬件代码生成
+- 登录/注销功能
+- 项目/用户信息显示
+- 设备管理
+- 资产上传
+- 格式支持
+
+</Card>
+
+<Card title="技术要求" icon="gear" iconType="solid">
+
+- 中断后恢复上传
+- 进度显示
+- 网络状态指示
+- 8 小时连接保持
+- 可取消的授权
+- 直接连接 Frame.io
+- 凭据安全
+- 网络速度优化
+
+</Card>
+
+</CardGroup>
+
+## 未来改进 {#future-improvements}
+
+[Frame.io](http://frame.io/) Camera to Cloud API 在不断发展。在保持向后兼容的同时，我们欢迎就未来的发展方向持续交流，使我们的 API 与实际使用情况保持一致。
+
+## 就是这些啦，各位！ {#that’s-all-folks}
+
+恭喜您完成了 UC2CIG（C2C 集成指南大学）！希望本指南对您有所帮助。
+
+如有任何不清楚或缺失的信息，欢迎反馈；如有 C2C 相关问题，也请随时联系我们。我们随时为您提供帮助！
+
+如果您还没有阅读，请在继续之前先查看 [实施 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要在 [身份验证与授权过程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization) 中获得的 `access_token`。
+
+本检查清单以 [基本上传指南](/cn/camera-to-cloud/how-to-basic-upload) 和 [高级上传指南](/cn/camera-to-cloud/how-to-advanced-uploads) 为基础。

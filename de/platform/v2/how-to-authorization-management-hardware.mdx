@@ -1,0 +1,168 @@
+---
+title: "Anleitung: Autorisierung verwalten (Hardware)"
+sidebarTitle: "Anleitung – Autorisierung verwalten (Hardware)"
+---
+
+## Einführung {#introduction}
+
+In diesem Leitfaden erfahren Sie, wie Sie Autorisierungsinformationen eines *Hardwaregeräts* für Frame.io aktualisieren, widerrufen und speichern.
+
+## Was benötige ich? {#what-will-i-need}
+
+Falls Sie den Leitfaden [C2C implementieren: Einrichtung](/de/camera-to-cloud/implementing-c2c-setting-up) noch nicht gelesen haben, werfen Sie einen kurzen Blick darauf, bevor Sie fortfahren!
+
+Sie benötigen das `client_secret`, das Sie von unserem Team erhalten haben, sowie dieselbe `client_id`, die Sie im [Leitfaden zu Authentifizierung und Autorisierung](/de/platform/v2/implementing-c2c-authentication-and-authorization-hardware) verwendet haben. Außerdem werden das `access_token` und das `refresh_token` benötigt, um diesen Leitfaden abzuschließen.
+
+## Autorisierungstokens {#authorization-tokens}
+
+Im [letzten Leitfaden](/de/platform/v2/implementing-c2c-authentication-and-authorization-hardware) haben wir gelernt, wie man neue Autorisierungstokens *generiert*, indem der Benutzer sich authentifiziert und ein Gerät für ein Projekt autorisiert.
+
+*Access Tokens sind nur etwa 8 Stunden gültig, bevor sie ablaufen.* Wir möchten nicht, dass der Benutzer eines Geräts sein Gerät alle 8 Stunden koppeln muss. Daher haben wir im letzten Leitfaden den Scope `offline` angefordert und bei der Autorisierung mit Frame.io zusätzlich ein *Refresh Token* erhalten. Mit Refresh Tokens kann ein neues Access Token generiert werden, wenn das aktuelle abläuft.
+
+*Ein Refresh Token ist 14 Tage lang gültig.* Indem wir die Gültigkeitsdauer eines access_token begrenzen, schränken wir möglichen Unfug ein, der entstehen könnte, wenn ein Token in falsche Hände gerät. Wenn die Autorisierung nicht aktualisiert wird, bevor das *Refresh Token* verwendet wird, muss sich der Benutzer erneut authentifizieren.
+
+## Ihr Access Token aktualisieren {#refreshing-your-access-token}
+
+Wenn Sie einen Aufruf an unsere API senden, der ein Access Token erfordert, und die folgende Antwort erhalten:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+… dann ist Ihr Access Token abgelaufen!
+
+Um Ihr Token zu aktualisieren, senden wir den folgenden Aufruf:
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**API-Endpoint-Spezifikation**
+
+Die Dokumentation zu `/v2/auth/token` finden Sie [hier](/de/camera-to-cloud/api-reference/authentication/auth-device-token)
+
+</Info>
+
+<Info>
+
+**Sie wissen nicht genau, was diese Werte sind?**
+
+Alle diese Werte wurden im [vorherigen Leitfaden](/de/platform/v2/implementing-c2c-authentication-and-authorization-hardware) generiert. Sehen Sie ihn sich an, falls Sie das noch nicht getan haben, und kehren Sie dann hierher zurück!
+
+</Info>
+
+Indem wir all diese Werte verwenden (statt nur des Refresh Tokens), machen wir es unmöglich, allein aus einem online geleakten Refresh Token eine neue Autorisierung zu generieren. Wer ein Token generieren möchte, als wäre er Ihre Integration, benötigt sowohl das `refresh_token` *als auch* das `client_secret`.
+
+Sie sollten eine Antwort wie diese erhalten:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+Dies sind Ihre neuen Autorisierungstokens. *Sobald Sie Ihre Tokens aktualisiert haben, funktionieren die alten Tokens nicht mehr.* Halten Sie diese also griffbereit!
+
+Wenn wir jetzt versuchen, mit unserem alten Refresh Token zu aktualisieren, erhalten wir einen Fehler:
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+Unser Token wurde bereits aktualisiert, daher ist die Verwendung des bisherigen Refresh Tokens ungültig.
+
+<Danger>
+
+**Ein 401 während einer Aktualisierung**
+
+Wenn Sie beim Aktualisieren Ihrer Tokens die Antwort `401 Not Authorized` erhalten, ist Ihr Token nicht mehr gültig, und Sie müssen den Autorisierungsprozess von vorn beginnen.
+
+</Danger>
+
+## Eine verpasste Aktualisierungsantwort {#missing-a-refresh-response}
+
+`refresh_token`-Werte können nur ein einziges Mal verwendet werden. Wenn Sie Frame.io aufrufen, um ein Token zu aktualisieren, und die Antwort verpassen – sei es aufgrund eines Netzwerkfehlers oder eines unerwarteten Neustarts –, dann *müssen Sie den gesamten Authentifizierungs-/Autorisierungsablauf neu starten.*
+
+Das ist eine unglückliche Möglichkeit, aber Vorsicht ist besser als Nachsicht!
+
+## Ihre Tokens widerrufen {#revoking-your-tokens}
+
+In manchen Fällen möchten wir uns möglicherweise von Frame.io „abmelden“. Ein Benutzer könnte beispielsweise entscheiden, dass er nach Abschluss eines Drehs nicht mehr verbunden sein möchte. Das Widerrufen der Autorisierung ist auch dann eine gute Praxis, wenn Ihre App in einen fehlerhaften Zustand gerät und auf einen sauberen Ausgangszustand zurückgesetzt werden muss. Immer wenn Sie wissen, dass Sie die aktuelle Autorisierung verwerfen werden, sollte Ihre App versuchen, sie zu widerrufen.
+
+Um unsere Autorisierung zu widerrufen, senden wir den folgenden Aufruf:
+
+<Info>
+
+**Erneut autorisieren**
+
+Nachdem Sie diesen Aufruf ausgeführt haben, müssen Sie den im [letzten Leitfaden](/de/platform/v2/implementing-c2c-authentication-and-authorization-hardware) beschriebenen Authentifizierungs- und Autorisierungsprozess neu starten.
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]
+```
+
+<Info>
+
+**API-Endpoint-Spezifikation**
+
+Die Dokumentation zu `/v2/auth/revoke ` finden Sie [hier](/de/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)
+
+</Info>
+
+Die Antwort enthält keinen Payload. Wir haben im Befehl `--include` verwendet, um die zurückgegebenen Header auszugeben, die mit dem Statuscode `200` beginnen sollten, wenn unser Aufruf erfolgreich war:
+
+```text
+HTTP/2 200
+...
+```
+
+Da unser Token nun widerrufen wurde, geben alle Aufrufe an [Frame.io](http://frame.io/), die ein `access_token` erfordern, `Not Authorized` zurück. Wenn der Benutzer die Frame.io-Verbindung wieder nutzen möchte, muss er sein Gerät erneut mit dem Projekt koppeln.
+
+## Tokens speichern {#storing-tokens}
+
+Damit die Funktionalität über Neustarts hinweg erhalten bleibt, müssen Sie Ihre Autorisierungs-Header dauerhaft speichern. Dies kann in einer Datei, einer Datenbank oder in Ihrer eigenen Cloud erfolgen. Hier einige Richtlinien zum Speichern von Autorisierungstokens:
+
+**Erlauben Sie dem Benutzer nicht, die Tokens zu sehen oder darauf zuzugreifen.** Ihr Benutzer sollte seine Tokens niemals anzeigen oder abrufen können. Sie sollten ausschließlich von Ihrer App verwaltet werden.
+
+**Verschlüsseln Sie Ihre Tokens im Ruhezustand.** Genau wie das `client_secret` sollten Access und Refresh Tokens nach Möglichkeit im Ruhezustand verschlüsselt werden, um Schlüsseldiebstahl zu verhindern. *Autorisierungsschlüssel sollten nicht im Klartext gespeichert werden.*
+
+**Speichern Sie Ihre Autorisierungstokens nicht in derselben Datei wie Ihr client_secret.** Die Python-Beispiel-App speichert `client_secret` und `client_id` in derselben Datei wie ihre Autorisierungstokens. Für eine Demo funktioniert das gut, ist aber keine gute Praxis für Produktionscode. `client_secret` und `client_id` sind statische Werte für ein Gerät, und *das Gerät funktioniert nicht mehr, wenn sie verloren gehen.*
+
+Die Autorisierungstokens sind nicht statisch und müssen während der Lebensdauer des Geräts viele Male neu geschrieben werden. Wenn das Gerät beim Aktualisieren einer Datei mit neuen Tokens die Stromversorgung verlieren würde, könnte diese Datei beschädigt werden und das `client_secret` verloren gehen. Das Gerät könnte sich dann *nie wieder* bei Frame.io authentifizieren. Wenn die Tokens getrennt gespeichert werden, muss ein Benutzer das Gerät im schlimmsten Fall erneut koppeln.
+
+Der beste Ort zum Speichern von Tokens wäre eine bewährte Datenbank wie SQLite, aber zumindest sollten Autorisierungsdaten von unseren anderen Werten getrennt werden.
+
+## Wie geht es weiter? {#next-up}
+
+Falls Sie es noch nicht getan haben, empfehlen wir Ihnen, sich an unser Team zu wenden und dann mit dem nächsten Leitfaden fortzufahren. Wir freuen uns darauf, von Ihnen zu hören!

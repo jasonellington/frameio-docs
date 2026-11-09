@@ -1,0 +1,73 @@
+---
+title: "ngrok の使用"
+---
+
+ngrok は、ローカルマシン上に安全なトンネルを作成し、ローカルプロジェクトのテストや、クライアントやチームメイトとのレビューのための作業共有に使用できるパブリック URL を提供する、使いやすいツールです。HTTP または HTTPS を設定でき、このツールは広く使われているため、問題が発生した場合でも、さまざまな解決方法を説明した記事がたくさんあります。この記事では、ngrok を簡単にインストールするいくつかの方法と、Web アプリケーションが ngrok と通信できない場合の対処法について説明します。
+
+<Info>
+
+**ngrok**
+
+ngrok の方々が、ngrok を介した Frame.io Webhook のサポートに特化した素晴らしい記事を書いてくれています。[こちら](https://ngrok.com/docs/integrations/frameio/webhooks)をご覧ください。
+
+</Info>
+
+## ngrok をインストールする {#install-ngrok}
+
+ngrok はいくつかの方法で使用できます。
+
+### ngrok インストーラーでインストールする {#install-via-the-ngrok-installer}
+
+1. ngrok の Web サイトにアクセスし、そこに記載されている手順に従います: [https://ngrok.com/download](https://ngrok.com/download)
+2. アカウントを接続することで利用できる機能が必要な場合は、手順に従ってアカウントとトークンを取得します。
+
+アカウントの取得やトークンの追加は必須ではありませんが、必要かどうかを判断するために、ダウンロードページをぜひ確認してください。
+
+<Info>
+
+**注:**
+
+この方法を使用した場合、システム全体で使用できるように設定しない限り、ngrok は保存した場所から実行されます。
+
+</Info>
+
+### Homebrew でインストールする {#install-with-homebrew}
+
+これは私が気に入っている ngrok のインストール方法です。Homebrew がインストールされていれば、`homebrew cask install ngrok` と入力するだけです。ngrok がインストールされ、どこからでも使用できるようになります。何より、ターミナルで各コマンドの先頭に `./ngrok` と入力する必要がなく、`ngrok` と入力するだけで済みます。この方法の詳細については[こちら](https://gist.github.com/wosephjeber/aa174fb851dfe87e644e)をご覧ください。
+
+## ngrok を使用する {#use-ngrok}
+
+ngrok をセットアップしたら、`3000` などのポートを選択し、ターミナルのコマンドラインからコマンド ngrok http `3000` で実行します。ポート `3000` を使用する必要はありませんが、セットアップでよく選ばれるポートです。
+
+ngrok を特定のフォルダーから実行するようにセットアップした場合は、ngrok を配置したフォルダーに移動して、コマンド `./ngrok http 3000` を使用する必要があります。
+
+プロジェクトのサーバーを起動して同じポートでリッスンさせると、ngrok が提供するパブリックアドレスを使用して作業にアクセスできるようになります。
+
+### Web アプリでの ngrok のトラブルシューティング - 末尾のスラッシュ {#troubleshooting-ngrok-with-your-web-app-trailing-slash}
+
+ngrok で発生する可能性がある問題として、Web アプリで使用する ngrok URL をセットアップしたときに、サーバーに接続できないことがあります。この問題の厄介な点は、何かを送信したことを ngrok が認識しないことです。localhost:4040 を開いて状況を確認しても、何も表示されません(localhost:4040 は、サーバーへの受信リクエストを監視できるように ngrok が提供しているものです)。ngrok はアドレスを (/.*) ではなく /(.*) に照合しているようです。そのため、アドレスの末尾にスラッシュを含めずに、ngrok の監視ツールに何も表示されない場合は、ngrok が指定したアドレスに一致するものを見つけられていないことが原因です。
+
+末尾にスラッシュを追加する例: `http://something.ngrok.io/`
+
+スラッシュを含むエンドポイントに解決されるように、サンプルアプリケーションを作成することもできます。ただし、Frame.io アプリがサーバーに到達するには、サンプルアプリがエンドポイント `/actions` を使用している場合、ngrok アドレスの末尾に /actions エンドポイントを追加する必要があることに注意してください。たとえば、ngrok アドレスが `http://something.ngrok.io` の場合、Custom Action のセットアップでは `http://something.ngrok.io/actions` と指定する必要があります。これは他の Web アプリケーションでは異なる場合があるため、すぐにうまくいかない場合は、ngrok アドレスの末尾をいろいろと試してみてください。
+
+### ngrok 以外のものを使用できますか?Glitch を試してみましょう! {#can-i-use-something-besides-ngrok-try-glitch}
+
+Glitch は ngrok のなかなか優れた代替手段で、セットアップもより迅速です。Glitch ではアカウントを作成し、Glitch のサーバーを使用して、パブリックにアクセス可能な URL を持つ独自のアプリを構築できます。他のユーザーとコラボレーションしたり、コードを公開または非公開にしたり、さまざまな言語やプラットフォームから選択したりできます。利用可能なものについては [https://glitch.com/create](https://glitch.com/create) をご覧ください。
+
+Glitch でプロジェクトをセットアップする際、一部の Web アプリケーションでは末尾のスラッシュの問題が当てはまります。Frame.io の場合、[developer.frame.io](/ja/platform/v2) で Custom Action をセットアップするときは、Glitch が提供する URL の末尾にスラッシュを含める必要があります。/actions エンドポイントの場合でも、それ以外に何かを追加する必要はありません。
+
+### 今すぐ試せるセットアップ済みのものはありますか? {#is-there-something-set-up-i-could-try-now}
+
+はい。ngrok を使用したくない場合や、独自の Glitch プロジェクトを作成したくない場合のために、試用できるサンプルアプリケーションを用意しています: [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me)。このアドレスを \[/) の Custom Actions セクションに追加する際は、末尾にスラッシュを含めることを忘れないでください。
+
+### リソース {#resources}
+
+このセクションでは、記事全体で紹介したリソースを一覧にしています。
+
+- **ngrok** [https://ngrok.com/](https://ngrok.com/)
+- **Glitch** [https://glitch.com/](https://glitch.com/)
+- **Glitch で利用可能なプラットフォーム** [https://glitch.com/create](https://glitch.com/create)
+- **JavaScript による Custom Action の Glitch サンプルアプリ** [https://frameio-custom-action.glitch.me](https://frameio-custom-action.glitch.me)
+- **Frame.io 開発者の登録とセットアップ** [Frame.io 開発者サイト](/ja/platform/v2)
+- **Frame.io Web アプリ** [https://app.frame.io/](https://app.frame.io/)

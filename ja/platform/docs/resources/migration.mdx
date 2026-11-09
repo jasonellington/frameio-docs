@@ -1,0 +1,345 @@
+---
+title: "Frame.io Legacy API から V4 への移行ガイド"
+sidebarTitle: "移行"
+---
+
+## はじめに {#introduction}
+
+Frame.io V4 API は、*V2 エンドポイント*や *Frame.io V3 API* とも呼ばれる Legacy API を再設計したものです。この再設計では、Legacy API の関連機能をすべて維持しながら、Frame V4 の新しい機能を最大限に活用しています。このガイドでは、Legacy API と V4 API の主な違いを概説し、スムーズに移行するためのステップバイステップのガイダンスを提供します。
+
+## 移行チェックリスト {#migration-checklist}
+
+<Steps>
+
+<Step title="認証">
+
+Adobe Admin Console でまだ管理されていない <Tooltip tip="生成した開発者トークンで Legacy API を使用しており、V4 に自動移行されたアカウント。V4 で作成されたアカウントや手動で移行されたアカウントは含まれません">**V4 自動移行アカウント**</Tooltip>の場合、[Frame.io 開発者サイト](/ja/platform/welcome)で管理されている Legacy Developer トークンを引き続き使用できますが、API リクエストにキー `x-frameio-legacy-token-auth`、値 `true` のヘッダーを追加する必要があります。それ以外の場合は、以下の[認証](#adobe-developer-console-managed-authentication)セクションの手順に従ってください。
+
+</Step>
+
+<Step title="既存の API 呼び出しを更新する">
+
+すべてのレガシー API ルートを、新しい V4 API のルートと JSON ペイロードにマッピングする必要があります。このプロセスを支援するため、以下にかなり網羅的な[マッピング](#endpoint-mappings-legacy-api-to-v4)表を用意しています。
+
+</Step>
+
+<Step title="テストを強く推奨">
+
+**十分にテストしてください。** API には多くの変更があるため、V4 アカウントでテストして、新しい API が期待どおりに動作することを確認することをお勧めします。
+
+</Step>
+
+<Step title="専用のログインを実装する">
+
+認証 URL が別であるため、V4 専用のログイン方法を実装してください。V4 の認証 URL は Legacy API とは異なり、まだ V4 にアップグレードされていないアカウントはレスポンスに含まれないため、別のインテグレーションとして扱う必要があります。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+以下のマッピング表に記載されていないエンドポイントについてご質問がある場合は、サポートチーム（[support@frame.io](mailto:support@frame.io)）までお問い合わせください。
+
+</Note>
+
+## Adobe Developer Console で管理される認証 {#adobe-developer-console-managed-authentication}
+
+[Adobe Developer Console](https://developer.adobe.com/developer-console/) で管理されている V4 移行済みアカウントの場合は、OAuth 2.0 で V4 API を使用する必要があります。以下の手順に従ってください。
+
+<Steps>
+
+<Step title="Adobe プロジェクトを作成する">
+
+**Adobe Developer Console でプロジェクトを作成**し、製品として Frame.io を追加します。
+
+</Step>
+
+<Step title="認証タイプを選択する">
+
+**認証します。** 詳しくは、[認証ガイド](https://developer.adobe.com/frameio/guides/Authentication/)をご覧ください。V4 アカウントがまだ Adobe Admin Console で管理されていない場合は、この手順をスキップできます。
+
+- **ユーザー認証**：Client ID と Client Secret（またはそのいずれか）を使用して Frame に接続し、ユーザーがユーザー名とパスワードでログインする必要があります。
+- **サーバー間認証**：Client ID と Client Secret を使用して Frame に接続しますが、ユーザーがブラウザ経由でログインする必要はありません。
+
+</Step>
+
+<Step title="Bearer 認証を実装する">
+
+**JWT Bearer 認証**：すべての API リクエストで、キー `Authorization`、値 `Bearer <IMS_ACCESS_TOKEN>` のヘッダーを使用して認証トークンを渡します。
+
+</Step>
+
+</Steps>
+
+## エンドポイントのマッピング（Legacy API から V4） {#endpoint-mappings-legacy-api-to-v4}
+
+<Note>
+
+レガシーの開発者トークン認証を使用している場合は、API リクエストにキー x-frameio-legacy-token-auth、値 true のヘッダーを追加する必要があります。
+
+</Note>
+
+移行に役立つ一般的な注意事項：
+
+<Steps>
+
+<Step title="ペイロード">
+
+リクエストとレスポンスのペイロードが異なる場合があります。
+
+</Step>
+
+<Step title="Teams → Workspaces">
+
+Legacy API の「Teams」は、V4 の「Workspaces」に相当します。
+
+</Step>
+
+<Step title="Assets">
+
+Legacy API の「Assets」は、V4 では「Files」、「Folders」、「Version Stacks」に分割されました。
+
+</Step>
+
+<Step title="権限">
+
+V4 では権限とロールが異なるため、エンドポイントの構造が変わります。V4 には、ワークスペースとプロジェクトのユーザーロールがあります。詳しくは、[ユーザー権限の管理](/ja/platform/docs/guides/managing-user-permissions)をご覧ください。
+
+</Step>
+
+</Steps>
+
+### 1. アカウントとユーザー情報 {#1-accounts-&-user-info}
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/accounts` <br />([ユーザーのアカウントを取得](/ja/platform/v2/api-reference/accounts/get-accounts)) | **GET** | `/v4/accounts` <br />([アカウントの一覧](/ja/platform/api-reference/accounts/index)) | V4 は、ユーザーがアクセスできるすべてのアカウントを返します。 |
+| **GET** | `/v2/accounts/{account_id}` <br />([ID でアカウントを取得](/ja/platform/v2/api-reference/accounts/get-account)) | N/A | N/A | 特定のアカウントに関する情報は、アカウント一覧エンドポイントで確認できます。 |
+| **GET** | `/v2/me` <br />([現在のユーザーを取得](/ja/platform/v2/api-reference/users/get-me)) | **GET** | `/v4/me` <br />([ユーザーの詳細](/ja/platform/api-reference/users/show)) | 現在のユーザーのプロファイルを取得します。 |
+| **GET** | `/v2/accounts/{account_id}/membership` | N/A | N/A | ロールと権限は、ワークスペースとプロジェクトの権限で処理されます。 |
+
+### 2. ワークスペース（Team エンドポイントの置き換え） {#2-workspaces-replaced-team-endpoints}
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/accounts/{account_id}/teams` <br />([アカウントのすべての Team を取得](/ja/platform/v2/api-reference/teams/get-teams-by-account)) | **GET** | `/v4/accounts/{account_id}/workspaces` <br />([ワークスペースの一覧](/ja/platform/api-reference/workspaces/index)) | Legacy API の「teams」の概念は、V4 では「workspaces」になります。 |
+| **POST** | `/v2/accounts/{account_id}/teams` <br />([指定したアカウントに Team を作成](/ja/platform/v2/api-reference/teams/create-team)) | **POST** | `/v4/accounts/{account_id}/workspaces` <br />([ワークスペースを作成](/ja/platform/api-reference/workspaces/create)) | ボディは類似しています（name など）。レスポンスは team オブジェクトではなく workspace オブジェクトです。 |
+| **GET** | `/v2/teams/{team_id}` <br />([Team を取得](/ja/platform/v2/api-reference/teams/get-team)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}` <br />([ワークスペースを表示](/ja/platform/api-reference/workspaces/show)) | V4 では Team ID が Workspace ID になります。 |
+| **GET** | `/v2/teams/{team_id}/members` <br />([Team メンバーを取得](/ja/platform/v2/api-reference/teams/get-team-members)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/users` <br />[(ワークスペースメンバーを取得)](/ja/platform/api-reference/workspace-permissions/index) | ワークスペース内のすべてのユーザーを返します |
+| **POST** | `/v2/teams/{team_id}/members` <br />([Team メンバーを追加)](/ja/platform/v2/api-reference/teams/add-team-member)) | **PATCH** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/users/{user_id}` <br />([ワークスペースのユーザーロールを追加または更新](/ja/platform/api-reference/workspace-permissions/workspace-user-roles-update)) | ワークスペースへのユーザーの追加や削除を行えます |
+| **GET** | `/v2/teams/{team_id}/membership` <br />([Team のユーザーメンバーシップを取得](/ja/platform/v2/api-reference/teams/get-membership-by-team)) | N/A | N/A | ロールと権限は、ワークスペースとプロジェクトの権限で処理されます。 |
+
+### 3. プロジェクト {#3-projects}
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/teams/{team_id}/projects` <br />([Team ごとのプロジェクトを取得](/ja/platform/v2/api-reference/projects/get-projects-by-team)) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects` <br />([プロジェクトの一覧](/ja/platform/api-reference/projects/index)) | V4 では `account_id` と `workspace_id` の両方を指定する必要があります。 |
+| **GET** | `/v2/projects/shared` | **GET** | `/v4/accounts/{account_id}/invited_projects` <br />([招待されたプロジェクトの一覧](https://next.developer.frame.io/platform/api-reference/projects/invited-projects-index)) | 招待されたプロジェクトのみを一覧表示します。`/v4/accounts/{account_id}/projects` は、招待されたプロジェクトを含むすべてのプロジェクトを一覧表示します |
+| **POST** | `/v2/teams/{team_id}/projects` <br />([プロジェクトを作成](/ja/platform/v2/api-reference/projects/create-project)) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects` <br />([プロジェクトを作成](/ja/platform/api-reference/projects/create)) | ボディは類似しています：`{ "name": "MyProject", ... }`。 |
+| **GET** | `/v2/projects/{project_id}` <br />([ID でプロジェクトを取得](/ja/platform/v2/api-reference/projects/get-project)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}` <br />([プロジェクトを表示](/ja/platform/api-reference/projects/show)) | `account_id` と `project_id` が必要です |
+| **PUT** | `/v2/projects/{project_id}` <br />([プロジェクトを更新](/ja/platform/v2/api-reference/projects/update-project)) | **PATCH** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects/{project_id}` <br />([プロジェクトを更新](/ja/platform/api-reference/projects/update)) | V4 では部分更新に PATCH を使用します。 |
+| **DELETE** | `/v2/projects/{project_id}` <br />[(ID でプロジェクトを削除)](/ja/platform/v2/api-reference/projects/delete-project) | **DELETE** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/projects/{project_id}` <br />[(プロジェクトを削除)](/ja/platform/api-reference/projects/delete) | プロジェクトを削除します。 |
+| **GET** | `/v2/projects/{project_id}/collaborators` <br />([プロジェクトのコラボレーターを取得](/ja/platform/v2/api-reference/projects/get-project-collaborators)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}/users` <br />([プロジェクトのユーザーロールの一覧](/ja/platform/api-reference/project-permissions/index)) | プロジェクト内のすべてのユーザーを返します（レガシーの collaborators エンドポイントに最も近い機能） |
+| **POST** | `/v2/projects/{project_id}/collaborators` <br />([プロジェクトにコラボレーターを追加](/ja/platform/v2/api-reference/projects/add-collaborator-to-project)) | **PATCH** | `/v4/accounts/{account_id}/projects/{project_id}/users/{user_id}` <br />([指定したプロジェクトのユーザーロールを更新](/ja/platform/api-reference/project-permissions/project-user-roles-update)) | プロジェクトへのユーザーの追加や削除を行えます（レガシーの collaborators エンドポイントに最も近い機能） |
+
+### 4. フォルダー {#4-folders}
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/assets/{asset_id}/children` <br />([子 Asset を取得](/ja/platform/v2/api-reference/assets/get-assets)) | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/children` <br />([フォルダーの子要素の一覧](/ja/platform/api-reference/folders/index)) | Legacy API で `asset_id` がフォルダーだった場合、V4 では `folder_id` になります。 |
+| **POST** | `/v2/assets/{parent_asset_id}/children` <br />([Asset を作成](/ja/platform/v2/api-reference/assets/create-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/folders` <br />([フォルダーを作成](/ja/platform/api-reference/folders/create)) | Legacy API では `"type": "folder"` を使用していましたが、V4 では `{"data": {"name": "Folder name"}}` とします。 |
+| **GET** | `/v2/assets/{asset_id}` <br />([Asset を取得](/ja/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([フォルダーを表示](/ja/platform/api-reference/folders/show)) | Legacy API では "type": "folder" が必要です <br />V4 API ではパスパラメーターに `folder_id` と `account_id` が必要です |
+| **PUT** | `/v2/assets/{asset_id}` ([Asset を更新](/ja/platform/v2/api-reference/assets/update-asset)) | **PATCH** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([フォルダーを更新](/ja/platform/api-reference/folders/update)) | Legacy API：`asset_id` がフォルダー ID になります <br />V4 API：ボディ：`{"data": {"name": "New Folder Name"}}`。 |
+| **DELETE** | `/v2/assets/{asset_id}` <br />([Asset を削除](/ja/platform/v2/api-reference/assets/delete-asset)) | **DELETE** | `/v4/accounts/{account_id}/folders/{folder_id}` <br />([フォルダーを削除)](/ja/platform/api-reference/folders/delete) | フォルダーを削除します。 |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/folders` <br />([フォルダーの一覧](/ja/platform/api-reference/folders/list)) | 指定したフォルダー内のフォルダーを一覧表示します。（プロジェクト表示ルートから root_folder_id を取得し、それを使用して最上位レベルのすべてのフォルダーを一覧表示できます。） |
+
+### 5. バージョンスタック {#5-version-stacks}
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/assets/{destination_folder}/copy` <br />([Asset をコピー](/ja/platform/v2/api-reference/assets/copy-asset)) | **POST** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/copy` <br />([バージョンスタックをコピー](/ja/platform/api-reference/version-stacks/copy)) | Legacy：パスにコピー先フォルダーを指定し、リクエストでバージョンスタックとともに使用します。V4：バージョンスタックをコピーします。 |
+| **POST** | `/v2/assets/{asset_id}/version` <br />([Asset をバージョン管理](/ja/platform/v2/api-reference/assets/add-version-to-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/version_stacks` <br />([バージョンスタックを作成](/ja/platform/api-reference/version-stacks/create)) | バージョンスタックを作成します。リクエストボディに 2〜10 個のファイル ID が必要です。 |
+| **POST** | `/v2/assets/{asset_id}/version` <br />([Asset をバージョン管理](/ja/platform/v2/api-reference/assets/add-version-to-asset)) | **PATCH** | `/v4/accounts/{account_id}/files/{file_id}/move` <br />([ファイルをバージョンスタックに移動](/ja/platform/api-reference/files/move)) | ファイルを既存のバージョンスタックに移動します。リクエストボディの `parent_id` に `version_stack_id` を使用します。 |
+| **GET** | `/v2/assets/{asset_id}/children` <br />([子 Asset を取得](/ja/platform/v2/api-reference/assets/get-assets)) | **GET** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/children` <br />([バージョンスタックの子要素の一覧](/ja/platform/api-reference/version-stacks/index)) | Legacy：バージョンスタックの asset_id とともに使用します。V4：バージョンスタック内の子要素（ファイル/バージョン）を一覧表示します。 |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/folders/{folder_id}/version_stacks` <br />([バージョンスタックの一覧](/ja/platform/api-reference/version-stacks/list)) | フォルダー内のバージョンスタックを一覧表示します。 |
+| N/A | N/A | **PATCH** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}/move` <br />([バージョンスタックを移動](/ja/platform/api-reference/version-stacks/move)) | バージョンスタックを別のフォルダーに移動します。 |
+| **GET** | `/v2/assets/{asset_id}` <br />([Asset を取得](/ja/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/version_stacks/{version_stack_id}` <br />([バージョンスタックを表示](/ja/platform/api-reference/version-stacks/show)) | Legacy：バージョンスタックの asset_id とともに使用します。V4：バージョンスタックの詳細を表示します。 |
+| **DELETE** | `/v2/assets/{asset_id}/unversion` (Delete unversion) | N/A | N/A | バージョン解除は現在 V4 ではサポートされていません。 |
+
+### 6. ファイル {#6-files}
+
+注意：V4 では、ファイルを作成するためのエンドポイントが 2 つになりました（ローカルアップロードと S3 経由のアップロード）。詳しくは、[ファイルのアップロード](/ja/platform/v4-experimental/docs/guides/how-to-upload)をご覧ください。
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/assets/{parent_asset_id}/children` <br />([Asset を作成](/ja/platform/v2/api-reference/assets/create-asset)) | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/files/local_upload` <br />([ファイルを作成（ローカルアップロード）](/ja/platform/api-reference/files/create-local-upload)) | Legacy API：name、type、filetype、filesize、auto_version_id が必要です <br />V4 API：パスパラメーターに account_id と folder_id が必要で、ペイロードに file_size と name が必要です |
+| N/A | N/A | **POST** | `/v4/accounts/{account_id}/folders/{folder_id}/files/remote_upload` <br />([ファイルを作成（リモートアップロード）](/ja/platform/api-reference/files/create-remote-upload)) | パスパラメーターに account_id と folder_id が必要で、ペイロードにソース URL と name が必要です |
+| **GET** | `/v2/assets/{asset_id}` <br />([Asset を取得](/ja/platform/v2/api-reference/assets/get-asset)) | **GET** | `/v4/accounts/{account_id}/files/{file_id}` <br />([ファイルを表示)](/ja/platform/api-reference/files/show) | ファイルの詳細を表示します。多くの includes を利用して、レスポンスで追加のファイル詳細を返すことができます。 |
+| N/A | N/A | **GET** | `/v4/accounts/{account_id}/files/{file_id}/status` <br />([ファイルのメタデータを取得](/ja/platform/api-reference/files/show-file-upload-status)) | リモートアップロードによるファイル作成エンドポイントからのリモートアップロードのステータスを取得します。 |
+| **PUT** | `/v2/assets/{asset_id}` <br />([Asset を更新](/ja/platform/v2/api-reference/assets/update-asset)) | **PATCH** | `/v4/accounts/{account_id}/files/{file_id}` <br />([ファイルを更新](/ja/platform/api-reference/files/update)) | ファイル名を更新します。 |
+| **DELETE** | `/v2/assets/{asset_id}` <br />([Asset を削除](/ja/platform/v2/api-reference/assets/delete-asset)) | **DELETE** | `/v4/accounts/{account_id}/files/{file_id}` <br />([ファイルを削除](/ja/platform/api-reference/files/delete)) | 成功時は 204 No Content を返します。 |
+
+### 7. コメント {#7-comments}
+
+V4 API のコメント機能のほとんどが現在サポートされています。
+
+<Info>
+
+**近日公開予定の機能：**
+
+- コメントへのリアクション（絵文字など）
+- コメントの完了ステータスの表示または変更
+- コメントを閲覧したユーザーの確認（インプレッション）
+
+</Info>
+
+<Note>
+
+「timestamp」フィールドは、タイムスタンプではなく、コメントが付けられたフレームスタンプ（1 から開始）を表します
+
+</Note>
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/assets/{asset_id}/comments` <br />([コメントスレッドのすべてのコメントと返信を取得](/ja/platform/v2/api-reference/comments/get-comments)) | **GET** | `/v4/accounts/{account_id}/files/{file_id}/comments` <br />([コメントの一覧](/ja/platform/api-reference/comments/index)) | ファイルのコメントを一覧表示します。 |
+| **POST** | `/v2/assets/{asset_id}/comments` <br />([コメントを作成](/ja/platform/v2/api-reference/comments/create-comment)) | **POST** | `/v4/accounts/{account_id}/files/{asset_id}/comments` <br />([コメントを作成](/ja/platform/api-reference/comments/create)) | コメントを作成します。ボディは類似しています：`{"text":"Nice","timestamp":12.3}`。 |
+| **GET** | `/v2/comments/{comment_id}` <br />([ID でコメントを取得](/ja/platform/v2/api-reference/comments/get-comment)) | **GET** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([コメントを表示](/ja/platform/api-reference/comments/show)) | ID で単一のコメントを取得します。 |
+| **PUT** | `/v2/comments/{comment_id}` <br />([コメントを更新](/ja/platform/v2/api-reference/comments/update-comment)) | **PATCH** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([コメントを更新)](/ja/platform/api-reference/comments/update) | テキストや時間などを更新します。 |
+| **DELETE** | `/v2/comments/{comment_id}` <br />([コメントを削除](/ja/platform/v2/api-reference/comments/delete-comment)) | **DELETE** | `/v4/accounts/{account_id}/comments/{comment_id}` <br />([コメントを削除](/ja/platform/api-reference/comments/delete)) | コメントを削除します。 |
+| **GET** | `/v2/comments/{comment_id}/impressions` <br />([インプレッションを取得](/ja/platform/v2/api-reference/comments/get-comment-impressions)) | N/A | N/A | インプレッションは現在 V4 ではサポートされていません。 |
+
+### 8. 共有（レビューリンク / プレゼンテーション） {#8-shares-review-links-/-presentations}
+
+Frame V4 では、共有リンクはレビューリンクとプレゼンテーションリンクに分かれなくなりました。V4 では、レビューまたはプレゼンテーションのエクスペリエンスに合わせて、共有リンクに異なるスタイルを設定できるようになりました。
+
+注意：V4 API を介したレガシーのレビューリンクやプレゼンテーションの操作はサポートされていません。
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **GET** | `/v2/projects/{project_id}/review_links` <br />([プロジェクト内のレビューリンクの一覧](/ja/platform/v2/api-reference/review-links/list)) | **GET** | `/v4/accounts/{account_id}/projects/{project_id}/shares` <br />([共有の一覧](https://developer.adobe.com/frameio/api/current/#tag/Shares/operation/shares.index)) | プロジェクト内の共有を一覧表示します（レガシーのレビューリンクとプレゼンテーションは含まれないことに注意してください） |
+| **POST** | `/v2/projects/{project_id}/review_links` <br />([レビューリンクを作成)](/ja/platform/v2/api-reference/review-links/review-link-create)) | **POST** | `/v4/accounts/{account_id}/projects/{project_id}/shares` <br />([共有を作成](https://developer.adobe.com/frameio/api/current/#tag/Shares/operation/shares.create)) | 新しい共有リンクを作成します。ボディの例：`{"data":{"name":"Review Link","type":"review"}}`。 |
+| **POST** | `/v2/review_links/{link_id}/assets` <br />([レビューリンクに Asset を追加](/ja/platform/v2/api-reference/review-links/review-link-item-create)) | **POST** | `/v4/accounts/{account_id}/shares/{share_id}/assets` <br />([共有に新しいアセットを追加](/ja/platform/api-reference/shares/add-asset)) | 共有にアセットを追加します。ファイル、フォルダー、バージョンスタックに対応しています。 |
+| N/A | 存在しません | **DELETE** | `/v4/accounts/{account_id}/shares/{share_id}/assets/{asset_id}` <br />[(共有を削除)](/ja/platform/api-reference/shares/remove-asset) | 共有からアセットを削除します |
+| **DELETE** | `/v2/review_links/{link_id}` <br />([レビューリンクを削除](/ja/platform/v2/api-reference/review-links/review-link-delete)) | **DELETE** | `/v4/accounts/{account_id}/shares/{share_id}` <br />[(共有を削除)](/ja/platform/api-reference/shares/delete) | 共有リンクを削除します。 |
+| **PUT** | `/v2/review_links/{review_link_id}` <br />([レビューリンクを更新](/ja/platform/v2/api-reference/review-links/review-link-update)) | **PATCH** | `/v4/accounts/{account_id}/shares/{share_id}` <br />[(共有を更新)](/ja/platform/api-reference/shares/update) | 共有リンクを更新します |
+
+### 9. Webhook {#9-webhooks}
+
+V3 で使用していた Webhook は移行され、ほとんどの場合同じように機能します。移行時には無効化されるため、機能させるには有効にする必要があります。アセットのイベントはファイルとフォルダーに分割されたため、いくつかの変更が必要になります。また、注意すべき V4 固有の新しいイベントとして、metadata.value.updated、コレクション関連のイベント、共有関連のイベントがあります。
+
+移行された Webhook を再度有効にする前に、[Webhook のレート制限](/ja/platform/docs/guides/webhooks#webhook-rate-limits)を確認してください。V4 の Webhook と Custom Action のイベントは、アカウントごとに **1 分あたり 1,000 イベント**、**1 時間あたり 20,000 イベント**の制限を共有します。どちらの制限も、アカウント全体での合計量に適用されます。
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/teams/{team_id}/hooks` <br />[(Webhook を作成)](/ja/platform/v2/api-reference/webhooks/create-webhook-for-team) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspaces_id}/webhooks` <br />[(Webhook を作成)](/ja/platform/api-reference/webhooks/create) | `{"data":{"url":"...","events":["file.created",...]}}` を指定します。 |
+| **GET** | `/v2/accounts/{account_id}/webhooks` <br />[(アカウントの Webhook を取得)](/ja/platform/v2/api-reference/webhooks/get-webhooks-by-account) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspaces_id}/webhooks` <br />[(Webhook の一覧)](/ja/platform/api-reference/webhooks/index) | ワークスペースのすべての Webhook を取得します。注意：アカウントのすべての Webhook を取得するには、アカウントのすべてのワークスペースを取得してから、それらのワークスペースのすべての Webhook を取得する必要があります。 |
+| **GET** | `/v2/hooks/{hook_id}` <br />[(Webhook を取得)](/ja/platform/v2/api-reference/webhooks/get-webhook) | **GET** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(Webhook の一覧)](/ja/platform/api-reference/webhooks/index) | Webhook の情報を取得します |
+| **PUT** | `/v2/hooks/{hook_id}` <br />[(Webhook を更新)](/ja/platform/v2/api-reference/webhooks/update-webhook) | **PATCH** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(Webhook を更新)](https://developer.adobe.com/frameio/api/experimental/#tag/Webhooks/operation/webhooks.update) | Webhook の設定を更新します |
+| **DELETE** | `/v2/hooks/{hook_id}` <br />[(Webhook を削除)](/ja/platform/v2/api-reference/webhooks/delete-webhook) | **DELETE** | `/v4/accounts/{account_id}/webhooks/{webhook_id}` <br />[(Webhook を削除)](https://developer.adobe.com/frameio/api/experimental/#tag/Webhooks/operation/webhooks.delete) | Webhook を削除します。 |
+
+### 10. Custom Actions {#10-custom-actions}
+
+V3 で使用していた Custom Actions は移行されますが、リクエストとレスポンスの処理にいくつかの変更が必要になります。移行時には無効化されるため、機能させるには有効にする必要があります。詳しくは、こちらの[（ドキュメント）](/ja/platform/docs/guides/custom-actions#migrated-actions)を参照してください。
+
+注意：Custom Actions のエンドポイントは現在 experimental API に含まれており、ヘッダー「api-version: experimental」が必要です。
+
+| メソッド | Legacy エンドポイント | メソッド | V4 エンドポイント | 備考 |
+| --- | --- | --- | --- | --- |
+| **POST** | `/v2/teams/{team_id}/actions` ([Custom Action を作成](/ja/platform/v2/api-reference/custom-actions/create-action-for-team)) | **POST** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/actions` ([Custom Action を作成](/ja/platform/v4-experimental/api-reference/custom-actions/actions-create)) | ワークスペースに Custom Action を作成します。 |
+| **DELETE** | `/v2/actions/{action_id}` ([Custom Action を削除](/ja/platform/v2/api-reference/custom-actions/delete-action)) | **DELETE** | `/v4/accounts/{account_id}/actions/{action_id}` ([Custom Action を削除](/ja/platform/v4-experimental/api-reference/custom-actions/actions-delete)) | Custom Action を削除します。 |
+| **PUT** | `/v2/actions/{action_id}` ([Custom Action を更新](/ja/platform/v2/api-reference/custom-actions/update-action)) | **PATCH** | `/v4/accounts/{account_id}/actions/{action_id}` ([Custom Action を更新](/ja/platform/v4-experimental/api-reference/custom-actions/actions-update)) | Custom Action の詳細を更新します。 |
+| **GET** | `/v2/teams/{team_id}/actions` ([Team の Custom Actions を取得)](/ja/platform/v2/api-reference/custom-actions/get-actions-by-account) | **GET** | `/v4/accounts/{account_id}/workspaces/{workspace_id}/actions` ([Custom Actions の一覧](/ja/platform/v4-experimental/api-reference/custom-actions/actions-index)) | 指定したワークスペースの Custom Actions を一覧表示します。 |
+| **GET** | `/v2/actions/{action_id}` ([ID で Custom Action を取得](/ja/platform/v2/api-reference/custom-actions/get-action)) | **GET** | `/v4/accounts/{account_id}/actions/{action_id}` ([Custom Action の詳細を表示](/ja/platform/v4-experimental/api-reference/custom-actions/actions-show)) | Custom Action の詳細を表示します。 |
+
+## 移行手順 {#migration-steps}
+
+<Steps>
+
+<Step title="サポートされていない V2 エンドポイントを調整する">
+
+サポートされていない Legacy V2 エンドポイントを**調整**します。
+
+</Step>
+
+<Step title="ベース URL を更新する">
+
+**ベース URL を** `api.frame.io/v2/...` から `api.frame.io/v4/...` に**更新**します。
+
+</Step>
+
+<Step title="API リクエストを更新する">
+
+コード内の **API リクエストを更新**して、新しいエンドポイントのスキーマを参照するようにします。
+
+</Step>
+
+<Step title="JSON ペイロードを更新する">
+
+リクエスト/レスポンススキーマの **JSON ペイロードを更新**して、正しいフィールドを生成、使用していることを確認します。
+
+</Step>
+
+<Step title="用語を更新する">
+
+コードとフロントエンドの用語を更新します：「teams」→「workspaces」、「assets」→「files/folders」、「review links」または「presentation links」→「shares」。
+
+</Step>
+
+<Step title="エンドポイントをテストする">
+
+新たに更新したすべてのエンドポイントを**テスト**します。403、404、422 が返される場合は、エンドポイントやリクエストペイロードの形式などを確認してください。
+
+</Step>
+
+<Step title="エラーレスポンスを解析する">
+
+API 呼び出しが失敗した場合は、新しい詳細なエラーレスポンスを**解析**し、`{"errors": [...]}` JSON レスポンスで問題を確認します。
+
+</Step>
+
+<Step title="本番環境にデプロイする">
+
+V4 の [Frame.io](http://frame.io/) アカウントで検証が完了したら、本番環境に**デプロイ**します。
+
+</Step>
+
+</Steps>
+
+## エラー処理とよくある問題 {#error-handling-&-common-issues}
+
+<Note>
+
+一部のルートでは、以下の例とは若干異なるカスタムの説明を含むエラーが返される場合があります。
+
+</Note>
+
+<CardGroup cols={2}>
+
+<Card title="クライアントエラー（4xx）" icon="triangle-exclamation" iconType="solid">
+
+- **400** Bad Request：ペイロードが正しいか確認してください。
+- **401** Unauthorized：認可トークンが無効か、指定されていません。
+- **403** Forbidden：スコープが不足しているか、ユーザーにアクセス権がありません。
+- **404** Not Found：エンドポイント、API バージョン、ID を確認してください。
+- **422** Unprocessable Entity：リクエストデータを検証してください
+- **429** Too Many Requests：バックオフ付きのリトライを実装してください。
+
+</Card>
+
+<Card title="サーバーエラー（5xx）" icon="server" iconType="solid">
+
+- **500** Internal Server Error：少し時間をおいてからリトライしてください。
+
+</Card>
+
+</CardGroup>
+
+## SDK のサポート {#sdk-support}
+
+Legacy SDK と同様に、開発者が使用できる Python SDK が用意されており、さらに今回初めて TypeScript SDK も利用できるようになりました。これらの SDK は同様の機能を備えていますが、メソッドはまったく異なるため、Legacy SDK から V4 SDK に更新する場合は、それに応じてコードを必ず更新してください。SDK は以下のリンクから入手できます。
+[SDK の使い方](/ja/platform/docs/getting-started#sdks)
+[Python SDK](/ja/platform/docs/sdk-reference/python-sdk-reference)
+[TypeScript SDK](/ja/platform/docs/sdk-reference/type-script-sdk-reference)
+
+---

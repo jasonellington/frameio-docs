@@ -1,0 +1,80 @@
+---
+title: "Przepływ autoryzacji kodem OAuth 2"
+---
+
+## Przegląd {#overview}
+
+Frame.io obsługuje tworzenie aplikacji OAuth 2 i zarządzanie nimi. W przeciwieństwie do [tokenów deweloperskich](/pl/platform/v2/authentication#developer-tokens) aplikacje OAuth 2 umożliwiają każdemu użytkownikowi Frame.io przekazanie swoich danych uwierzytelniających poprzez bezpieczne logowanie, po którym aplikacja może działać w imieniu tego użytkownika.
+
+Mówiąc prościej, aplikacje OAuth 2 najlepiej sprawdzają się w każdym scenariuszu integracji, w którym istotny jest kontekst i dostęp konkretnego użytkownika.
+
+## Przepływ kodu OAuth 2 {#oauth-2-code-flow}
+
+### Podstawowa sekwencja {#the-basic-sequence}
+
+W dużym uproszczeniu w OAuth 2 uczestniczą trzy strony:
+
+1. **Użytkownik** (w naszym przypadku: każdy, kto ma login Frame.io)
+2. **Aplikacja** kliencka (zewnętrzna aplikacja OAuth2.0)
+3. **Serwer** danych uwierzytelniających (w naszym przypadku: Frame.io)
+
+Przepływ kodu w OAuth 2 to czteroetapowy proces, w którym:
+
+1. **Aplikacja** wyświetla **użytkownikowi** ekran logowania
+2. **Użytkownik** wprowadza swoje dane uwierzytelniające, które trafiają bezpośrednio do **serwera**
+3. Jeśli logowanie się powiedzie, **serwer** odsyła stronę z prośbą do **użytkownika** o potwierdzenie, że chce przyznać **aplikacji** wstępnie skonfigurowany zestaw zakresów dostępu
+4. Jeśli **użytkownik** wyrazi zgodę, **serwer** wysyła **aplikacji** token, za pomocą którego można działać w imieniu **użytkownika** w ramach żądanych zakresów.
+
+W ten sposób aplikacja kliencka może wykonywać działania w imieniu użytkownika — bezpiecznie, za jego zgodą i (co ważne) bez wglądu w rzeczywiste dane uwierzytelniające użytkownika i bez ich przetwarzania.
+
+### Cykl wywołań zwrotnych {#the-callback-cycle}
+
+Powyższa sekwencja wymaga, aby serwer (Frame.io) udostępniał dwie usługi, każdą z własną ścieżką:
+
+| Usługa | URL | Metoda | Opis |
+| --- | --- | --- | --- |
+| Auth | `https://applications.frame.io/oauth2/auth` | `GET` | Na podstawie informacji o aplikacji klienckiej OAuth uruchamia przepływ uwierzytelniania na serwerze. |
+| Token | `https://applications.frame.io/oauth2/token` | `POST` | Na podstawie informacji z etapu uwierzytelniania pobiera token w imieniu użytkownika. |
+
+Rola aplikacji OAuth 2 w tym cyklu polega na przedstawieniu się serwerowi i wykonaniu tych dwóch żądań.
+
+## Krótki przykład {#quick-example}
+
+<Info>
+
+**Czy budowałeś już wcześniej aplikację OAuth 2?**
+
+Jeśli znasz pozostałe mechanizmy OAuth2.0, poniższy przykład może wystarczyć, aby zacząć. Jeśli potrzebujesz więcej szczegółów, zapoznaj się z bardziej szczegółowym przewodnikiem [tutaj](/pl/platform/v2/building-an-oauth2-app).
+
+</Info>
+
+### Konfigurowanie aplikacji {#setting-up-your-app}
+
+1. Zaloguj się do [Frame.io Developer Portal](/pl/platform/v2) przy użyciu swoich danych logowania Frame.io, przejdź do sekcji **OAuth Apps** za pomocą linków po lewej stronie i kliknij **New**, aby rozpocząć konfigurowanie aplikacji.
+2. Na kolejnym ekranie wprowadź **Name** i **Redirect URI** aplikacji, wybierz **Scopes** i zdecyduj, czy chcesz używać **PKCE**.
+3. Zapisz — powinieneś teraz zobaczyć konfigurację nowej aplikacji.
+
+<Info>
+
+**Informacje o PKCE**
+
+Ustawienie **P**roof **K**ey for **C**ode **E**xchange („pixie”) umożliwia aplikacji żądanie tokenów bez podawania `client_secret`. W związku z tym nie otrzymasz `client_secret` i nie należy dołączać nagłówka `Authorization` podczas wysyłania żądania `POST` po token w cyklu wywołań zwrotnych aplikacji. Mimo to **musisz dołączyć swój `client_id` do wywołania zwrotnego**, w przeciwnym razie żądanie zostanie odrzucone.
+
+</Info>
+
+#### Kiedy należy używać PKCE? {#when-should-i-use-pkce}
+
+Ogólnie rzecz biorąc, używanie PKCE nie ma negatywnych skutków ubocznych i jest to zalecane oraz preferowane podejście. Tworząc aplikację kliencką OAuth2.0, zaimplementujesz przepływ autoryzacji kodem w jednym z dwóch kontekstów:
+
+- **Prywatnym**: przepływ jest zaimplementowany w języku po stronie serwera (Python, Java), a `client_secret` możesz bezpiecznie przechowywać na kontrolowanym przez siebie serwerze.
+- **Publicznym**: przepływ jest zaimplementowany w języku po stronie klienta (Javascript) lub bezpośrednio na urządzeniu klienckim kontrolowanym przez użytkownika końcowego (iOS, Android).
+
+Z reguły aplikację można uznać za „publiczną”, jeśli Ty, jako jej twórca, nie możesz widzieć i kontrolować całego ruchu sieciowego związanego z wymianą sekretu. Oznacza to, że oprócz aplikacji po stronie klienta za publiczne należy uznać aplikacje na urządzenia mobilne, urządzenia wbudowane oraz wszelkie urządzenia znajdujące się w sieci użytkownika końcowego (AppleTV, Roku itp.).
+
+W kontekstach prywatnych *możesz* używać PKCE. W kontekstach publicznych *musisz* używać PKCE.
+
+## Budowanie aplikacji OAuth 2 {#building-your-oauth-2-application}
+
+Teraz, gdy masz konfigurację aplikacji w Frame.io, możesz przystąpić do konfigurowania serwera wywołań zwrotnych, który obsłuży dwie kluczowe ścieżki potrzebne do ukończenia cyklu wywołań zwrotnych, zgodnie z powyższą tabelą.
+
+Bardziej szczegółowe informacje o tym, jak zbudować aplikację, znajdziesz w artykule [Budowanie aplikacji OAuth 2](/pl/platform/v2/building-an-oauth2-app).

@@ -1,0 +1,164 @@
+---
+title: "Guide pratique : gérer les autorisations"
+sidebarTitle: "Gérer les autorisations"
+---
+
+## Présentation {#overview}
+
+Ce guide décrit les procédures de gestion des jetons d’autorisation des appareils dans Frame.io, notamment l’actualisation des jetons, leur révocation et les bonnes pratiques de stockage sécurisé.
+
+## Prérequis {#prerequisites}
+
+Consultez le guide [Implementing C2C: Setting Up](/fr/camera-to-cloud/implementing-c2c-setting-up) pour vous assurer que la configuration est correcte.
+
+Éléments essentiels requis :
+
+- Un `client_secret` valide délivré par Frame.io
+- Votre `client_id` attribué, comme indiqué dans le [guide d’authentification et d’autorisation](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization)
+- Des identifiants `access_token` et `refresh_token` valides
+
+## Comprendre les jetons d’autorisation {#understanding-authorization-tokens}
+
+Notre précédent guide sur l’[authentification des appareils](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization) décrivait le processus d’obtention des jetons d’autorisation initiaux via l’authentification de l’utilisateur.
+
+Les jetons d’accès restent fonctionnels pendant environ 8 heures. Pour éviter d’avoir à réappairer fréquemment l’appareil, nous utilisons le scope `offline` afin d’obtenir un jeton d’actualisation en même temps que l’autorisation. Ce jeton d’actualisation permet de générer de nouveaux jetons d’accès lorsqu’ils expirent.
+
+Les jetons d’actualisation restent valides pendant 14 jours. Cette limitation délibérée de la durée des jetons d’accès renforce la sécurité en réduisant les risques liés aux jetons compromis. Notez que si l’autorisation n’est pas renouvelée avant l’expiration du jeton d’actualisation, l’utilisateur devra s’authentifier à nouveau.
+
+## Processus de renouvellement du jeton d’accès {#access-token-renewal-process}
+
+Lorsque le jeton d’accès a expiré, les requêtes API reçoivent cette réponse :
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+Exécutez la commande suivante pour obtenir un nouveau jeton :
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation détaillée de `/v2/auth/token` est disponible [ici](/fr/camera-to-cloud/api-reference/authentication/auth-device-token)
+
+</Info>
+
+Cette implémentation nécessite plusieurs facteurs d’authentification afin de renforcer la sécurité. Une personne non autorisée devrait obtenir à la fois le `refresh_token` et le `client_secret` pour usurper l’identité de votre intégration.
+
+Un renouvellement réussi génère cette réponse :
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+Une fois le jeton actualisé avec succès, vos identifiants précédents deviennent invalides. Veillez à stocker correctement les nouveaux jetons d’autorisation.
+
+Toute tentative de réutilisation d’un jeton d’actualisation expiré renvoie :
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+Cela indique que le jeton a déjà été utilisé et n’est plus valide.
+
+<Danger>
+
+**Erreur 401 lors d’une actualisation**
+
+La réception d’une réponse `401 Not Authorized` lors de l’actualisation du jeton indique que les identifiants ont été invalidés, ce qui nécessite un nouveau processus d’autorisation.
+
+</Danger>
+
+## Gestion des échecs de réponse d’actualisation {#handling-failed-refresh-responses}
+
+Comme les valeurs `refresh_token` sont à usage unique, ne pas récupérer la réponse d’actualisation (en raison d’une interruption réseau ou d’un arrêt du système) oblige à relancer l’intégralité de la séquence d’authentification/autorisation.
+
+Ce protocole de sécurité, bien que parfois contraignant, est indispensable pour préserver l’intégrité du système.
+
+## Processus de révocation des jetons {#token-revocation-process}
+
+Certaines circonstances peuvent nécessiter de mettre fin à l’accès à Frame.io, comme la fin d’un projet ou la réinitialisation de l’application. Appliquez les procédures de révocation appropriées lorsque vous mettez fin à l’autorisation en cours.
+
+Exécutez la commande suivante pour révoquer l’autorisation :
+
+<Info>
+
+**Nouvelle autorisation**
+
+Après la révocation, vous devez relancer le processus d’authentification et d’autorisation décrit dans le [guide d’authentification et d’autorisation](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]'
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation complète de `/v2/auth/revoke` est disponible [ici](/fr/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)
+
+</Info>
+
+Le système renvoie des en-têtes sans charge utile. Le succès est indiqué par un code de statut `200` :
+
+```text
+HTTP/2 200
+...
+```
+
+Après la révocation, les opérations Frame.io nécessitant une authentification par `access_token` renverront `Not Authorized`. Pour rétablir l’accès, l’appareil doit être réappairé au projet.
+
+## Mise en œuvre du stockage des jetons {#token-storage-implementation}
+
+Conserver l’autorisation lors des redémarrages du système nécessite un stockage sécurisé des jetons. Respectez ces consignes essentielles :
+
+**Mettre en place des contrôles d’accès utilisateur :** limitez la visibilité et l’accès aux jetons aux seuls processus de l’application.
+
+**Activer le chiffrement du stockage :** chiffrez les jetons stockés, y compris le `client_secret` et les identifiants d’autorisation. Ne conservez jamais de clés d’autorisation en texte brut.
+
+**Séparer les identifiants :** bien que notre application Python de démonstration regroupe le stockage, les environnements de production doivent séparer les jetons d’autorisation du `client_secret`. Tenez compte des facteurs suivants :
+
+- Le `client_secret` et le `client_id` constituent des identifiants permanents de l’appareil : leur perte entraîne une défaillance définitive de l’appareil
+- Les jetons d’autorisation sont régulièrement mis à jour pendant le fonctionnement de l’appareil
+- Un stockage séparé garantit qu’une corruption du stockage des jetons ne nécessite qu’un réappairage de l’appareil plutôt qu’une réinitialisation complète de l’authentification
+
+Bien que SQLite offre des capacités de stockage optimales pour les jetons, prévoyez au minimum un stockage séparé pour les données d’autorisation et les identifiants principaux.
+
+## Étapes suivantes {#next-steps}
+
+Bravo pour votre progression ! Nous vous invitons à passer au [guide sur l’état de connexion et les heartbeats](/fr/camera-to-cloud/how-to-heartbeats-connection-info-and-status). N’hésitez pas à contacter notre équipe pour toute question ou préoccupation.

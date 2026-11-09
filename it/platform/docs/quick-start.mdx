@@ -1,0 +1,131 @@
+---
+title: "Guida rapida"
+---
+
+Questa guida illustra il percorso più rapido per effettuare la tua prima chiamata riuscita all’API Frame.io V4. Creerai un progetto nella Adobe Developer Console, genererai le credenziali ed effettuerai la tua prima richiesta API.
+
+---
+
+## Passaggio 1: crea un progetto nella tua Adobe Developer Console + aggiungi l’API Frame.io V4 {#step-1-create-a-project-in-your-adobe-developer-console-+-add-the-frame-io-v4-api}
+
+Dalla [Adobe Developer Console](https://developer.adobe.com/developer-console/), crea un nuovo progetto e aggiungi l’API Frame.io V4.
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-1.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+<Tip>
+
+Questa guida utilizza OAuth 2.0 Web App per l’autenticazione. Per informazioni sugli altri metodi di autenticazione, consulta la **[Guida all’autenticazione](/it/platform/docs/guides/authentication/overview)**
+
+</Tip>
+
+## Passaggio 2: configura la tua applicazione {#step-2-configure-your-application}
+
+Seleziona OAuth Web App come tipo di applicazione e imposta i campi di reindirizzamento.
+
+| **Redirect URI** | Una route della tua applicazione che riceve la risposta OAuth da Adobe IMS. Dopo che un utente ha effettuato l’accesso e approvato l’accesso, Adobe IMS lo reindirizza a questo URL con un codice di autorizzazione nella query string, che la tua app scambia poi con un token di accesso |
+| --- | --- |
+| **Redirect URI pattern** | Pattern che corrispondono a URL di reindirizzamento aggiuntivi oltre al Redirect URI predefinito. È utile se la tua app viene eseguita in più ambienti o utilizza un routing dinamico. Più pattern vanno forniti come elenco separato da virgole |
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-2.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+## Passaggio 3: autenticazione {#step-3-authentication}
+
+Avvia il flusso OAuth reindirizzando l’utente all’endpoint di autorizzazione di Adobe IMS:
+
+```
+  https://ims-na1.adobelogin.com/ims/authorize/v2
+  ?client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}
+  &scope=offline_access,openid,email,profile,additional_info.roles
+  &response_type=code
+```
+
+Dopo che l’utente ha effettuato l’accesso e approvato l’accesso, Adobe IMS lo reindirizza al Redirect URI configurato con un codice di autorizzazione nella query string. Scambia quel codice con un token di accesso inviando una richiesta POST all’endpoint dei token di IMS.
+
+<br />
+
+Ecco un elenco delle definizioni dei parametri, insieme a un esempio di richiesta e risposta:
+
+| Parametro | Obbligatorio | Descrizione |
+| --- | --- | --- |
+| **code** | Sì | Il valore della query string code restituito al tuo `redirect_uri` quando un utente si autentica con la tua applicazione |
+| **grant_type** | Sì | Il valore deve essere sempre `authorization_code` |
+| **authorization** | Obbligatorio per i client riservati | La stringa dell’header di autenticazione `Basic`. È la parola letterale `Basic` seguita dalla stringa codificata in Base64 di `clientID:clientSecret` |
+
+**Esempio di richiesta**
+
+```
+curl -X POST 'https://ims-na1.adobelogin.com/ims/token/v3' \
+  -H 'Authorization: Basic {AUTHORIZATION}' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'code={CODE}&grant_type=authorization_code'
+```
+
+**Esempio di risposta**
+
+```
+{
+    "access_token": "{ACCESS_TOKEN}",
+    "refresh_token": "{REFRESH_TOKEN}",
+    "sub": "B0DC108C5CD449CA0A494133@c62f24cc5b5b7e0e0a494004",
+    "id_token": "{ID_TOKEN}",
+    "token_type": "bearer",
+    "expires_in": 86399
+}
+```
+
+<Tip>
+
+**Supporto degli SDK**
+
+Sia l’SDK Python sia l’SDK TypeScript includono moduli di autenticazione che gestiscono l’handshake OAuth, lo scambio dei token e l’aggiornamento automatico dei token. Puoi trovare maggiori informazioni su ciascuno qui:
+[**Python**](/it/platform/docs/sdk-reference/python-sdk-reference)  | [**TypeScript**](/it/platform/docs/sdk-reference/type-script-sdk-reference)
+
+</Tip>
+
+---
+
+## Passaggio 4: effettua le tue prime richieste API {#step-4-make-your-first-api-requests}
+
+Con il tuo token di accesso, inizia chiamando l’endpoint [`/v4/me`](/it/platform/api-reference/users/show):
+
+```
+curl https://api.frame.io/v4/me \
+-H "Authorization: Bearer <token>"
+```
+
+Questa richiesta chiama l’<Tooltip tip="Per maggiori informazioni su Adobe IMS, consulta il **[riferimento API](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#request-2)**">**API di Adobe IMS**</Tooltip> per verificare il tuo token e le informazioni dell’utente.
+
+Una richiesta riuscita restituisce i dettagli dell’utente autenticato, inclusi `user_id`, nome ed email. Usali per confermare che il tuo flusso di autenticazione funziona come previsto.
+
+La maggior parte degli endpoint dell’API V4 richiede un `account_id`, che non viene restituito da `/v4/me`. Per ottenere il tuo `account_id`, effettua una richiesta a [`/v4/accounts`](/it/platform/api-reference/accounts/index):
+
+```
+curl https://api.frame.io/v4/accounts \
+-H "Authorization: Bearer <token>"
+```
+
+Viene restituito l’elenco degli account disponibili per l’utente autenticato. Usa l’`account_id` di questa risposta nelle richieste API successive.
+
+<Tip>
+
+**User ID e Account ID**
+
+Il tuo **`user_id`** ti identifica come individuo, mentre il tuo **`account_id`** rappresenta l’organizzazione a cui appartieni. La maggior parte degli endpoint V4 opera a livello di account.
+
+</Tip>
+
+---
+
+## Passaggi successivi {#next-steps}
+
+Con l’autenticazione configurata e il tuo `account_id`, sei pronto per iniziare a lavorare con l’API di Frame.io. Queste risorse possono aiutarti a iniziare:
+
+- [Guida all’autenticazione](/it/platform/docs/guides/authentication/overview)
+- [Account, progetti e workspace](/it/platform/docs/guides/accounts-projects-and-workspaces)
+- [Riferimento API](/it/platform/api-reference/account-permissions/account-user-roles-update)
+- [Collection Postman](/it/platform/docs/guides/postman-collection)

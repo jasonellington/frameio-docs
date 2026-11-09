@@ -1,0 +1,497 @@
+---
+title: "Coleção do Postman"
+---
+
+Este guia aborda os conceitos básicos da coleção oficial do Postman da Frame.io Developer API, um conjunto de requisições prontas que você pode usar para começar a trabalhar com a API Frame.io V4.
+
+A coleção abrange toda a gama de endpoints da API V4, divididos nas categorias estável e experimental. Os endpoints estáveis estão prontos para produção, e os endpoints experimentais são adições mais recentes que funcionam, mas podem mudar com base no feedback antes de serem promovidos a estáveis.
+
+## Primeiros passos com o Postman {#getting-started-with-postman}
+
+<Tip>
+
+Este guia pressupõe que você já gerou credenciais para a API. Se ainda não fez isso, comece [aqui](/pt-BR/platform/docs/quick-start)
+
+</Tip>
+
+<Steps>
+
+<Step title="Crie uma conta no Postman + escolha sua configuração">
+
+Crie sua conta do Postman em [postman.com](http://auth.postman.com/__redirect/login) e escolha sua configuração. Você pode baixar o aplicativo do Postman [aqui](https://www.postman.com/downloads/) ou usar o Postman na web.
+
+</Step>
+
+<Step title="Importe a coleção do Postman da Frame.io Developer API">
+
+<CardGroup cols={2}>
+
+<Card title="Coleção da Frame.io Developer API" icon="terminal" iconType="solid" href="https://www.postman.com/adobe/workspace/frame-io-v4-public-api/collection/33150877-924315f2-cc62-45f5-8153-77ff2aaa9067?action=share&creator=33150877&active-environment=33150877-cffd66a8-23bd-4c50-8891-29157ead1185">
+
+Faça um fork ou baixe aqui
+
+</Card>
+
+</CardGroup>
+
+</Step>
+
+</Steps>
+
+### Configurando seu ambiente {#setting-up-your-environment}
+
+A coleção da Frame.io Developer API tem um <Tooltip tip="Um conjunto de variáveis que você pode referenciar ao enviar requisições. Para saber mais sobre ambientes, consulte a documentação do Postman **[aqui](https://learning.postman.com/docs/sending-requests/variables/managing-environments)**">ambiente</Tooltip> padrão com várias variáveis de ambiente definidas. Os valores de `BASE_URL` e `IMS_BASE_URL` são estáticos. Variáveis de ambiente adicionais podem ser configuradas de acordo com as informações da sua conta.
+
+<Frame>
+
+![alt image](/images/platform/docs/guides/postman-collection/0780e30f05ff2cee570d698b9adc209f24326281b60e23968e5d78e66c5c9b43.webp)
+![alt image](/images/platform/docs/guides/postman-collection/663c863cbbec947567616faf433d79e3900e70ace3d8d9d26299ee20e204c064.webp)
+
+</Frame>
+
+Abaixo está uma tabela com a descrição de cada variável encontrada nos ambientes Default e Stage da coleção:
+
+| Variável | Descrição | Como obter | Ambiente |
+| --- | --- | --- | --- |
+| `BASE_URL` | URL base para todas as requisições da API V4 | Pré-configurada, não edite | Default |
+| `IMS_BASE_URL` | URL base de autenticação do Adobe IMS | Pré-configurada, não edite | Default, Stage |
+| `IMS_CLIENT_ID` | O Client ID do seu app Frame.io | Página de credenciais no **[Adobe Developer Console](https://developer.adobe.com/developer-console/)** | Stage |
+| `IMS_CLIENT_SECRET` | O Client Secret do seu app Frame.io | Página de credenciais no **[Adobe Developer Console](https://developer.adobe.com/developer-console/)** | Stage |
+| `FOLDER_ID` | ID exclusivo da pasta de destino | Retornado no objeto de resposta da pasta | Default |
+| `WEBHOOK_ID` | ID exclusivo de um webhook configurado | Retornado no objeto de resposta do webhook | Default |
+| `ASSET_ID` | ID exclusivo de um asset do tipo arquivo ou pasta | Retornado no objeto de resposta do arquivo ou da pasta | Default |
+| `SHARE_ID` | ID exclusivo de um link de compartilhamento | Retornado no objeto de resposta do compartilhamento | Default |
+
+---
+
+### Configurando a autorização {#setting-up-authorization}
+
+<Tip>
+
+Este guia usa OAuth 2.0 para autenticar na API Frame.io V4. Para informações sobre outros métodos de autenticação, como Server-to-Server (S2S), consulte o [Guia de autenticação](/pt-BR/platform/docs/guides/authentication/overview).
+
+</Tip>
+
+As variáveis de ambiente `IMS_CLIENT_ID` e `IMS_CLIENT_SECRET` devem ser definidas com os valores obtidos em **Credential details** do seu projeto no [Adobe Developer Console](https://developer.adobe.com/console).
+
+<Frame>
+
+![alt image](/images/platform/docs/guides/postman-collection/8f77af2f98d46f52b5d9da85adb48ee8f383f326edc8103f291f192deb4d9dba.webp)
+
+</Frame>
+
+Na seção **Credential details** do seu projeto, defina **Redirect URI** e **Redirect URL Pattern** com o endpoint público de callback do Postman:
+
+**Redirect URI**
+
+```
+https://oauth/pstmn.io/v1/callback
+```
+
+**Redirect URI Pattern**
+
+```
+https://oauth\\.pstmn\\.io
+```
+
+Depois que as variáveis de ambiente forem definidas e salvas, o próximo passo é configurar as opções de autorização. Para isso, clique no ícone **Collections** no topo da barra lateral esquerda para abrir o navegador de coleções.
+
+No navegador de coleções, selecione a raiz da coleção Frame.io V4 Developer API (geralmente intitulada **‘Frame.io Developer API Collection’** seguida do nome do seu fork) e selecione a aba **Authorization**.
+![alt image](/images/platform/docs/guides/postman-collection/518e800fde27188c25a4f8438a552fca3cb37a27af7a810f9a93ab959b786615.webp)
+
+Os <Tooltip tip="Para saber mais sobre escopos OAuth, consulte a documentação do IMS **[aqui](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#scopes)**">escopos</Tooltip> OAuth já vêm pré-configurados na coleção. Com suas variáveis de ambiente definidas, use o botão **Get New Access Token** para iniciar o fluxo OAuth 2.0. Isso abrirá uma janela do navegador para concluir o processo de autenticação e retornar o token ao Postman.
+
+Para verificar sua configuração de autorização, selecione a requisição **`GET user details`** na pasta Users e clique em **Send**.
+
+Uma resposta **`200 OK`** confirma tanto que sua coleção está configurada corretamente quanto que você se autenticou na conta correta. Se encontrar um erro, consulte **[esta seção](/pt-BR/platform/docs/getting-started#errors)** do guia de primeiros passos para informações sobre erros e avisos.
+
+**Exemplo de resposta**
+
+```
+{
+  "data": {
+    "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+    "email": "user_email@example.com",
+    "id": "00000000-1111-2222-3333-444444444444",
+    "name": "Name"
+  }
+}
+```
+
+---
+
+## Obtendo seu Account ID {#obtaining-your-account-id}
+
+`account_id` é um parâmetro de caminho obrigatório para a maioria dos endpoints da API V4, e você precisará dele para testar outras requisições. Você pode obter seu `account_id` com a requisição **`GET List accounts`**, localizada na pasta **Accounts** da coleção. **[Referência da API](/pt-BR/platform/api-reference/accounts/index)**
+
+**Exemplo de resposta**
+
+```
+{
+  "data": [
+    {
+      "created_at": "2023-09-25T19:18:29.614189Z",
+      "display_name": "Integration Account",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "roles": [
+        "admin"
+      ],
+      "storage_limit": 300,
+      "storage_usage": 300,
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "image": null
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts"
+  }
+}
+```
+
+<Tip>
+
+Se você tiver várias contas Frame.io, cada uma aparecerá como um objeto separado na resposta
+
+</Tip>
+
+Depois de obter seu Account ID, copie o valor de `id` da resposta e salve-o como uma variável de ambiente. Você o referenciará como o <Tooltip tip="Para saber mais sobre como enviar parâmetros de requisição, consulte a **[documentação do Postman](https://learning.postman.com/docs/sending-requests/create-requests/parameters#send-request-parameters)**">parâmetro de caminho</Tooltip> `account_id` usando `{{ACCOUNT_ID}}` em requisições futuras.
+
+---
+
+## Operações de Workspace e Project {#workspace-and-project-operations}
+
+Seus arquivos do Frame.io são armazenados em pastas, organizadas em Projects dentro de Workspaces. Para uma visão geral completa da hierarquia de recursos da V4, consulte **[este guia](/pt-BR/platform/docs/getting-started#resource-hierarchy)**.
+
+### Listando Workspaces {#listing-workspaces}
+
+A requisição **`GET list workspaces`** na pasta **Workspaces** chama **[`/v4/accounts/:account_id/workspaces`](/pt-BR/platform/api-reference/workspaces/index)** e retorna uma lista dos Workspaces aos quais sua conta tem acesso.
+
+Algumas operações de Project exigem `workspace_id` como parâmetro de caminho, então salve primeiro o ID do seu Workspace se você planeja listar ou recuperar Projects.
+
+Uma requisição bem-sucedida retornará o status **`200 OK`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+  "data": [
+    {
+      "account_id": "11111111-2222-3333-4444-555555555555",
+      "created_at": "2024-01-25T19:18:29.614189Z",
+      "id": "88888888-bbbb-4444-aaaa-ffffffffffff",
+      "name": "My Workspace",
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "creator": {
+        "active": true,
+        "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+        "email": "user_email@example.com",
+        "id": "196C1A5777BF4CV00A49411B@176719f5667d82g5594324.e",
+        "name": "Name"
+      }
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts/123/workspaces"
+  }
+}
+```
+
+---
+
+### Criando um Workspace {#creating-a-workspace}
+
+A requisição **`POST create workspace`** chama **[`/v4/accounts/:account_id/workspaces`](/pt-BR/platform/api-reference/workspaces/create)** para criar um novo Workspace para sua conta.
+
+No editor de requisições, selecione a aba **Body** para definir o nome do seu Workspace dentro do objeto `data`.
+
+Uma requisição bem-sucedida retornará o status **`201 Created`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+  "data": {
+    "account_id": "11111111-2222-3333-4444-555555555555",
+    "created_at": "2024-01-25T19:18:29.614189Z",
+    "id": "77777777-999-4444-8888-000000000000",
+    "name": "My New Workspace",
+    "updated_at": "2024-02-07T16:44:41.986478Z"
+  }
+}
+```
+
+---
+
+### Atualizando um Workspace {#updating-a-workspace}
+
+A requisição **`PATCH update workspace`** chama **[`/v4/accounts/:account_id/workspaces/:workspace_id`](/pt-BR/platform/api-reference/workspaces/update)** para atualizar o nome de um Workspace.
+
+No editor de requisições, selecione a aba **Body** para definir o novo nome do seu Workspace dentro do objeto `data`.
+
+Uma requisição bem-sucedida retornará o status **`200 OK`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+    "data": {
+        "id": "77777777-9999-4444-8888-000000000000",
+        "name": "New Workspace Name",
+        "updated_at": "2026-05-01T02:42:00.462467Z",
+        "account_id": "11111111-2222-3333-4444-555555555555",
+        "created_at": "2025-09-22T19:17:02.565496Z"
+    }
+}
+```
+
+---
+
+### Criando um Project {#creating-a-project}
+
+A requisição **`POST create project`** chama **[`/v4/accounts/:account_id/workspaces/:workspace_id/projects`](/pt-BR/platform/api-reference/projects/create)** para criar um novo Project em um determinado Workspace.
+
+No editor de requisições, selecione a aba **Body** para definir o nome do seu Project dentro do objeto `data`. A propriedade opcional `restricted` é um booleano usado para criar um Project restrito.
+
+Uma requisição bem-sucedida retornará o status **`201 Created`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+    "data": {
+        "id": "fd26defb-8bdf-5c39-9746-24d38f109cc3",
+        "name": "test",
+        "status": "active",
+        "restricted": true,
+        "updated_at": "2026-05-01T03:39:58.910884Z",
+        "storage": 0,
+        "workspace_id": "77777777-999-4444-8888-000000000000",
+        "created_at": "2026-05-01T03:39:58.853797Z",
+        "root_folder_id": "d4fca8b4-5fd8-4a94-90aa-de13de4b2021",
+        "view_url": "https://next.frame.io/project/fd26defb-8bdg-5c39-9746-24d38f109cc3"
+    }
+}
+```
+
+Copie o **`root_folder_id`** da resposta e defina-o como o valor da sua variável de ambiente **`FOLDER_ID`**. Você precisará dele nas seções restantes deste guia.
+
+<Tip>
+
+Você pode adicionar um usuário a um Project restrito recém-criado com uma requisição posterior **`PATCH Update user role in a Project`**, localizada na pasta **Project Permissions**. (**[Referência da API](/pt-BR/platform/docs/guides/postman-collection)**)
+
+</Tip>
+
+---
+
+## Operações de pastas e arquivos {#folder-and-file-operations}
+
+### Listando os filhos de uma pasta {#listing-folder-children}
+
+A requisição **`GET list folder children`** chama **[`/v4/accounts/:account_id/folders/:folder_id/children`](/pt-BR/platform/api-reference/folders/index)** para listar os filhos de uma determinada pasta. Neste caso, a pasta raiz do projeto definida como sua variável de ambiente **`FOLDER_ID`**.
+
+Você pode usar os seguintes parâmetros de consulta opcionais para refinar sua resposta:
+
+| Parâmetro | Tipo | Descrição |
+| --- | --- | --- |
+| **`page_size`** | Integer | Limita o número de pastas retornadas <br />**1-100. Padrão: 50** |
+| **`type`** | String | Filtra os filhos da pasta por tipo de recurso: **`file`** ou **`folder`** |
+| **`after`** | String | Cursor opaco para requisições que retornam resultados paginados. <br />**É gerado automaticamente e retornado no objeto `links` da resposta anterior.** Não foi feito para ser legível por humanos. |
+| **`include_total_count`** | Boolean | Retorna a contagem total de todas as entidades <br />**Padrão: False** |
+| **`include`** | Enum | Acrescenta dados adicionais a cada objeto retornado, como `creator`, `project`, `media_links`. <br />Para a lista completa de parâmetros suportados, consulte a **[Referência da API](/pt-BR/platform/api-reference/folders/index#request.query.include)** |
+
+Uma requisição bem-sucedida retornará o status **`200 OK`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+  "data": [
+    {
+      "type": "file",
+      "created_at": "2023-09-25T19:18:29.614189Z",
+      "file_size": 1137444,
+      "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+      "media_type": "image/png",
+      "name": "asset.png",
+      "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+      "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+      "status": "created",
+      "updated_at": "2024-02-07T16:44:41.986478Z",
+      "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+      "creator": {
+        "active": true,
+        "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+        "email": "user_email@example.com",
+        "id": "196C1A5666BF4EB00A49411B@176719f5667c82b4494214.e",
+        "name": "Jon Doe"
+      },
+      "media_links": {
+        "high_quality": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN"
+        },
+        "original": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "inline_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=inline%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragSDFXDFh&1Key-Pair-Id=KKI497NESTHMN"
+        },
+        "thumbnail": {
+          "download_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "url": "https://picture2.frame.io/image/s3://frameio-assets-development/image/cd58cb8e-24b3-4498-8d0f-9532fcd04d11/image_full.png?alg=HS256&sig=0_u7w_wz2MwQHOXp000ibbQSMRijujyaUu8V3YYPxu4&exp=1729857600"
+        }
+      },
+      "metadata": [
+        {
+          "field_type": "select",
+          "field_definition_id": "b859ccec-9536-4bf2-bc6f-5e9206e26606",
+          "field_definition_name": "Fields definition name",
+          "mutable": true,
+          "value": [
+            {
+              "display_name": "Display name",
+              "id": "212add59-6527-4fd2-ac30-55ea94a8b5f8"
+            }
+          ],
+          "field_options": [
+            {
+              "display_name": "Display name",
+              "id": "212add59-6527-4fd2-ac30-55ea94a8b5f8"
+            },
+            {
+              "display_name": "Display name 2",
+              "id": "c6eb873f-125b-4317-b857-1a22eb3dbf22"
+            }
+          ]
+        }
+      ],
+      "project": {
+        "created_at": "2024-01-25T19:18:29.614189Z",
+        "description": "Project Description",
+        "id": "e0e30b1d-c3aa-44ee-926e-c6c326fb10dc",
+        "name": "My Project",
+        "root_folder_id": "be733511-6f15-4d97-8ee7-bc23b2fb0bd7",
+        "status": "active",
+        "storage": 15000,
+        "updated_at": "2024-02-07T16:44:41.986478Z",
+        "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/",
+        "workspace_id": "91b10e83-5874-44de-9b57-41c937b87256",
+        "owner": {
+          "active": true,
+          "avatar_url": "https://assets.frame.io/uploads/cd58cb8e-24b3-4448-8d0f-9532fcd04d11/original.png?response-content-disposition=attachment%3B+filename%3D%22foo.png&Expires=1729857600&Signature=L09h0pi82dCrMYjr9lMHBragByWYh1&Key-Pair-Id=KKI497NESTHMN",
+          "email": "user_email@example.com",
+          "id": "196C1A5666BF4EB00A49411B@176719f5667c82b4494214.e",
+          "name": "Jon Doe"
+        },
+        "restricted": false
+      }
+    }
+  ],
+  "links": {
+    "next": "/v4/accounts/123/folders/123/folders"
+  },
+  "total_count": 10
+}
+```
+
+<Tip>
+
+**\{'t': '#frag', 'p': \{\}, 'c': \{'t': 'p', 'p': \{\}, 'c': \['Testando o parâmetro ', \{'t': 'strong', 'p': \{\}, 'c': \{'t': 'code', 'p': \{\}, 'c': 'after'\}\}, ''\]\}\}**
+
+Se você estiver testando resultados paginados, localize o objeto **`links`** na sua resposta:
+
+- Na URL da propriedade **`next`**, copie apenas o valor da string que vem depois de **`after=`**
+- Defina-o como o valor do seu parâmetro de consulta **`after`** na próxima requisição.
+- **Cuidado com a codificação dupla!** Se a URL contiver caracteres codificados (por exemplo: %3D%3D), substitua-os pela versão bruta (**==**). O Postman interpreta sua entrada literalmente e pode codificá-los duas vezes, gerando um erro **`422`**
+
+</Tip>
+
+---
+
+### Criando um arquivo - upload local {#creating-a-file-local-upload}
+
+A requisição **`POST create file - local upload`** chama **[`/v4/accounts/:account_id/folders/:folder_id/files/local_upload`](/pt-BR/platform/api-reference/files/create-local-upload)** para fazer upload de um arquivo local em uma pasta especificada.
+
+Uploads locais exigem duas ou mais requisições, dependendo do tamanho do arquivo. Para seu primeiro teste, use um arquivo pequeno (menos de 10 MB) para limitar o processo a uma única URL de upload.
+
+<Steps>
+
+<Step title="Crie o recurso de arquivo placeholder">
+
+No editor de requisições, selecione a aba **Body** para definir o nome e o tamanho do arquivo (especificado em **bytes**) dentro do objeto `data`. Uma requisição bem-sucedida retornará o status **`201 Created`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+  "data": {
+    "created_at": "2023-09-25T19:18:29.614189Z",
+    "file_size": 1137444,
+    "media_type": "image/png",
+    "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+    "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+    "status": "created",
+    "type": "file",
+    "updated_at": "2024-02-07T16:44:41.986478Z",
+    "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+    "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+    "name": "asset.png",
+    "upload_urls": [
+      {
+        "size": 20000000,
+        "url": "https://my.fileupload.url.dev"
+      }
+    ]
+  }
+}
+```
+
+Esta chamada criou um recurso de arquivo placeholder na pasta especificada. Use a URL de upload pré-assinada no array `upload_urls` da resposta para concluir o upload na próxima etapa.
+
+</Step>
+
+<Step title="Faça upload do conteúdo do arquivo">
+
+Clique na URL do array `upload_urls` da sua resposta para abrir uma nova aba de requisição no Postman. Altere o método da requisição para **`PUT`**. No editor de requisições, selecione a aba **Headers** para adicionar os seguintes cabeçalhos à sua requisição:
+
+- **`x-amz-acl`:`private`**
+- **`Content-Type`**: deve corresponder exatamente ao tipo da extensão especificada no nome do arquivo (por exemplo: um arquivo chamado **`IMG.png`** deve usar **`image/png`**)
+
+![alt image](/images/platform/docs/guides/postman-collection/86ddb4aebecaffdee01cf07be3c2e7af0b616285721ec8ef412575114a916b21.webp)
+No editor de requisições, selecione a aba **Body** e clique na opção **binary** para selecionar seu arquivo. Depois de selecioná-lo, clique em **Send** para concluir sua requisição. Uma requisição bem-sucedida retornará o status **`200 OK`**, confirmando que seu arquivo foi enviado.
+
+</Step>
+
+</Steps>
+
+Depois que o upload do arquivo for concluído, o pipeline de mídia do Frame.io cuida automaticamente da transcodificação e da geração de miniaturas. Para arquivos maiores, pode levar alguns instantes para que o arquivo passe do estado **`created`** para **`ready`**.
+
+---
+
+### Criando um arquivo - upload remoto {#creating-a-file-remote-upload}
+
+A requisição **`POST create file - remote upload`** chama **[`/v4/accounts/:account_id/folders/:folder_id/files/remote_upload`](/pt-BR/platform/api-reference/files/create-remote-upload)** para trazer um arquivo externo para uma pasta especificada usando uma URL de origem fornecida.
+
+No editor de requisições, selecione a aba **Body** para definir o nome e a URL de origem do seu arquivo dentro do objeto `data`.
+
+Uma requisição bem-sucedida retornará o status **`202 Accepted`** e um corpo de resposta semelhante ao exemplo abaixo.
+
+**Exemplo de resposta**
+
+```
+{
+  "data": {
+    "created_at": "2023-09-25T19:18:29.614189Z",
+    "file_size": 1137444,
+    "media_type": "image/png",
+    "parent_id": "2559e2c4-9bb9-4284-b616-a97700a579a4",
+    "project_id": "955c0511-656a-4859-b824-ebdbfdcb615b",
+    "status": "created",
+    "type": "file",
+    "updated_at": "2024-02-07T16:44:41.986478Z",
+    "view_url": "https://next.frame.io/project/d5e6011c-2bc9-4596-be05-77d562627112/view/5a89a9fb-0900-4b23-826b-127b90e4db4c",
+    "id": "cba3b1c5-c644-4592-91c5-0d0b91f4895d",
+    "name": "asset.png"
+  },
+  "links": {
+    "status": "/v4/accounts/fb4dd62f-8a89-4e98-8fa1-ad4b29a0094f/files/eab70952-966c-4d99-949b-f0a947ca5754/status"
+  }
+}
+```

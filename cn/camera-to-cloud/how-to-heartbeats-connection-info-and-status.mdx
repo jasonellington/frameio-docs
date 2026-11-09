@@ -1,0 +1,229 @@
+---
+title: "操作指南：管理状态"
+sidebarTitle: "管理状态"
+---
+
+## 简介 {#introduction}
+
+本指南介绍如何管理设备状态并与 Frame.io 保持同步。我们使用 websocket 协议实现 Frame.io 与您的设备之间的实时通信。如果您不熟悉 websocket，本指南将帮助您了解如何在 C2C 集成中实现它。
+
+Websocket 使 Frame.io 能够向您的设备推送消息，并且通过维持持久连接，提供比传统 HTTP 请求更高效的通信通道。
+
+在本指南中，我们将介绍：
+
+- 打开 socket 连接以表明您的设备处于"在线"状态
+- 获取有关设备连接的信息
+- 验证 Frame.io 后端的可用性
+
+## 前提条件 {#prerequisites}
+
+如果您尚未阅读，请在继续之前先查看 [实现 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南。
+
+您需要使用在[认证与授权流程](/cn/camera-to-cloud/implementing-c2c-authentication-and-authorization)中获得的 `access_token`。请注意，令牌会在 8 小时后过期，因此您可能需要刷新令牌或重新执行授权流程。
+
+对于本指南中的 websocket 连接示例，我们建议使用 [websocat](https://github.com/vi/websocat)，这是一款 CLI 工具，提供了适用于各种操作系统的详细安装说明。
+
+<Info>
+
+**MacOS**
+
+安装命令：`brew install websocat`
+
+</Info>
+
+## 获取连接信息 {#retrieving-connection-information}
+
+每次新授权或令牌刷新后，您的设备都应立即查询 `identity` 端点。该端点会提供有关连接的关键信息：
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/me \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+响应将类似于以下内容（部分数据已省略）：
+
+```
+{
+    "_type": "project_device",
+    "id": "a7e95254-8cd6-4d59-b54d-28c58570a8de",
+    "asset_type": "video",
+    "authorization": {
+        "_type": "project_device_authorization",
+        "creator": {
+            "_type": "user",
+            "id": "e7e96254-8bd6-4d59-b54d-28c58570a8de",
+            "name": "Harry Potter"
+        },
+        "expires_at": null,
+        "id": "7b2b68e5-788d-497c-8597-f9362cb1a75e",
+        ...
+        "project_device_id": "14856308-46e0-4d7d-8438-320262eec74e",
+        "scopes": {
+            ...
+            "asset_create": true,
+            ...
+            "id": "0fe0accb-447f-44f6-b2af-177d913b3a29",
+            "offline": true,
+            ...
+        }
+    },
+    ...
+    "name": "Frameio-BPEAKE-TEST-DEVICE",
+    "project": {
+        "_type": "project",
+        "id": "2ad59fe6-77b6-4fbc-a9d2-3dd0413ed4a3",
+        "name": "Testbed"
+    },
+    "project_id": "2ad59fe6-77b6-4fbc-a9d2-3dd0413ed4a3",
+    "status": "online",
+    ...
+}
+```
+
+此端点有助于核实连接详情。您的设备应向用户显示以下信息：
+
+- `project.name` - 已连接的项目名称
+
+- `authorization.creator.name` - 授权该设备的用户
+
+- `authorization.expires_at`（可选）- 连接过期时间（如已设置）
+
+- `status`（可选）- 设备状态，可能为：
+
+  - `online` - 设备在线且已配对
+  - `offline` - 设备已超过 5 分钟未通信（查询此端点会将状态更改为 `online`）
+  - `paused` - 设备已在 Frame.io 的 C2C Connections 面板中被临时禁用
+
+由于过期时间和暂停状态随时可能在 Frame.io 中发生变化，如果要向用户显示这些信息，请考虑定期轮询。我们建议将轮询频率限制为每 60 秒不超过一次。
+
+<Info>
+
+**id**
+
+请记下 `id` 值，因为在下一节建立 websocket 连接时需要用到它
+
+</Info>
+
+## 建立 Websocket 连接 {#establishing-the-websocket-connection}
+
+Frame.io 中的 C2C Connections 面板会显示每台设备的连接状态。当设备具有活动的 socket 连接时，它会显示为 `online`，并在卡片左上角显示绿色指示灯。没有活动连接的设备会显示为 `offline`，并呈灰色显示。
+
+如果 60 秒内未收到"心跳"消息，服务器会自动终止 socket 连接。虽然这个时间间隔已经足够，但为了可靠起见，我们建议每 15 秒发送一次心跳。如果连接意外关闭，只需重新建立即可。
+
+连接到 Frame.io 的 websocket 包括两个步骤：
+
+1. 建立 TCP/IP 握手并打开实际的 websocket 连接
+2. 加入设备的特定通道，以便向我们的后端标识您的设备
+
+打开 websocket 连接：
+
+```shell
+websocat -n "wss://api.frame.io/devices/websocket?Authorization=Bearer ACCESS_TOKEN"
+```
+
+<Info>
+
+**Authorization 标头**
+
+与标准 API 端点将访问令牌放在 `Authorization` 标头中不同，websocket 连接将其作为 URL 编码的查询参数包含在内。请注意，您仍必须在访问令牌前加上 `Bearer `（带一个空格）。在 URL 编码的字符串中，空格显示为 `%20`，因此这种格式是正常的。
+
+</Info>
+
+连接成功会返回 `101` 状态码，表示协议切换为 `wss`。您的 websocket 库可能会自动处理此过程。令牌过期会产生 `403` 响应。
+
+接下来，使用连接信息中的 `id` 发送以下 JSON 消息，加入设备的通道：
+
+```json
+{"topic":"devices:YOUR_DEVICE_ID", "event":"phx_join", "payload":"", "ref":"channel_connect"}
+```
+
+您将收到一条确认消息：
+
+```json
+{"event":"phx_reply","payload":{"response":{},"status":"ok"},"ref":"channel_connect","topic":"devices:YOUR_DEVICE_ID"}
+```
+
+<Info>
+
+**ref 和 payload 字段**
+
+`ref` 字段用于将响应与发起它们的事件关联起来。由于无法保证事件的顺序，此标识符有助于将服务器响应与触发事件配对。Frame.io 不会在传入事件中使用此字段——它仅供客户端参考。`payload` 字段必须始终存在，但通常可以是空字符串（当负载需要特定内容时，我们会另行说明）。
+
+</Info>
+
+查看 C2C 仪表板——您的设备现在应该显示为在线了！我们建议实现一个后台进程来维持此连接：
+
+```python title="Python"
+def heartbeat_task():
+    """
+    Task that emits heartbeats every 15 seconds.
+    """
+
+    while True:
+        c2c.emit_socket_heartbeat()
+        sleep(15)
+```
+
+心跳消息格式：
+
+```json
+{"topic":"phoenix", "event":"heartbeat", "payload":"", "ref":"heartbeat"}
+```
+
+收到的响应如下：
+
+```json
+{"event":"phx_reply","payload":{"response":{},"status":"ok"},"ref":"heartbeat","topic":"phoenix"}
+```
+
+在 socket 连接处于活动状态并订阅了通道的情况下，您的设备将在 Frame.io 的 C2C Connections 面板中显示为在线。当连接终止时，它将显示为离线。
+
+## 显示设备状态 {#displaying-device-status}
+
+我们建议不要直接显示原始状态值（`online`、`offline`、`paused`），而是将其转换为对用户更有意义的指示信息：
+
+- **已暂停**：true/false - 如果状态为 `paused`，则显示 `true`，否则显示 `false`
+- **已连接**：true/false - 指示设备能否访问 Frame.io 后端（请参阅下文的后端连接测试）
+
+## 管理暂停状态 {#managing-the-paused-status}
+
+虽然显示暂停状态是可选的，但了解其功能非常重要。
+
+暂停功能旨在临时阻止敏感内容被上传。它不会阻止网络流量，而是防止特定媒体到达 Frame.io。这在拍摄包含敏感内容的场景等情况下非常有用，因为此时立即存储到云端可能并不合适。
+
+暂停是通过 Frame.io 界面控制的，而不是通过您的集成。当设备被暂停时，只有在暂停期间创建的媒体会被阻止——之前拍摄的媒体仍可上传。
+
+重要注意事项：
+
+- 不要仅依赖 identity 端点来验证是否可以上传——我们的后端会自动处理这一点
+- Socket 事件会通过 `event: "status_updated"` 以及 `payload: "paused"` 或 `"resumed"` 通知您状态变化
+- 虽然事件有助于管理状态，但它们可能会丢失或乱序送达
+- 上传期间收到 `409` 错误并不一定意味着设备当前处于暂停状态——它可能表示该媒体是在之前的暂停时间窗口内创建的
+- 如果要显示暂停状态，请定期检查连接信息以核实其准确性
+
+## 验证后端连接 {#verifying-backend-connectivity}
+
+要检查 Frame.io 后端的可用性，请使用以下端点：
+
+```shell
+curl -X GET https://api.frame.io/health \
+    | python -m json.tool
+```
+
+此端点无需授权。成功的响应表示连接正常：
+
+```json
+{
+    "ok": true
+}
+```
+
+这项健康检查特别有价值，因为它确认的是与 Frame.io 之间的连接，而不是一般的网络可用性。在某些情况下，您的网络运行正常，但由于服务问题或路由问题，Frame.io 可能无法访问。
+
+## 后续步骤 {#next-steps}
+
+如有任何问题，欢迎联系我们的团队，并继续阅读[基础上传指南](/cn/camera-to-cloud/how-to-basic-upload)。我们期待为您的集成进展提供支持。
+
+有关管理设备授权的更多信息，请参阅[授权管理指南](/cn/camera-to-cloud/how-to-authorization-management)。

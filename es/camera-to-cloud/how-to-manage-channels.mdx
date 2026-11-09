@@ -1,0 +1,182 @@
+---
+title: "Cómo: gestionar canales"
+sidebarTitle: "Gestionar canales"
+---
+
+¿Qué ocurre cuando tienes dispositivos en tu ecosistema que no pueden conectarse a internet ni comunicarse directamente con Frame.io, pero que sí pueden comunicarse con tu dispositivo habilitado para C2C? Algunas integraciones pueden querer realizar acciones en nombre de esos dispositivos: una grabadora de sonido que sube archivos en nombre de un micrófono, o una cámara que publica comentarios en tiempo real en nombre de los botones de un accesorio.
+
+Estas solicitudes se resuelven comprendiendo los canales de un dispositivo. Si tu integración no va a gestionar subdispositivos, puedes omitir esta guía.
+
+## ¿Qué necesitaré? {#what-will-i-need}
+
+Si aún no has leído la guía [Implementar C2C: configuración](/es/camera-to-cloud/implementing-c2c-setting-up), ¡échale un vistazo rápido antes de continuar!
+
+Necesitarás el `access_token` que recibiste durante la [guía de autenticación y autorización de dispositivos](/es/platform/v2/how-to-authorization-management-hardware).
+
+También necesitarás una lista de los ID de modelo de dispositivo (Device Model IDs) de los subdispositivos que deberían poder conectarse a Frame.io a través de tu dispositivo principal.
+
+## ¿Qué es un canal? {#what-is-a-channel}
+
+Los canales se tratan brevemente en nuestra [descripción general de la arquitectura](/es/camera-to-cloud/integration-architecture). Cada dispositivo de proyecto tiene al menos un canal y, aunque hasta ahora los hemos tratado generalmente como una misma cosa, ahora necesitamos separar ambos conceptos. Profundicemos.
+
+Un dispositivo de proyecto tiene la capacidad de comunicarse directamente con frame.io. Un canal recopila datos para que el dispositivo de proyecto los comunique. En la mayoría de los casos, el ProjectDevice y el primer canal son uno y el mismo. Pensemos en una cámara: conceptualmente, el dispositivo de proyecto representa la tarjeta de red de la cámara, que envía datos directamente a Frame.io, mientras que el canal representa el sensor CMOS de la cámara, que recopila datos de vídeo para enviarlos a través de la tarjeta de red (dispositivo de proyecto).
+
+Lo más importante es que el dispositivo de proyecto se autentica con Frame mediante una OauthApp, mientras que los canales no. Estos utilizan la autenticación de su dispositivo de proyecto principal.
+
+Nuestro modelo permite que un dispositivo de proyecto tenga varios canales, que pueden formar parte o no del dispositivo físico. Los canales pueden ser componentes de hardware que se comunican con el dispositivo principal mediante TCP/IP, Bluetooth, SDI, etc. El dispositivo de proyecto actúa como enrutador para enviar estos datos a frame.io. La forma en que los canales suministran esos datos al dispositivo de proyecto depende de ti, el integrador.
+
+Imagina una grabadora de sonido, conectada a Frame.io como dispositivo de proyecto, con muchos micrófonos conectados cada uno como un canal independiente. La grabadora puede enviar el archivo de mezcla por su canal principal y las pistas de cada micrófono por los canales de sus subdispositivos. ¡Cómo uses los canales y lo que represente cada uno depende de ti! Los canales no se autentican; el dispositivo puede añadirlos y quitarlos en cualquier momento.
+
+Dado que los canales pueden pertenecer a subdispositivos físicos independientes, cada canal estará asociado a un modelo de dispositivo, como cualquier otra integración de hardware o software. Esto permite que frame.io muestre el modelo del subdispositivo, que puede ser diferente del dispositivo anfitrión, y permite que las integraciones definan el comportamiento de cada subdispositivo por separado. Los modelos de dispositivo que pueden añadirse como canales a una integración determinada deben definirse con antelación.
+
+Hay varias razones por las que podrías querer conectar nuevos canales a tu dispositivo C2C:
+
+- Permitir varias configuraciones para una integración en función del canal + modelo de dispositivo. Esto incluye una estructura de carpetas fija para los assets, rutas de carpetas con tokens, enrutamiento por extensión de archivo, etc. Imagina una estación DIT que utiliza distintos canales para subir proxies de edición o Camera Raw.
+- Ofrecer al usuario de frame.io visibilidad sobre tus subdispositivos.
+- Los canales pueden configurarse con entradas humanas, es decir, botones, que pueden configurarse para funciones de registro en tiempo real.
+
+Profundicemos un poco más en cómo gestionar canales con la API de C2C.
+
+## Listar canales {#listing-channels}
+
+Se puede obtener una lista de los canales existentes en el campo channels del [endpoint de identidad](/es/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information). Veamos el campo `"channels"` del payload de respuesta:
+
+```json
+{
+    "_type": "project_device",
+    ...
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+            "external_index": 0,
+            "id": "5919e9bc-7fc2-4629-97e5-852ce27cfa1a",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Host Device",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "online",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        },
+        {
+            "_type": "project_device_channel",
+            "actor_id": null,
+            "asset_type": "video",
+            "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+            "external_index": 0,
+            "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+            "inserted_at": "2023-07-14T19:11:43.217565Z",
+            "name": "Test Client Device 01234",
+            "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+            "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+            "real_time_logging_capable": false,
+            "status": "offline",
+            "updated_at": "2023-07-14T19:11:43.217565Z"
+        }
+    ],
+    ...
+    "device_id": "98e9367a-b26b-4c60-8e64-da83dfd9540b",
+    ...
+    "id": "bf30fc66-f126-4336-bdfc-75d3e659b95am"
+}
+```
+
+Observa que el `device_id` del primer canal coincide con el `device_id` de nuestro dispositivo de proyecto en su conjunto.
+
+## Conectar un canal {#connecting-a-channel}
+
+Podemos conectar un nuevo canal con la siguiente solicitud:
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/connect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'{
+            "client_id": [client_id],
+            "device_model_id": [device_model_id]
+        }
+__JSON__
+    | python -m json.tool
+```
+
+Obtenemos la siguiente respuesta:
+
+```json
+{
+   "_type": "project_device_channel",
+   "actor_id": null,
+   "asset_type": "video",
+   "device_id": "057b33c4-9f92-4eeb-a3d5-2fd0f4932292",
+   "external_index": 0,
+   "id": "0b17e1e3-588c-4365-be51-5cf097c8f004",
+   "inserted_at": "2023-07-14T19:11:43.217565Z",
+   "name": "Test Client Device 01234",
+   "project_device_id": "bf30fc66-f126-4336-bdfc-75d3e659b95a",
+   "project_id": "1eb3587f-6bca-4e8d-a2f6-e7413d82c1ad",
+   "real_time_logging_capable": true,
+   "status": "offline",
+   "updated_at": "2023-07-14T19:11:43.217565Z"
+}
+```
+
+Esta respuesta refleja el campo channels del endpoint de [identidad](/es/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information).
+
+El client_id es lo que determina la unicidad, por lo que debe ser un valor estable, como el número de serie.
+El device_model_id es lo que indica a Frame.io el tipo de dispositivo de hardware subyacente que representa este canal, como un modelo específico de micrófono. Tu partner manager los habrá configurado.
+
+Si un canal ya ha sido declarado, recibirás un error 409 con el título de error Already Exists.
+
+Al crear un canal con los mismos identificadores que uno que se conectó previamente y luego se desconectó, se restaurará toda la configuración de usuario anterior del canal.
+
+## Desconectar un canal {#disconnecting-a-channel}
+
+Un canal se desconecta mediante el id definido por Frame.io, no mediante client_id ni device_model_id.
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/:channel_id/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Lo cual devuelve una respuesta `204` con un payload vacío.
+
+Al eliminar un canal que no existe, obtendrás un 404. No puedes desconectar el primer canal, el canal principal, del dispositivo padre.
+
+## Desconectar todos los canales de subdispositivos {#disconnecting-all-sub-device-channels}
+
+Puedes desconectar todos los canales de subdispositivos actuales de un dispositivo de proyecto con la siguiente llamada:
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/channels/disconnect \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'x-client-version: 2.0.0' \
+    | python -m json.tool
+```
+
+Lo cual devuelve una respuesta `204` con un payload vacío. Esta llamada siempre tendrá éxito, incluso si el dispositivo de proyecto no tiene canales de dispositivos cliente.
+
+Ahora podemos listar todos nuestros canales mediante el endpoint de [identidad](/es/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information); solo permanecerá el canal principal del dispositivo anfitrión.
+
+## Flujo de gestión de canales {#channel-management-flow}
+
+No recomendamos que los ProjectDevice gestionen el estado de los canales internamente, para evitar problemas de integridad de datos que podrían derivarse de ciclos de apagado y encendido en momentos poco oportunos. Por ejemplo:
+
+- Apagar el dispositivo después de que se haya procesado una llamada Channel Connect, pero antes de que el `id` devuelto pueda guardarse en un almacén de datos
+- Conectar o desconectar subdispositivos del dispositivo anfitrión mientras este está apagado.
+
+En su lugar, se recomienda que todos los dispositivos anfitriones ejecuten los siguientes pasos al arrancar por primera vez:
+
+- Llamar al endpoint Bulk Channel Disconnect para eliminar todos los canales de subdispositivos existentes
+- Llamar al endpoint Channel Connect para cada subdispositivo conectado actualmente
+  Tras la configuración inicial, un dispositivo anfitrión DEBE llamar al endpoint Channel Disconnect cada vez que se desconecte un subdispositivo, y al endpoint Channel Connect cada vez que se añada un nuevo subdispositivo. Los dispositivos anfitriones NO PUEDEN eliminar los subdispositivos cada vez que se conecta un nuevo dispositivo.
+
+Los dispositivos anfitriones DEBEN gestionar correctamente las malas condiciones de red al administrar dispositivos, y añadir o eliminar adecuadamente los dispositivos conectados actualmente cuando se restablezca la conexión a la red.
+
+## Siguientes pasos {#next-up}
+
+Si aún no lo has hecho, te animamos a ponerte en contacto con nuestro equipo y, a continuación, continuar con la siguiente guía. ¡Esperamos tener noticias tuyas!

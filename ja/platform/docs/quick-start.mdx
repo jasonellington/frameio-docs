@@ -1,0 +1,131 @@
+---
+title: "クイックスタート"
+---
+
+このガイドでは、Frame.io V4 API の最初の呼び出しを成功させるための最短の手順を説明します。Adobe Developer Console でプロジェクトを作成し、認証情報を生成して、最初の API リクエストを送信します。
+
+---
+
+## ステップ 1：Adobe Developer Console でプロジェクトを作成し、Frame.io V4 API を追加する {#step-1-create-a-project-in-your-adobe-developer-console-+-add-the-frame-io-v4-api}
+
+[Adobe Developer Console](https://developer.adobe.com/developer-console/) で新しいプロジェクトを作成し、Frame.io V4 API を追加します。
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-1.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+<Tip>
+
+このガイドでは、認証に OAuth 2.0 Web App を使用します。その他の認証方法については、**[認証ガイド](/ja/platform/docs/guides/authentication/overview)** を参照してください。
+
+</Tip>
+
+## ステップ 2：アプリケーションを設定する {#step-2-configure-your-application}
+
+アプリケーションの種類として OAuth Web App を選択し、リダイレクトフィールドを設定します。
+
+| **Redirect URI** | Adobe IMS からの OAuth レスポンスを受け取る、アプリケーション内のルートです。ユーザーがサインインしてアクセスを承認すると、Adobe IMS はクエリ文字列に認可コードを付けてこの URL にユーザーをリダイレクトし、アプリはそのコードをアクセストークンと交換します |
+| --- | --- |
+| **Redirect URI pattern** | デフォルトのリダイレクト URI 以外の追加のリダイレクト URL に一致するパターンです。アプリが複数の環境で実行される場合や、動的ルーティングを使用する場合に便利です。複数のパターンはカンマ区切りのリストで指定してください |
+
+<video src="/videos/platform/docs/quick-start/QS-ADC-2.mp4" autoPlay={true} loop={true} muted={true} playsInline={true} controls={true} />
+
+---
+
+## ステップ 3：認証 {#step-3-authentication}
+
+ユーザーを Adobe IMS の認可エンドポイントにリダイレクトして、OAuth フローを開始します。
+
+```
+  https://ims-na1.adobelogin.com/ims/authorize/v2
+  ?client_id={CLIENT_ID}
+  &redirect_uri={REDIRECT_URI}
+  &scope=offline_access,openid,email,profile,additional_info.roles
+  &response_type=code
+```
+
+ユーザーがサインインしてアクセスを承認すると、Adobe IMS はクエリ文字列に認可コードを付けて、設定済みのリダイレクト URI にユーザーをリダイレクトします。IMS トークンエンドポイントに POST リクエストを送信して、そのコードをアクセストークンと交換します。
+
+<br />
+
+以下は、パラメーターの定義と、リクエストおよびレスポンスの例です。
+
+| パラメーター | 必須 | 説明 |
+| --- | --- | --- |
+| **code** | はい | ユーザーがアプリケーションで認証したときに、`redirect_uri` に返される code クエリ文字列の値 |
+| **grant_type** | はい | 値は常に `authorization_code` である必要があります |
+| **authorization** | コンフィデンシャルクライアントの場合は必須 | `Basic` 認証ヘッダー文字列。文字どおりの単語 `Basic` の後に、`clientID:clientSecret` を Base64 エンコードした文字列が続きます |
+
+**リクエストの例**
+
+```
+curl -X POST 'https://ims-na1.adobelogin.com/ims/token/v3' \
+  -H 'Authorization: Basic {AUTHORIZATION}' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'code={CODE}&grant_type=authorization_code'
+```
+
+**レスポンスの例**
+
+```
+{
+    "access_token": "{ACCESS_TOKEN}",
+    "refresh_token": "{REFRESH_TOKEN}",
+    "sub": "B0DC108C5CD449CA0A494133@c62f24cc5b5b7e0e0a494004",
+    "id_token": "{ID_TOKEN}",
+    "token_type": "bearer",
+    "expires_in": 86399
+}
+```
+
+<Tip>
+
+**SDK のサポート**
+
+Python と TypeScript の SDK には、OAuth ハンドシェイク、トークン交換、トークンの自動更新を処理する認証モジュールが含まれています。それぞれの詳細はこちらをご覧ください。
+[**Python**](/ja/platform/docs/sdk-reference/python-sdk-reference)  | [**TypeScript**](/ja/platform/docs/sdk-reference/type-script-sdk-reference)
+
+</Tip>
+
+---
+
+## ステップ 4：最初の API リクエストを送信する {#step-4-make-your-first-api-requests}
+
+アクセストークンを取得したら、まず [`/v4/me`](/ja/platform/api-reference/users/show) エンドポイントを呼び出します。
+
+```
+curl https://api.frame.io/v4/me \
+-H "Authorization: Bearer <token>"
+```
+
+このリクエストは <Tooltip tip="Adobe IMS の詳細については、**[API リファレンス](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims#request-2)** を参照してください">**Adobe IMS API**</Tooltip> を呼び出して、トークンとユーザー情報を検証します。
+
+リクエストが成功すると、`user_id`、名前、メールアドレスなど、認証済みユーザーの詳細が返されます。これを使用して、認証フローが期待どおりに動作していることを確認してください。
+
+ほとんどの V4 API エンドポイントには `account_id` が必要ですが、これは `/v4/me` では返されません。`account_id` を取得するには、[`/v4/accounts`](/ja/platform/api-reference/accounts/index) にリクエストを送信します。
+
+```
+curl https://api.frame.io/v4/accounts \
+-H "Authorization: Bearer <token>"
+```
+
+これにより、認証済みユーザーが利用できるアカウントの一覧が返されます。以降の API リクエストでは、このレスポンスに含まれる `account_id` を使用してください。
+
+<Tip>
+
+**User ID と Account ID の違い**
+
+**`user_id`** は個人としてのあなたを識別し、**`account_id`** はあなたが所属する組織を表します。ほとんどの V4 エンドポイントはアカウントレベルで動作します。
+
+</Tip>
+
+---
+
+## 次のステップ {#next-steps}
+
+認証が完了し、`account_id` を取得したら、Frame.io API を使い始める準備は完了です。以下のリソースが導入に役立ちます。
+
+- [認証ガイド](/ja/platform/docs/guides/authentication/overview)
+- [アカウント、プロジェクト、ワークスペース](/ja/platform/docs/guides/accounts-projects-and-workspaces)
+- [API リファレンス](/ja/platform/api-reference/account-permissions/account-user-roles-update)
+- [Postman コレクション](/ja/platform/docs/guides/postman-collection)

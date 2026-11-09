@@ -1,0 +1,277 @@
+---
+title: "Frame.io Python SDK — Upload-Leitfaden"
+sidebarTitle: "Python SDK Upload-Leitfaden"
+---
+
+Dieser Leitfaden erklärt, wie Sie mit dem **Frame.io Python SDK** (`frameio`) Dateien zu Frame.io hochladen. Das SDK übernimmt mehrteilige Uploads in Chunks über vorsignierte URLs zu S3 – mit parallelen Workern, automatischen Wiederholungsversuchen und optionaler Fortschrittsanzeige.
+
+Die allgemeinen Konzepte der Upload-API (Upload-URLs, Header, Chunking) finden Sie unter [So funktionieren lokale und Remote-Uploads](/de/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work).
+
+---
+
+## Voraussetzungen {#prerequisites}
+
+<Steps>
+
+<Step title="Authentifizierung">
+
+Sie verfügen über einen funktionierenden `Frameio`-Client. Informationen zur Einrichtung finden Sie im [Authentifizierungsleitfaden](/de/platform/docs/guides/authentication/python-sdk).
+
+</Step>
+
+<Step title="SDK installieren">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="Zielordner">
+
+Sie benötigen die `account_id` und die `folder_id` des Ordners, in den die Datei hochgeladen werden soll. Ermitteln Sie diese mit dem SDK:
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## Schnellstart {#quick-start}
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+Das war's schon. Das SDK teilt die Datei anhand der von der API zurückgegebenen Upload-URLs in Chunks auf, lädt diese parallel hoch und kümmert sich automatisch um Wiederholungsversuche.
+
+---
+
+## Funktionsweise {#how-it-works}
+
+Der lokale Upload ist ein zweistufiger Prozess:
+
+<Steps>
+
+<Step title="Dateiressource erstellen">
+
+Rufen Sie `client.files.create_local_upload()` mit dem Dateinamen und der Dateigröße auf. Die API erstellt eine Platzhalterdatei und gibt vorsignierte S3-PUT-URLs zurück – eine pro Chunk. Die Anzahl der URLs (und damit der Chunks) hängt von der Dateigröße ab.
+
+</Step>
+
+<Step title="Zu S3 hochladen">
+
+`FrameioUploader` liest die Upload-URLs aus der Antwort, teilt Ihre Datei in entsprechende Chunks auf und sendet jeden Chunk per PUT parallel über einen Thread-Pool an seine URL. Jeder Request enthält die erforderlichen Header `x-amz-acl: private` und `Content-Type`.
+
+</Step>
+
+</Steps>
+
+<Note>
+
+Der Upload erfolgt direkt von Ihrer Anwendung zu S3 – er läuft nicht über die Server der Frame.io API. Dasselbe Muster verwenden Dienste wie YouTube, Vimeo und Dropbox für Uploads großer Dateien.
+
+</Note>
+
+---
+
+## `FrameioUploader` verwenden {#using-frameiouploader}
+
+`FrameioUploader` ist die empfohlene Methode zum Hochladen von Dateien. Er kapselt den Chunked-Uploader der unteren Ebene und kümmert sich um alle Details – das Extrahieren der Upload-URLs aus der API-Antwort, das Setzen der erforderlichen Header, das Aufteilen der Datei in Chunks und den parallelen Upload.
+
+### Fortschrittsanzeige {#progress-tracking}
+
+Verwenden Sie den Callback `on_progress`, um den Upload-Fortschritt zu verfolgen:
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+Der Callback wird nach Abschluss jedes Chunks einmal aufgerufen, mit der Summe der bisher hochgeladenen Bytes und der Gesamtgröße der Datei.
+
+#### Rich-Fortschrittsbalken {#rich-progress-bar}
+
+Für eine ansprechendere Darstellung im Terminal verwenden Sie [Rich](https://github.com/Textualize/rich):
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### Konfiguration {#configuration}
+
+`FrameioUploader` akzeptiert mehrere optionale Parameter:
+
+| Parameter | Standardwert | Beschreibung |
+| --- | --- | --- |
+| `max_workers` | `5` | Anzahl gleichzeitiger Upload-Threads |
+| `headers` | `{"x-amz-acl": "private"}` | Header, die mit jedem S3-PUT-Request gesendet werden. Benutzerdefinierte Header werden mit den Standardwerten zusammengeführt. |
+| `max_retries` | `3` | Wiederholungsversuche pro Chunk (exponentielles Backoff: 1 s, 2 s, 4 s, …) |
+| `on_progress` | `None` | Callback `(bytes_uploaded, total_bytes)`, der nach jedem Chunk ausgelöst wird |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### Vollständiges Beispiel {#full-example}
+
+Ein vollständiges Beispiel mit Authentifizierung, Upload und Fortschrittsanzeige:
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+Wenn Sie die volle Kontrolle über den Upload-Prozess benötigen – etwa um das Chunking manuell zu steuern, eine asynchrone Pipeline zu integrieren oder die Wiederholungslogik anzupassen –, finden Sie unter [So funktionieren lokale und Remote-Uploads](/de/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work) den reinen API-Ablauf und ein eigenständiges Python-Skript als Beispiel.
+
+</Tip>
+
+---
+
+## Remote-Upload {#remote-upload}
+
+Wenn Ihre Datei bereits über eine öffentliche URL zugänglich ist, verwenden Sie stattdessen den Remote-Upload. Es ist kein Chunking erforderlich – Frame.io ruft die Datei direkt ab:
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+Für Remote-Uploads gilt derzeit eine **Dateigrößenbeschränkung von 50 GB**. Verwenden Sie für Dateien, die größer als 50 GB sind, stattdessen den [lokalen Upload](#quick-start).
+
+</Warning>
+
+---
+
+## Upload-Status prüfen {#checking-upload-status}
+
+Nach dem Upload können Sie überprüfen, ob die Datei empfangen wurde:
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

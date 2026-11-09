@@ -1,0 +1,168 @@
+---
+title: "Como gerenciar a autenticação (hardware)"
+sidebarTitle: "Como gerenciar a autenticação (hardware)"
+---
+
+## Introdução {#introduction}
+
+Neste guia, vamos aprender como atualizar, revogar e armazenar as informações de autorização de um *dispositivo de hardware* para o Frame.io.
+
+## Do que vou precisar? {#what-will-i-need}
+
+Se você ainda não leu o guia [Implementando o C2C: configuração](/pt-BR/camera-to-cloud/implementing-c2c-setting-up), dê uma olhada rápida antes de continuar!
+
+Você precisará do `client_secret` fornecido pela nossa equipe e do mesmo `client_id` que você usou no [guia de autenticação e autorização](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-hardware). O `access_token` e o `refresh_token` também são necessários para concluir este guia.
+
+## Tokens de autorização {#authorization-tokens}
+
+No [guia anterior](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-hardware), aprendemos como *gerar* novos tokens de autorização fazendo o usuário autenticar e autorizar um dispositivo em um projeto.
+
+*Os access tokens duram apenas cerca de 8 horas antes de expirar*. Não queremos que o usuário de um dispositivo precise parear o dispositivo a cada 8 horas, então, no guia anterior, solicitamos o escopo `offline` e também obtivemos um *refresh token* ao fazer a autorização com o Frame.io. Os refresh tokens podem ser usados para gerar um novo access token quando o atual expirar.
+
+*Um refresh token é válido por 14 dias*. Ao restringir o tempo de validade de um access_token, limitamos os possíveis problemas que poderiam ocorrer caso ele vazasse. Se a autorização não for atualizada antes de o *refresh token* ser usado, o usuário precisará se autenticar novamente.
+
+## Atualizando seu access token {#refreshing-your-access-token}
+
+Se você fizer uma chamada à nossa API que exija um access token e receber a seguinte resposta:
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+… então seu access token expirou!
+
+Para atualizar seu token, faremos a seguinte chamada:
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/token \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Especificação do endpoint da API**
+
+A documentação de `/v2/auth/token` pode ser [encontrada aqui](/pt-BR/camera-to-cloud/api-reference/authentication/auth-device-token)
+
+</Info>
+
+<Info>
+
+**Não sabe o que são esses valores?**
+
+Todos esses valores foram gerados no [guia anterior](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-hardware). Dê uma olhada se ainda não fez isso e depois volte aqui!
+
+</Info>
+
+Ao usar todos esses valores (em vez de apenas o refresh token), tornamos impossível gerar uma nova autorização apenas a partir de um refresh token vazado. Se alguém quiser gerar um token como se fosse a sua integração, precisará tanto do `refresh_token` *quanto* do `client_secret`.
+
+Você deve receber uma resposta como esta:
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 28800,
+    "refresh_token": "[refresh_token]",
+    "token_type": "bearer"
+}
+```
+
+Estes são seus novos tokens de autorização. *Depois que você atualizar seus tokens, os tokens antigos deixarão de funcionar*, então mantenha estes à mão!
+
+Se tentarmos usar nosso refresh token antigo para atualizar agora, receberemos um erro:
+
+```json
+{
+    "error": "invalid_request"
+}
+```
+
+Nosso token já foi atualizado, então usar o refresh token existente é inválido.
+
+<Danger>
+
+**Recebendo um 401 durante uma atualização**
+
+Se você receber uma resposta `401 Not Authorized` ao atualizar seus tokens, seu token não é mais válido e você precisará reiniciar todo o processo de autorização.
+
+</Danger>
+
+## Perdendo uma resposta de atualização {#missing-a-refresh-response}
+
+Os valores de `refresh_token` podem ser usados uma única vez. Se você fizer uma chamada ao Frame.io para atualizar um token e perder a resposta, seja por um erro de rede ou por um desligamento inesperado, *você precisará reiniciar todo o fluxo de autenticação/autorização.*
+
+É uma possibilidade infeliz, mas é melhor prevenir do que remediar!
+
+## Revogando seus tokens {#revoking-your-tokens}
+
+Em algumas situações, podemos querer "sair" do Frame.io. Um usuário pode decidir, por exemplo, que não quer mais ficar conectado depois de concluir uma filmagem. Revogar a autorização também é uma boa prática se o seu app entrar em um estado inconsistente e precisar ser redefinido do zero. Sempre que você souber que pretende descartar a autorização atual, seu app deve tentar revogá-la.
+
+Para revogar nossa autorização, fazemos a seguinte chamada:
+
+<Info>
+
+**Reautorizando**
+
+Depois de fazer essa chamada, você precisará reiniciar o processo de autenticação e autorização detalhado no [guia anterior](/pt-BR/platform/v2/implementing-c2c-authentication-and-authorization-hardware).
+
+</Info>
+
+```shell
+curl -X POST https://api.frame.io/v2/auth/revoke \
+    --include \
+    --header 'x-client-version: 2.0.0' \
+    --form 'client_id=[client_id]' \
+    --form 'client_secret=[client_secret]' \
+    --form 'token=[refresh_token]
+```
+
+<Info>
+
+**Especificação do endpoint da API**
+
+A documentação de `/v2/auth/revoke ` pode ser [encontrada aqui](/pt-BR/camera-to-cloud/api-reference/authentication/auth-device-revoke-token)
+
+</Info>
+
+A resposta não conterá um payload. Usamos `--include` no comando para exibir os cabeçalhos retornados, que devem começar com um código de status `200` se a chamada for bem-sucedida:
+
+```text
+HTTP/2 200
+...
+```
+
+Agora que nosso token foi revogado, todas as chamadas ao [Frame.io](http://frame.io/) que exigem um `access_token` retornarão `Not Authorized` e, se o usuário quiser usar a conexão com o Frame.io novamente, precisará parear o dispositivo ao projeto outra vez.
+
+## Armazenando tokens {#storing-tokens}
+
+Para manter o funcionamento entre ciclos de energia, você precisará armazenar seus cabeçalhos de autorização de forma persistente. Isso pode ser feito em um arquivo, em um banco de dados ou na sua própria nuvem. Aqui estão algumas diretrizes para armazenar tokens de autorização:
+
+**Não permita que o usuário veja ou acesse os tokens**. Seu usuário nunca deve poder visualizar ou recuperar os tokens. Eles devem ser gerenciados pelo seu app e somente por ele.
+
+**Criptografe seus tokens em repouso.** Assim como o `client_secret`, os access tokens e refresh tokens devem ser criptografados em repouso sempre que possível para evitar que as chaves sejam roubadas. *As chaves de autorização não devem ser armazenadas em texto simples.*
+
+**Não armazene seus tokens de autorização no mesmo arquivo que o seu client_secret.** O app Python de exemplo armazena o `client_secret` e o `client_id` no mesmo arquivo que os tokens de autorização. Isso funciona bem para uma demonstração, mas não é uma boa prática para código de produção. `client_secret` e `client_id` são valores estáticos de um dispositivo, e *o dispositivo deixará de funcionar se eles forem perdidos.*
+
+Os tokens de autorização não são estáticos e precisarão ser regravados muitas vezes ao longo da vida útil do dispositivo. Se o dispositivo perdesse energia durante a atualização de um arquivo com novos tokens, esse arquivo poderia ser corrompido e o `client_secret` poderia ser perdido, fazendo com que o dispositivo não conseguisse mais se autenticar no Frame.io *nunca mais*. Ao separar os tokens, na pior das hipóteses, o usuário precisará parear o dispositivo novamente.
+
+O melhor lugar para armazenar tokens seria um banco de dados confiável como o SQLite, mas, no mínimo, os dados de autorização devem ficar separados dos nossos outros valores.
+
+## Próximos passos {#next-up}
+
+Se ainda não fez isso, recomendamos que você entre em contato com nossa equipe e depois siga para o próximo guia. Estamos ansiosos para ter notícias suas!

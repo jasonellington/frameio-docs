@@ -1,0 +1,116 @@
+---
+title: "ハウツー: フッテージをリアルタイムでログに記録する"
+sidebarTitle: "フッテージをリアルタイムでログに記録する"
+---
+
+## はじめに {#introduction}
+
+リアルタイムロギングを使用すると、撮影現場でメディアが収録されている最中、つまり Frame.io に登録される前の段階で、デバイスからコメント、アセットのステータス、その他のデータを登録できます。対象は、同じプロジェクト内の任意のデバイスで生成されているすべての C2C アセットです。
+
+たとえば、Video Village で映像をモニターしている監督が、俳優が良い演技をするたびにボタンを押せる場面や、すべてのアセットでクラップポイントをマークできるスマートスレートを想像してみてください。
+
+## 何が必要ですか? {#what-will-i-need}
+
+[Implementing C2C: Setting Up](/ja/camera-to-cloud/implementing-c2c-setting-up) ガイドをまだ読んでいない場合は、先に進む前にざっと目を通してください!
+
+ハードウェアデバイスまたは C2C アプリケーションの認証と認可のガイドで取得した `access_token` が必要になります。
+
+## タイムコードの要件 {#timecode-requirements}
+
+リアルタイムロギングのイベントをアセットと一致させるには、撮影されるアセットとロギングに使用するデバイスの両方が [jam-sync または gen-lock](https://www.bhphotovideo.com/explora/video/tips-and-solutions/timecode-versus-sync-how-they-differ-and-why-it-matters) されている必要があります。収録デバイスとロギングデバイスはどちらも当社のバックエンドにタイムコードを送信する役割を担い、バックエンドではタイムコードの同期処理を行って、ロギングイベントを正しいフレームに合わせます。
+
+## 入力設定のセットアップ {#setting-up-your-input-configurations}
+
+リアルタイムロギングは、データモデルにおける新しいコンセプトである「入力 (Input)」に基づいて動作します。入力とは、Frame.io にデータを送信するよう設定できる、デバイス上の物理的なボタンを表します。まず、この種の操作を許可するボタンの数を決め、各ボタンに 0 から始まるインデックスを割り当てる必要があります。このインデックスは、イベントが当社のサーバーに送信される際に、どのボタンが押されたかを識別するために使用されます。入力はチャンネルに直接属しているため、各ボタン押下のメッセージは特定のチャンネルのエンドポイントを対象にする必要があります。チャンネルについて詳しくは、\[チャンネル管理ガイド\]を参照してください。
+
+各ボタンの動作の設定はユーザーが Frame.io の UI を通じて行うため、インテグレーションを可能な限りシンプルにできます。ボタンやトリガーなどが設定可能な場合に、ボタンを「Frame.io アクション」として割り当てられるようにすること以外、お客様側で特別な UI を用意する必要はありません。
+
+デバイスの各入力について、お客様と協力して次の設定を決定します。
+
+- インデックス: 入力を識別するために使用される、0 から始まる整数。
+
+- 表示名: Frame.io の設定画面でユーザーに表示される入力の名前。
+
+- サポートされるアクション: 現在、アクションの種類は「シングルプレス」のみですが、将来的には「長押し」や「ダブルプレス」などの追加のアクションタイプを許可し、各入力がそれぞれ異なる意味を持つ複数のアクションをサポートできるようにする可能性があります。
+
+- ボタンの色: ボタンに色が関連付けられている場合は、その色を表示して、ユーザーがデバイスの入力設定を構成する際にわかりやすくすることができます。
+
+- デフォルトのイベントタイプ: この入力がデフォルトで生成するイベントの種類:
+
+  - コメント: この入力はコメントを生成します
+  - ステータス: この入力はアセットのステータスを更新します
+
+- デフォルトのコメントテキスト: この入力によって生成されるコメントに使用されるデフォルトのテキスト
+
+- デフォルトのステータス: この入力がステータスに使用される場合に、アセットを更新するデフォルトのステータス。次のいずれかです。
+
+  - `in_progress`
+  - `needs_review`
+  - `approved`
+
+これらの情報を事前に提供していただくことで、実際のデバイスへの負担を可能な限り抑えることができます。
+
+## リアルタイムロギングイベントの送信 {#sending-a-real-time-logging-event}
+
+リアルタイムロギングのイベントは、次の呼び出しで送信できます
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/channels/{channel_id}/inputs/{input_index}/trigger \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__'
+        {
+            "action_type": "single_press",
+            "offset": 0,
+            "start": {
+                "smpte_timecode": "01:00:00:00",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            },
+            "duration": {
+                "smpte_timecode": "00:00:00:01",
+                "rate": {
+                    "playback": [24_000, 1001],
+                    "ntsc": "non_drop"
+                }
+            }
+       }
+__JSON__
+} | python -m json.tool
+```
+
+成功すると、空のペイロードとともに `204` が返されます。
+
+**URL パラメーター**
+
+- `channel_id`: この入力が登録されているチャンネルの UUID。この ID は、チャンネル作成の呼び出し、または [identity エンドポイント](/ja/camera-to-cloud/how-to-heartbeats-connection-info-and-status#retrieving-connection-information)から取得できます。
+- `input_index`: 呼び出しを行う入力のインデックス
+
+**JSON ボディ**
+
+- `action_type`: 実行するアクションの種類。現在サポートされているアクションは `single_press` のみです。
+
+- `offset`: イベントを記録する位置の、アセットの開始時点からのオフセット。
+
+- `start`: 入力がトリガーされた時点の開始時刻。[SMPTE タイムコード](https://workflow.frame.io/guide/timecode)とフレームレートで表します。
+
+  - `smpte_timecode`: SMPTE 文字列で表されたタイムコード。
+
+  - `rate`: タイムコードストリームのフレームレート。
+
+    - `playback`: フレームレートの再生速度。配列内の `[numerator, denominator]` のペアで表します。オプションで、このフィールドは文字列形式の分数 `"numerator/denominator"` も受け付けます。23.98 のような NTSC フレームレートは、完全な有理数の値として送信する必要があります: \[`24000, 1001]`。
+    - `ntsc`: タイムコードの NTSC 規格。“`non_drop"` または `null` を指定できます。`null` の場合、`playback` は `[24, 1]` のような整数値を表す必要があります。`"non_drop"` の場合、`playback` は `[24000, 1001]` のような有効な NTSC フレームレートを表す必要があります。
+
+- `duration`: 入力がトリガーされた時点のイベントの長さ。[SMPTE タイムコード](https://workflow.frame.io/guide/timecode)とフレームレートで表します。`start` と同じオブジェクト定義に従います。`single_press` のイベントでは、ちょうど 1 フレーム (`"01:00:00:00"`) である必要があります。
+
+## 信頼性の要件 {#reliability-requirements}
+
+リアルタイムアップロードのトリガーには、アップロードと同じ[信頼性のガイドライン](/ja/camera-to-cloud/how-to-advanced-uploads#uploading-reliably)を適用し、[デバイスの一時停止ステータス](/ja/camera-to-cloud/how-to-advanced-uploads#offset---handling-paused-devices)を尊重する必要があります。
+
+## 次へ {#next-up}
+
+まだの場合は、ぜひ私たちのチームにご連絡のうえ、次のガイドに進んでください。ご連絡をお待ちしています!

@@ -1,0 +1,529 @@
+---
+title: "Custom Actions"
+---
+
+Frame.io Actions bieten schnellen Zugriff auf gängige Medienvorgänge wie das Herunterladen, Umbenennen und Duplizieren von Elementen – und ermöglichen außerdem, Integrationen mit Tools und Diensten von Drittanbietern direkt in der Benutzeroberfläche von [Frame.io](https://next.frame.io/) bereitzustellen.
+
+## Über Actions {#about-actions}
+
+Mit der Einführung von Custom Actions können Entwickler ihre eigenen Actions in Frame.io V4 konfigurieren und verwalten. Custom Actions nutzen dasselbe zugrunde liegende Ereignissystem wie [Webhooks](https://developer.adobe.com/frameio/guides/Webhooks/) und sind ein alternativer Mechanismus, mit dem Entwickler ihre Assets mit den Tools verbinden können, die für die Benutzer in ihrem Frame.io-Konto am wichtigsten sind.
+
+Actions können von jedem Benutzer ausgeführt werden, der Mitglied des Frame.io-Workspace ist, in dem die Action aktiviert ist. Beim Ausführen einer Action sendet Frame.io einen Payload an eine von Ihnen angegebene URL. Die empfangende Anwendung antwortet mit einem HTTP-Statuscode, um den Empfang zu bestätigen, oder mit einem benutzerdefinierten Callback, um zusätzliche Formularfelder in der Frame.io-Benutzeroberfläche darzustellen. Die empfangende Anwendung kann Ihr eigenes gehostetes Programm, ein Dienst oder sogar ein Low-Code-/No-Code-IPaaS-Tool wie Workfront Fusion oder Zapier sein.
+
+Verwenden Sie Custom Actions, um Integrationen als programmierbare UI-Komponenten direkt in [Frame.io](https://next.frame.io/) zu entwickeln. So lassen sich Workflows realisieren, die von Benutzern innerhalb der App ausgelöst werden können und dasselbe zugrunde liegende Ereignis-Routing wie Webhooks nutzen. Sie können von Benutzern ausgelöste ein- oder mehrstufige Formulare erstellen, die als weiteres Formular oder als einfache Antwort an Frame.io zurückgegeben werden. Und wenn ein Benutzer auf eine Custom Action für ein Asset klickt, sendet Frame.io einen Payload an eine von Ihnen angegebene URL. Die empfangende Anwendung antwortet mit einem HTTP-Statuscode, um den Empfang zu bestätigen, oder mit einem benutzerdefinierten Callback, der zusätzliche UI in Frame.io darstellen kann.
+
+## Rate Limits {#rate-limits}
+
+Custom-Action-Ereignisse werden auf dieselben Limits auf Kontoebene angerechnet wie Webhook-Ereignisse: **1.000 Ereignisse pro Minute** und **20.000 Ereignisse pro Stunde**. Beide Limits gelten für das kombinierte Volumen im gesamten Konto, nicht separat für jede Custom Action oder jedes Webhook-Abonnement.
+
+Wenn eines der Limits erreicht ist, werden weitere Custom-Action-Ereignisse **verworfen** – sie werden weder in eine Warteschlange gestellt noch automatisch erneut versucht.
+
+Dies sind Limits für das Ereignisvolumen, keine Limits für API-Anfragen zur Verwaltung von Custom Actions. Details finden Sie unter [Webhook Rate Limits](/de/platform/docs/guides/webhooks#webhook-rate-limits).
+
+## Verbesserungen von Actions in V4 {#actions-improvements-in-v4}
+
+Auf Grundlage der Erfahrungen von Benutzern unserer Legacy-Version haben wir in Frame.io V4 eine Reihe von Verbesserungen an den Actions-Funktionen vorgenommen:
+
+<CardGroup cols={3}>
+
+<Card title="Neue Feldtypen" icon="input-numeric" iconType="solid">
+
+Bisher waren nur Text- und Einzelauswahlfelder möglich; jetzt unterstützen wir zusätzlich Mehrfachauswahl, Textbereich (für ein größeres Textfeld) und ein boolesches Feld (für einen Optionsschalter).
+
+</Card>
+
+<Card title="Klickbare Links" icon="link" iconType="solid">
+
+Textfelder machen es Benutzern nicht leicht, URLs zu kopieren und einzufügen. Verwenden Sie stattdessen unser neues Link-Feld für einfaches Kopieren mit einem Klick.
+
+</Card>
+
+<Card title="Dynamische Modals" icon="window" iconType="solid">
+
+Je nach Menge der zurückgegebenen Daten passt sich das Modal Ihrer Action dynamisch an, um die Informationen in Ihrem Formular optimal darzustellen – bei Bedarf auch mit scrollbaren Modals.
+
+</Card>
+
+<Card title="Actions für mehrere Assets" icon="files" iconType="solid">
+
+Konfigurieren Sie Ihre Action so, dass sie bis zu 100 Assets in einer Anfrage verarbeitet.
+
+<br /><Badge color="green">NEU</Badge>
+
+</Card>
+
+<Card title="Gemischte Asset-Typen" icon="rectangles-mixed" iconType="solid">
+
+Actions sind nicht auf einen Asset-Typ beschränkt und können für eine Kombination aus Dateien, Ordnern und Version Stacks ausgelöst werden.
+
+</Card>
+
+<Card title="In-App-Feedbackformular" icon="square-poll-horizontal" iconType="solid" href="https://next.frame.io/settings/actions">
+
+Wir möchten sowohl von Entwicklern als auch von Endbenutzern erfahren, wie Sie Actions verwenden. Deshalb haben wir auf der Einstellungsseite im Web ein Feedbackformular bereitgestellt.
+
+</Card>
+
+</CardGroup>
+
+## Migrierte Actions {#migrated-actions}
+
+Bei der Migration zu einem Frame.io-V4-Konto, das Custom Actions enthält, die zuvor in der Legacy-Version von Frame.io erstellt wurden, sind einige Punkte zu beachten.
+
+### Action-Status {#action-status}
+
+Bei der Migration des Kontos zu Frame.io V4 erhalten alle in früheren Versionen erstellten Custom Actions den Status ‘null’ und werden automatisch deaktiviert. So haben Benutzer die Möglichkeit, ihre Actions zunächst auf die V4 API umzustellen, bevor sie sie aktivieren, da nicht aktualisierte Actions fehlschlagen. Um Actions in diesem Zustand zu finden, besuchen Sie die Seite mit den Actions-Einstellungen und sehen Sie in der Spalte „Status“ nach oder prüfen Sie bei Verwendung der API das Feld is_active.
+
+### Unterstützte Ressourcen: Dateien, Ordner und Version Stacks {#actionable-resources-files-folders-&-version-stacks}
+
+Da Asset-Typen in der Frame.io V4 API als separate Ressourcen getrennt sind, gibt es bei der Interpretation der Ressourcen-ID im Payload Ihrer Action einiges zu beachten. Das Verhalten bei einzelnen Dateien ist unkompliziert, da die ID die konkrete Datei widerspiegelt, für die die Action ausgeführt wurde. Ebenso erhalten Sie bei Ordnern die ID des Ordners, für den die Action ausgeführt wurde; je nach Anwendungsfall haben Sie jedoch mehrere Möglichkeiten, das Verhalten Ihrer Action zu definieren. Verwenden Sie die Ordner-ID für nachfolgende Aufrufe der Frame.io API, wenn Sie mit der Ordnerressource selbst interagieren möchten. Alternativ können Sie die untergeordneten Elemente dieses Ordners abrufen, um die darin enthaltenen Assets weiterzuverarbeiten. Wenn eine Action für einen Version Stack ausgeführt wird, enthält Ihr Payload die ID des ‘Head Asset’, also der obersten Datei im Stack, die in der Frame.io-Benutzeroberfläche angezeigt wird.
+
+Mehr über die Unterschiede zwischen der Frame.io Legacy API und V4 erfahren Sie in unserem [Migrationsleitfaden](/de/platform/docs/resources/migration).
+
+<Info>
+
+Konfigurieren Sie [Custom Actions](/de/platform/api-reference/custom-actions/actions-show) mit der API.
+
+</Info>
+
+Eine Custom Action erfordert:
+
+| Feldname | Beschreibung |
+| --- | --- |
+| Name | Der Name, den Sie für Ihre Custom Action wählen. Er wird im Menü der verfügbaren Custom Actions in Frame.io angezeigt. |
+| Description | Erläutern Sie zur Referenz, was die Action tut (die Beschreibung erscheint nicht in der Frame.io-Web-App). |
+| Event | Interner Ereignisschlüssel, mit dem Sie zwischen Standard-Webhook-Ereignissen und Ihren eigenen unterscheiden können. |
+| URL | Wohin Ereignisse zugestellt werden. |
+| Workspace | Der Workspace, der die Custom Action verwendet. |
+
+## Custom Action konfigurieren {#configure-your-custom-action}
+
+Wenn ein Benutzer eine Custom Action auslöst, sendet Frame.io einen Payload an eine von Ihnen angegebene URL. Die empfangende Anwendung kann mit einem HTTP-Statuscode antworten, um den Empfang zu bestätigen, oder mit einem benutzerdefinierten Callback, der zusätzliche UI in [Frame.io](https://next.frame.io/) darstellt.
+
+<Warning>
+
+Zum Erstellen von Custom Actions für einen Workspace sind Berechtigungen als Account Admin erforderlich. Bitten Sie Ihren Admin, Ihre Berechtigungen anzupassen, falls Sie keinen Zugriff haben.
+
+</Warning>
+
+### Konfiguration für mehrere Assets {#multi-asset-configuration}
+
+Die Unterstützung mehrerer Assets ist konfigurationsgesteuert und muss im Konfigurations-Modal der Action [im Web](https://next.frame.io/settings/actions) explizit aktiviert werden. Dies kann beim Erstellen einer neuen Action oder beim Aktualisieren einer bestehenden Action erfolgen.
+
+Wenn die Unterstützung mehrerer Assets aktiviert ist, wird das Payload-Format sofort umgestellt. Der Legacy-Payload und der Payload mit Unterstützung mehrerer Assets schließen sich gegenseitig aus.
+
+## Payload von Frame.io {#payload-from-frame-io}
+
+Wenn der Benutzer auf Ihre Custom Action klickt, wird ein Payload an die URL gesendet, die Sie im Feld URL festgelegt haben. Verwenden Sie diesen Payload, um Folgendes zu ermitteln:
+
+<CardGroup cols={2}>
+
+<Card title="Action-Kontext" icon="computer-mouse" iconType="solid">
+
+- Welche Custom Action angeklickt wurde
+- Welche Ressource(n) angeklickt wurde(n)
+- Welcher Benutzer die Action ausgeführt hat
+- Welcher Ereignistyp ausgelöst wurde
+
+</Card>
+
+<Card title="Organisationskontext" icon="building" iconType="solid">
+
+- Welches Konto der Custom Action zugeordnet ist
+- Welcher Workspace der Custom Action zugeordnet ist
+- Welches Projekt die Ressource(n) enthält
+
+</Card>
+
+</CardGroup>
+
+<AccordionGroup>
+
+<Accordion title="Payload – Unterstützung für ein oder mehrere Assets">
+
+Custom Actions akzeptierten ursprünglich nur ein Asset pro Anfrage über ein `resource`-Objekt, das ein Asset enthält. Wenn die Unterstützung mehrerer Assets aktiviert ist, verwendet der Payload eine `resources`-Liste mit einem oder mehreren Assets (maximal 100 Assets pro Anfrage).
+
+```json
+POST /your/url
+{
+  "account_id": "1a94720e-f7f5-4c41-ab62-d11eebe3d504",
+  "action_id": "0aeb9feb-f8eb-4100-a8c2-b39b66d354ab",
+  "data": {
+      "description": "Pretty cool video.",
+      "title": "Hey there!"
+  },
+  "interaction_id": "985559de-865a-40e5-a687-2bbed4497eaa",
+  "project": {
+      "id": "3e34e7cb-5c21-49f5-8ca9-a1419584c2ea"
+  },
+  "resources": [
+      {
+          "id": "fe41c5a8-1b8d-417d-a7df-0b88bc19b476",
+          "type": "file"
+      },
+      {
+          "id": "fe81fb2b-1316-4a76-9cf6-0630f474fc39",
+          "type": "file"
+      }
+  ],
+  "type": "some.event",
+  "user": {
+      "id": "68093c1c-4b05-41ce-a3c9-e64d195b1935"
+  },
+  "workspace": {
+      "id": "629086c0-f6aa-4d63-a284-f39bcd415b9f"
+  }
+}
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+<AccordionGroup>
+
+<Accordion title="Legacy-Payload – nur Unterstützung für ein einzelnes Asset">
+
+```json
+POST /your/url
+{
+    "account_id": "1a94720e-f7f5-4c41-ab62-d11eebe3d504",
+    "action_id": "0e38b93a-9f10-4bc7-90bc-bd07a16e510a",
+    "data": {
+        "description": "Wow look at this.",
+        "title": "Hey there!!"
+    },
+    "interaction_id": "dff6d369-7150-41f9-8e6f-4f0895f6b416",
+    "project": {
+        "id": "3e34e7cb-5c21-49f5-8ca9-a1419584c2ea"
+    },
+    "resource": {
+        "id": "fe81fb2b-1316-4a76-9cf6-0630f474fc39",
+        "type": "file"
+    },
+    "type": "some.event",
+    "user": {
+        "id": "68093c1c-4b05-41ce-a3c9-e64d195b1935"
+    },
+    "workspace": {
+        "id": "629086c0-f6aa-4d63-a284-f39bcd415b9f"
+    }
+}                                  
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+### Migration vom Legacy-Payload {#migrating-from-the-legacy-payload}
+
+<Warning>
+
+**Legacy-Payload soll eingestellt werden**
+
+Der Legacy-Payload soll eingestellt werden, und Benutzern wird dringend empfohlen, ihre Dienste auf die Verarbeitung des neuen Payloads umzustellen.
+
+Durch Aktivieren des Konfigurations-Flags und Anpassen Ihrer Payload-Verarbeitung kann eine Action nahtlos auf die Unterstützung eines Payloads mit mehreren Assets umgestellt werden.
+
+1. Ersetzen Sie die Verwendung des einzelnen `resource`-Objekts durch die `resources`-Liste
+2. Passen Sie den Code so an, dass er über die `resources`-Liste iteriert
+3. Aktivieren Sie das Multi-Asset-Flag in der Actions-Konfiguration
+
+</Warning>
+
+| Feldname | Beschreibung |
+| --- | --- |
+| `account_id` | Die eindeutige Konto-ID der Action. |
+| `action_id` | Die eindeutige ID der Action. |
+| `interaction_id` | Eine von Frame.io generierte eindeutige Kennung, mit der Ihre Transaktion über mehrere Anfragen hinweg verfolgt wird, z. B. bei verketteten Message- oder Form-Callbacks. Bleibt während jeder Sequenz der Action gleich. |
+| `project_id` | Die eindeutige Projekt-ID der Action. |
+| `resource.id` | Die ID der Ressource, von der aus Sie die Action ausgelöst haben. |
+| `resource.type` | Der Typ der Ressource, von der aus Sie die Action ausgelöst haben. |
+| `type` | Der Name, der beim Konfigurieren der Action im Feld `event` angegeben wurde. |
+| `user.id` | Die ID des Benutzers, der die Action ausgelöst hat. |
+| `workspace.id` | Die ID des Workspace, der die Action verwendet. |
+| `data` | Schlüssel-Wert-Paare mit den Namen der Formularfelder und den vom Benutzer ausgewählten Werten. Ihre App erhält diese, um zu wissen, welche Auswahl getroffen wurde. |
+
+## Interaktionen, Wiederholungen und Timeouts {#interactions-retries-and-timeouts}
+
+Die `interaction_id` ist eine eindeutige Kennung, mit der die Interaktion im Laufe der Zeit verfolgt wird. Wenn Sie dem Benutzer nicht antworten müssen, geben Sie einen Statuscode 200 zurück, und Sie sind fertig. Auch wenn es optional ist, empfehlen wir, Informationen über das Ergebnis der Action mitzusenden, etwa eine Erfolgsmeldung oder einen Fehlerhinweis. Custom Actions unterstützen Message Callbacks.
+
+<Note>
+
+Frame.io erwartet eine Antwort innerhalb von weniger als 10 Sekunden und versucht es bis zu 5 Mal erneut, während auf eine erfolgreiche Antwort gewartet wird. Idealerweise erfolgt die Antwort sofort, und asynchrone Aktionen finden nach dem Auslösen über eine Custom Action statt.
+
+</Note>
+
+## Message Callback erstellen {#create-a-message-callback}
+
+In Ihrer HTTP-Antwort auf das Webhook-Ereignis können Sie ein JSON-Objekt zurückgeben, das eine Nachricht beschreibt, die dem auslösenden Benutzer in der Frame.io-Benutzeroberfläche angezeigt wird.
+
+```json
+{
+  "title": "Success!",
+  "description": "The thing worked! Nice."
+}
+```
+
+Mit Nachrichten können Sie dem Benutzer direkt in der Frame.io-Benutzeroberfläche Feedback geben. Wenn Sie zusätzliche Informationen vom Benutzer erfassen müssen, verwenden Sie stattdessen **Form Callbacks**.
+
+## Form Callback erstellen {#create-a-form-callback}
+
+Angenommen, Sie benötigen weitere Informationen, bevor Sie Ihren Prozess starten. Beispielsweise laden Sie Inhalte in ein System hoch, das zusätzliche Details erfordert. Sie können in Ihrer Antwort ein Formular beschreiben, das der Benutzer ausfüllt und an Sie zurücksendet. Hier ein Beispiel:
+
+```json
+{
+  "title": "Need some more info!",
+  "description": "Getting ready to submit this file!",
+  "fields": [
+    {
+      "type": "text",
+      "label": "Title",
+      "name": "title",
+      "value": "MyVideo.mp4"
+    },
+    {
+      "type": "select",
+      "label": "Captions",
+      "name": "captions",
+      "options": [
+        {
+          "name": "Off",
+          "value": "off"
+        },
+        {
+          "name": "On",
+          "value": "on"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Wenn der Benutzer das Formular absendet, erhalten Sie ein Ereignis an derselben URL wie beim ursprünglichen POST:
+
+```json
+POST /your/url
+{
+  "type": "your-specified-event-name",
+  "interaction_id": "the-same-id-as-before",
+  "action_id": "unique-id-for-this-custom-action",
+  "data":{
+    "title": "MyVideo.mp4",
+    "captions": "off"
+  }
+}
+```
+
+Alle benutzerdefinierten Felder eines Formulars erscheinen im Abschnitt `data` des von Frame.io gesendeten JSON-Payloads. Verwenden Sie die `interaction_id`, um die ursprüngliche Anfrage diesen neuen Formulardaten zuzuordnen. Sie können mit einer Nachricht antworten oder ein weiteres Formular anhängen. Durch das Verketten von Actions, Formularen und Nachrichten können Sie in Frame.io effektiv mehrstufige Workflows mit Geschäftslogik aus einem externen System programmieren.
+
+## Details zu Formularen {#form-details}
+
+Wie Nachrichten unterstützen Formulare die Attribute `title` und `description`, die oben im Formular dargestellt werden. Darüber hinaus akzeptiert jedes Formularfeld die folgenden Basisattribute:
+
+<CardGroup cols={2}>
+
+<Card title="Feldeigenschaften" icon="tarp" iconType="solid">
+
+- **type** — Teilt der Frame.io-Benutzeroberfläche mit, welche Art von Daten zu erwarten ist und welche Komponente dargestellt werden soll.
+- **label** — Erscheint in der Benutzeroberfläche als Überschrift über dem Feld.
+
+</Card>
+
+<Card title="Felddaten" icon="database" iconType="solid">
+
+- **name** — Schlüssel, über den das Feld im nachfolgenden Payload identifiziert wird.
+- **value** — Wert, mit dem das Feld vorausgefüllt wird.
+
+</Card>
+
+</CardGroup>
+
+## Unterstützte Feldtypen {#supported-field-types}
+
+### Textfeld {#text-field}
+
+Ein einfaches Textfeld ohne zusätzliche Parameter.
+
+```json
+{  
+  "type": "text",
+  "label": "Title",
+  "name": "title",
+  "value": "MyVideo.mp4"
+}
+```
+
+### Textbereich {#text-area}
+
+Ein einfacher Textbereich ohne zusätzliche Parameter.
+
+```json
+{  
+  "type": "textarea",
+  "label": "Description",
+  "name": "description",
+  "value": "This video is really, really popular."
+}
+```
+
+### Auswahlliste {#select-list}
+
+Definiert eine Auswahlliste, aus der der Benutzer wählen kann. Muss eine `options`-Liste enthalten, deren Einträge jeweils einen menschenlesbaren `name` und einen maschinenlesbaren `value` enthalten sollten.
+
+```json
+{
+  "type": "select",
+  "label": "Captions",
+  "name": "captions",
+  "value": "off",
+  "options": [
+       {
+         "name": "Off",
+         "value": "off"
+       },
+       {
+         "name": "On",
+         "value": "on"
+      }
+   ]
+}
+```
+
+### Kontrollkästchen {#checkbox}
+
+Ein einfaches Kontrollkästchen ohne zusätzliche Parameter.
+
+```json
+{ 
+   "type": "boolean", 
+   "name": "enabled", 
+   "label": "Enabled", 
+   "value": "false"
+}
+```
+
+### Link {#link}
+
+Ein einfacher Link ohne zusätzliche Parameter.
+
+```json
+{
+  "type": "link",
+  "name": "videoLink",
+  "label": "Video Link",
+  "value": "https://www.youtube.com/watch?v=XtX1zv9CEVc"
+}
+```
+
+## Das Berechtigungsmodell von Frame.io {#the-frame-io-permissions-model}
+
+Custom Actions haben ein besonderes Berechtigungsmodell: Sie gehören zu einem Workspace und nicht zu einem bestimmten Benutzer eines Kontos. Das bedeutet:
+
+<CardGroup cols={2}>
+
+<Card title="Erstellung & Verwaltung" icon="users-gear" iconType="solid">
+
+- Jeder Admin kann eine Custom Action in einem Workspace erstellen.
+- Jeder Admin kann eine Custom Action, die in einem Team existiert, ändern oder löschen.
+
+</Card>
+
+<Card title="Live-Aktualisierungen" icon="arrows-rotate" iconType="solid">
+
+- Nach einer Änderung sehen alle Benutzer sofort das Ergebnis.
+
+</Card>
+
+</CardGroup>
+
+## Sicherheit und Verifizierung {#security-and-verification}
+
+Standardmäßig wird für alle Custom Actions bei ihrer Erstellung ein Signaturschlüssel generiert. Dies ist nicht konfigurierbar. Mit diesem Schlüssel können Sie überprüfen, ob die Anfrage von Frame.io stammt. Die `POST`-Anfrage enthält Folgendes:
+
+| Name | Beschreibung |
+| --- | --- |
+| `X-Frameio-Request-Timestamp` | Der Zeitpunkt, zu dem Ihre Custom Action ausgelöst wurde. |
+| `X-Frameio-Signature` | Die berechnete Signatur. |
+
+<CardGroup cols={2}>
+
+<Card title="Überprüfung des Zeitstempels" icon="clock" iconType="solid">
+
+**Der Zeitstempel** ist der Zeitpunkt, zu dem die Anfrage beim Verlassen des Frame.io-Netzwerks signiert wurde. Er kann verwendet werden, um Replay-Angriffe zu verhindern. Wir empfehlen zu prüfen, ob dieser Zeitpunkt innerhalb von 5 Minuten der lokalen Zeit liegt.
+
+</Card>
+
+<Card title="Überprüfung der Signatur" icon="shield" iconType="solid">
+
+**Die Signatur** ist ein HMAC-SHA-256-Hash, der mit dem Signaturschlüssel erstellt wird, der bei der ersten Erstellung der Custom Action bereitgestellt wird.
+
+</Card>
+
+</CardGroup>
+
+### Signatur überprüfen {#verifying-the-signature}
+
+<Steps>
+
+<Step title="Signatur extrahieren">
+
+Extrahieren Sie die Signatur aus den HTTP-Headern.
+
+</Step>
+
+<Step title="Zu signierende Nachricht erstellen">
+
+Erstellen Sie eine zu signierende Nachricht, indem Sie Version, Zustellzeit und Anfragetext kombinieren: `v0:timestamp:body`.
+
+</Step>
+
+<Step title="HMAC SHA256 berechnen">
+
+Berechnen Sie die HMAC-SHA256-Signatur mit Ihrem Signatur-Secret.
+
+</Step>
+
+<Step title="Signaturen vergleichen">
+
+Vergleichen Sie Ihre berechnete Signatur mit der bereitgestellten!
+
+</Step>
+
+</Steps>
+
+<Note>
+
+Die bereitgestellte Signatur hat das Präfix `v0=`. Derzeit verfügt Frame.io nur über diese eine Version zum Signieren von Anfragen. Sie müssen dieses Präfix zu Ihrer berechneten Signatur hinzufügen.
+
+</Note>
+
+```python title="Python"
+import hmac
+import hashlib
+
+def verify_signature(curr_time, req_time, signature, body, secret):
+    """
+    Verify webhook/custom action signature
+    :Args:
+        curr_time (float): Current epoch time
+        req_time (float): Request epoch time
+        signature (str): Signature provided by the frame.io API for the given request
+        body (str): Custom Action body from the received POST
+        secret (str): The secret for this Custom Action that you saved when you first created it
+    """
+    if int(curr_time) - int(req_time) < 500:
+        message = 'v0:{}:{}'.format(req_time, body)
+        calculated_signature = 'v0={}'.format(hmac.new(
+            bytes(secret, 'latin-1'),
+            msg=bytes(message, 'latin-1'),
+            digestmod=hashlib.sha256).hexdigest())
+        if calculated_signature == signature:
+            return True
+    return False
+```
+
+## Feedback {#feedback}
+
+Wir würden gerne von Entwicklern und Endbenutzern erfahren, wie Sie Actions in Frame.io V4 nutzen möchten. [Kontaktieren Sie uns](https://forum.frame.io/) gerne mit Ihren Fragen, Ideen und Anwendungsfällen, damit wir unsere Prioritäten entsprechend setzen können.

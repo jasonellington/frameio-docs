@@ -1,0 +1,75 @@
+---
+title: "关键概念"
+---
+
+## API 结构 {#api-structure}
+
+Frame.io API 支持速率限制、资源集合分页、版本控制和错误等常见概念。本节将介绍每个概念的具体细节。
+
+### 组织方式与风格 {#organization-and-style}
+
+该 API 遵循常见的 [REST](https://restfulapi.net/) 原则进行组织。所有请求都应通过 SSL 发出。所有请求和响应正文（包括错误）均采用 JSON 编码。
+
+除非另有说明，API 方法遵循以下约定：
+
+- 没有值的属性将使用 `null`，而不是未定义
+- 属性名称使用“蛇形命名法”（Snake Case）（例如 `first_name`）
+- 时间戳以 ISO-8601 格式呈现（例如 `2016-02-03T16:38:46.985Z`）
+
+### 路径约定 {#path-conventions}
+
+Accounts > Teams > Projects > Assets > Comments
+
+一般而言，Frame.io API 中的资源路径会遵循上述层级模型，最多包含一个父级。在直观的情况下，对于逻辑上严格从属的对象，API 也支持独立的资源路径。
+
+例如，Frame.io API 同时支持以下路径：
+
+- `GET /accounts/:id/teams` — 返回某个 Account 的所有 Teams。
+- `GET /teams` — 返回调用方 User 的所有 Teams。
+- `GET /teams/:id` — 返回特定 Team 的详细信息。
+
+另一个例子：Comments 脱离其 Asset 上下文就没有太大意义，因此 Comment 集合和创建方法位于 Asset 作用域内。然而，在更新或删除 Comment 时，Asset 上下文就不那么重要了，因此资源路径中会将其省略：
+
+- `GET /assets/:id/comments`
+- `POST /assets/:id/comments`
+- `PUT /comments/:id`
+- `DELETE /comments/:id`
+
+## Scopes {#scopes}
+
+无论是通过 OAuth2.0 获取 token，还是直接通过[开发者门户](/cn/platform/v2)获取，所有 API token 都必须关联一个明确的“scopes”列表。scope 指资源（例如 `Asset`）与操作（例如 `create`）的组合，并以点号表示法表示。
+
+例如，拥有 `asset.create` scope 的 token 能够创建新的 Assets。
+
+如果您使用的是基于 Developer Token 的实现，scopes 会设置并分配给访问 token 本身。如果您使用的是 OAuth 应用，scopes 则是为应用定义的；当用户首次与应用交互时，他们会同意授予应用以所请求的 scopes 进行操作的权限。
+
+Developer Token 和应用可用的 scopes 包括以下内容（请注意，部分 scopes 并非对所有人开放，相关情况会特别注明）。
+
+| Scope 类别 | 描述 |
+| --- | --- |
+| Accounts、Users 和 Teams | 获取您有权访问的 Accounts 和 Teams 的信息。如果已认证的 User 是管理员等角色，他们可能有权访问其账户中其他 Users 和 Teams 的信息。<br />**注意**：要更新 Teams（例如管理 webhooks），您必须拥有 Team Manager 或 Account Admin 角色。 |
+| Projects 和 Assets | 获取 Projects 的基本信息，检查或更新 User 的成员资格，创建或更新 Assets |
+| Comments | 获取、创建或删除 Asset 上的评论，或回复特定 Comment。<br />**注意：** 更新或删除评论的请求必须由评论创建者执行。 |
+| Review Links | 创建 Review Links 或管理其设置。<br />**注意：** Review Links 是 Frame.io 的一项核心功能，用于收集 Assets 并通过单个 URL 发送以征求反馈，而无需明确的 Team 或 Project 访问权限。 |
+| Webhooks | Webhooks 提供了一种方式，可将 Frame.io 内发生的事件转化为通知，发送到外部系统进行处理、API 回调，并最终实现工作流自动化。 |
+| Audit Logs | Frame.io 为其应用中执行的绝大多数活动提供日志。这既包括核心资源的基本 CRUD 操作，也包括一些特殊抽象（例如 `AssetVersioned`）。您必须是 Admin 才能访问日志。 |
+| Presentations | 在现有的 Presentation 页面中创建或编辑选项和 Assets。 |
+
+## 分页 {#pagination}
+
+返回结果集合的 API 方法始终会进行分页。所有预期返回分页结果的方法都会响应以下查询参数，并返回以下 header 属性：
+
+| 描述 | 查询参数 | Header 属性 |
+| --- | --- | --- |
+| 每页大小 | `page_size` | `per-page` |
+| 页码 | `page` | `page-number` |
+| 总页数 | 不适用 | `total-pages` |
+| 总数 | 不适用 | `total` |
+
+此外，分页结果会包含一个 `Link` 响应 header（[参见 RFC-5988](https://tools.ietf.org/html/rfc5988)），其中包含以下信息：
+
+- `next` — 对应的 URL 是指向下一页的链接。
+- `prev` — 对应的 URL 是指向上一页的链接。
+- `last` — 对应的 URL 是指向最后一页的链接。
+
+**注意：** 当 `next` 和 `prev` 链接都不存在时，表示返回的第一页就是唯一的一页。

@@ -1,0 +1,216 @@
+---
+title: "操作指南：整理资产"
+sidebarTitle: "整理资产"
+---
+
+## 简介 {#introduction}
+
+在本指南中，我们将了解如何控制、以及在多大程度上可以控制集成中的资产上传到*哪里*。
+
+## 我需要准备什么？ {#what-will-i-need}
+
+如果您还没有阅读 [实施 C2C：设置](/cn/camera-to-cloud/implementing-c2c-setting-up) 指南，请在继续之前先快速浏览一下！
+
+您还需要在 [C2C 硬件](/cn/platform/v2/implementing-c2c-authentication-and-authorization-hardware) 或 [C2C 应用程序](/cn/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application) 身份验证与授权指南中获得的 `access_token`。
+
+## 资产文件夹结构 {#asset-folder-structure}
+
+默认情况下，资产会按照以下文件夹结构创建：
+
+`Cloud Devices` > `{YYYY}_{MM}_{DD}` > `{ASSET_TYPE}` > `{YOUR_DEVICE}` > `{ASSET_NAME}`
+
+其中，`{ASSET_TYPE}` 为 `VIDEO`、`AUDIO` 或 `DATA` 之一（按通道为您的设备型号进行配置），`{YOUR_DEVICE}` 是连接到用户项目的项目设备名称，`{ASSET_NAME}` 是您上传的资产名称，也就是 Frame.io 中实际可播放的资产。
+
+### 扩展名路由 {#extension-routing}
+
+您可以对设备进行设置，根据 `{ASSET_NAME}` 中的文件扩展名，将不同的资产路由到自定义的 `{ASSET_TYPE}` 文件夹。例如，假设您的集成会生成多种不同类型的文件，每种文件都有特定的来源。您可以告诉我们按如下方式映射这些资产：
+
+```text
+.mov -> VIDEO
+.mp4 -> VIDEO
+.raw -> STILLS
+.jpeg -> STILLS
+.pdf -> CAMERA REPORTS
+.las -> LiDAR Scans
+```
+
+现在，当您创建以下资产时：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_codes]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "IMAGE_0001.jpeg", 
+            "filetype": "image/jpeg", 
+            "filesize": 21136250,
+            "offset": 10
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**API 端点规范**
+
+`/v2/assets` 的文档可以 [在这里找到](/cn/camera-to-cloud/api-reference/device-asset-create)
+
+</Info>
+
+……它将被路由到类似这样的位置：`Cloud Devices` > `2022_04_01` > `STILLS` > `MY_DEVICE` > `IMAGE_0001.jpeg`。
+
+如果文件名改为 `A001_C001.mov`，它将被路由到：`Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `A001_C001.mov`。
+
+### 令牌化上传路径 {#tokenized-upload-paths}
+
+某些集成可能希望对其设备创建的文件夹结构拥有更多控制权。另一方面，我们 [Frame.io](http://frame.io/) 需要确保从 C2C 设备上传到 [Frame.io](http://frame.io/) 的文件保持一定程度的一致性，特别是要向 [Frame.io](http://frame.io/) 客户保证 C2C 设备可以与其项目的哪些部分进行交互。为此，我们允许集成方在 `{YOUR_DEVICE}` 文件夹内自定义资产上传位置，但不允许将资产上传到该文件夹之外。
+
+要上传到自定义文件夹结构，您需要与您的合作伙伴经理合作。自定义文件夹结构是一组令牌化的元数据，必须在创建资产时提供。我们来看一个简单的示例：
+
+假设我们有一套 3D 摄像机装置，其 `reel_name` 值为 `"A001"`、`"A002"`、`"A003"` 等，`clip_number` 值为 `"C001"`、`"C002"` 等。我们希望为每个片段创建文件夹，并在其中放入左眼和右眼文件，因此文件在项目中会如下所示：
+
+![Tokenized Folder Path - 3D Rig Example](/images/camera-to-cloud/how-to-organize-assets/e40b09128d1cbf3c876fd14169a6406642d50d13ce7ab802baff4bbaf50bfd4a.webp)
+
+为此，我们需要配置两项设置：
+
+- 必需的元数据字段
+- 令牌化文件路径
+
+必需的元数据字段是一个简单的键列表，您的集成在创建资产时必须设置这些键：
+
+```text
+[reel_name, clip_number]
+```
+
+然后，您可以使用其中任意键来创建一个以 `/` 分隔的路径，并使用 `{field_name}` 标示字段值应插入的位置：
+
+```text
+REEL_{reel_name}/{reel_name}_{clip_number}
+```
+
+这两项设置都需要提供给我们 [Frame.io](http://frame.io/) 团队，以便添加到您的集成详情中。设置完成后，您在创建资产时必须在负载的根级别提供这些值，资产才能成功创建：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_LEFT.mp4", 
+            "filetype": "video/mp4", 
+            "filesize": 21136250,
+            "offset": 10,
+            "metadata": {
+              "reel_name": "A001",
+              "clip_number": "C001"
+            },
+        }
+__JSON__
+} | python -m json.tool
+```
+
+上述请求将创建一个完整路径类似如下的文件：`Cloud Devices` > `2022_04_01` > `VIDEO` > `MY_DEVICE` > `REEL_A001` > `A001_C001` > `A001_C001_LEFT.mp4`
+
+<Danger>
+
+**元数据错误**
+
+如果您的设备未被明确设置为允许这些字段，那么当您尝试发起相同的调用时将收到错误。同样，如果您设置了必需的元数据字段，则必须（MUST）在资产创建负载中提供这些字段，否则将返回错误。
+
+</Danger>
+
+负载接受任何有效的 JSON 值。非字符串值按以下方式呈现：
+
+- **整数（integers）**：以十进制呈现：`10` -> `"10"`
+- **浮点数（floats）**：使用 SIGPLAN ‘96 编程语言设计与实现会议论文集中 “Printing Floating-Point Numbers Quickly and Accurately” 一文所述算法得出的最短表示形式。
+- **布尔值（booleans）**：`true` 和 `false` 分别呈现为 `"true"` 和 `"false"`
+- **null**：呈现为空字符串。如果将 `reel_name` 设置为 `null`，则第一个自定义文件夹将呈现为 `REEL_`
+
+一般而言，我们建议您将值限制为字符串，并按照您认为合适的方式格式化其他值（例如，整数始终会以不带前导零的形式输出，而您可能希望对此进行调整）。
+
+一般而言，应仅使用每个片段都具有有效值的字段；如果某个字段并非始终有有效值，您应当规划好如何表示未设置或 null 值。
+
+## 版本堆叠 {#version-stacking}
+
+[Frame.io](http://frame.io/) 支持 [版本堆叠](https://support.frame.io/en/articles/4431-version-stacking-and-comparison)，这是一种在 UI 中将同一内容的多个迭代版本捆绑在一起的方式。C2C API 允许设备上传资产的新迭代版本，这些版本将与之前的版本一起放入同一个版本堆叠中。
+
+要创建版本堆叠，您必须提供 `autoversion_id` 来标识资产所属的版本堆叠。该值可以是任何内容：UUID、文件名等。请注意，只能使用在资产文件夹中绝不会被意外重复的值。例如，如果您的集成可能多次创建相同的文件名，那么文件名就*不*适合用作 `autoversion_id`。
+
+我们按如下方式提供 autoversion_id：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v01.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+现在，每当您上传新资产时，如果使用相同的 autoversion_id，该资产就会作为最新版本添加到与原始资产相同的堆叠中：
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v02_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 10,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+*只有上传到同一文件夹的资产才会堆叠*，因此如果您希望实现版本堆叠，需要注意以下几点：
+
+- 令牌化元数据必须解析到同一个父文件夹，才能创建版本堆叠。
+- 由于创建日期是文件路径的一部分，在 UTC 午夜之后创建的新版本可能无法正确堆叠，除非您为原始上传的创建时间提供一个偏移量（offset）。
+
+第二点非常重要。假设在初次上传 48 小时后，创建了该资产的新版本。为了与原始资产堆叠，我们必须提供一个指向 48 小时之前的偏移量：172800 秒。
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "A001_C001_v03_with_color.mov", 
+            "filetype": "video/webm", 
+            "filesize": 21136250,
+            "offset": 172800,
+            "autoversion_id": "033e22ae-8544-4c9b-a84c-fcc140b0dd16"
+        }
+__JSON__
+} | python -m json.tool
+```
+
+如果当前资产*原本*会被上传到 `2022_04_03`，那么现在它将被上传到 `2022_04_01`，并与正确的资产堆叠。
+
+## 下一步 {#next-up}
+
+这是打造出色 C2C 集成的最后一篇指南！花点时间为自己鼓鼓掌吧！也许还可以吃点零食。剩下唯一要做的就是查看集成方检查清单，其中汇总了打造万无一失的集成所需的一切。
+
+如果您还没有联系我们的团队，我们建议您先与我们联系，然后继续阅读下一篇指南。期待您的来信！

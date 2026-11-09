@@ -1,0 +1,480 @@
+---
+title: "Linki do multimediów"
+---
+
+Frame.io przechowuje i przetwarza pliki przesłane do Twoich projektów — obrazy, filmy, pliki PDF i nie tylko. Gdy pobierasz plik za pomocą API, podstawowa odpowiedź zawiera główne metadane, takie jak nazwa pliku, status oraz `view_url` do otwarcia go w aplikacji Frame.io. Aby uzyskać dostęp do rzeczywistej zawartości pliku — oryginału, podglądu lub wersji o różnej jakości — używasz **includes**.
+
+Ten przewodnik wyjaśnia, jakie includes linków do multimediów są dostępne w endpointach **List Files** i **Get File**, co zwraca każdy z nich i kiedy z nich korzystać.
+
+## Czym są includes? {#what-are-includes}
+
+Includes to opcjonalne pola, o które możesz poprosić wraz z odpowiedzią dotyczącą pliku. Domyślnie API zwraca tylko podstawowe metadane pliku — nazwę, status, typ, znaczniki czasu i `view_url`. Includes pozwalają dodać dodatkowe dane na żądanie, dzięki czemu odpowiedzi pozostają lekkie, gdy nie potrzebujesz wszystkiego.
+
+### Jak dodać includes {#how-to-add-includes}
+
+Przekaż listę nazw includes oddzielonych przecinkami jako parametr zapytania `include` w dowolnym żądaniu **Get File** lub **List Files**:
+
+```bash title="Single include"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+```bash title="Multiple includes"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```bash title="Includes on List Files"
+GET /v4/accounts/{account_id}/folders/{folder_id}/files?include=media_links.thumbnail
+```
+
+Includes działają tak samo zarówno w endpointach pojedynczego pliku, jak i w endpointach list. W przypadku List Files includes są rozwiązywane dla każdego pliku w odpowiedzi.
+
+### Przykłady w SDK {#sdk-examples}
+
+<CodeGroup>
+
+```python title="Python SDK"
+import frameio
+
+client = frameio.Frameio(auth="<YOUR_TOKEN>")
+
+file = client.files.get(
+    file_id="93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    include=["media_links.thumbnail", "media_links.original"]
+)
+
+print(file.media_links.thumbnail.url)
+```
+
+```typescript title="TypeScript SDK"
+import Frameio from "frameio";
+
+const client = new Frameio({ auth: "<YOUR_TOKEN>" });
+
+const file = await client.files.get("93e4079d-0a8a-4bf3-96cd-e6a03c465e5e", {
+  include: ["media_links.thumbnail", "media_links.original"],
+});
+
+console.log(file.media_links?.thumbnail?.url);
+```
+
+</CodeGroup>
+
+Includes, o które nie poproszono, są całkowicie pomijane w odpowiedzi.
+
+## Przegląd includes linków do multimediów {#media-link-includes-overview}
+
+<CardGroup cols={2}>
+
+<Card title="media_links.original" icon="file-arrow-down" iconType="solid">
+
+Oryginalny przesłany plik, dokładnie w takiej postaci, w jakiej został przesłany
+
+</Card>
+
+<Card title="media_links.thumbnail" icon="image" iconType="solid">
+
+Obraz podglądu w formacie PNG do celów wyświetlania
+
+</Card>
+
+<Card title="media_links.high_quality" icon="star" iconType="solid">
+
+Najlepsza dostępna przetworzona wersja
+
+</Card>
+
+<Card title="media_links.efficient" icon="bolt" iconType="solid">
+
+Najmniejsza dostępna wersja do zastosowań przy ograniczonej przepustowości
+
+</Card>
+
+<Card title="media_links.video_h264_180" icon="film" iconType="solid">
+
+Transkodowane wideo H264 o niskiej rozdzielczości 180p do strumieniowania i odtwarzania
+
+</Card>
+
+<Card title="media_links.scrub_sheet" icon="table-cells" iconType="solid">
+
+Arkusz sprite'ów WebP z miniaturami klatek wideo do budowania interfejsu przewijania (scrubbing)
+
+</Card>
+
+</CardGroup>
+
+## media_links.original {#media_links-original}
+
+Zwraca podpisane adresy URL wskazujące na **oryginalny plik dokładnie w takiej postaci, w jakiej został przesłany** — bez przetwarzania i bez konwersji.
+
+### Pola {#fields}
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `download_url` | string \| null | Podpisany URL wymuszający pobranie pliku (`Content-Disposition: attachment`) |
+| `inline_url` | string \| null | Podpisany URL otwierający plik bezpośrednio w przeglądarce (`Content-Disposition: inline; filename=<name>`) |
+
+### Kiedy używać {#when-to-use}
+
+Używaj `media_links.original`, gdy potrzebujesz pliku źródłowego — na przykład aby umożliwić użytkownikowi pobranie oryginalnego pliku MOV, MP4, MXF, AVI, PSD, PNG lub TIFF albo aby przekazać oryginalne bajty do innego systemu.
+
+### Przykładowe żądanie {#example-request}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.original
+```
+
+### Przykładowa odpowiedź {#example-response}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+<Warning>
+
+Te adresy URL to **tymczasowe podpisane adresy URL S3** — wygasają. Nie buforuj ani nie przechowuj ich; za każdym razem, gdy potrzebujesz adresu URL, poproś o nowy.
+
+</Warning>
+
+## media_links.thumbnail {#media_links-thumbnail}
+
+Zwraca **obraz podglądu PNG** zasobu o wysokości maksymalnie 540 px. Jest to przetworzona wersja — nie oryginalny plik — i w zależności od ustawień konta mogą zostać na niej nałożone znaki wodne.
+
+### Pola {#fields-1}
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `download_url` | string \| null | Podpisany URL wymuszający pobranie miniatury PNG |
+| `url` | string \| null | Podpisany URL serwujący miniaturę PNG inline, bez nagłówka `Content-Disposition` |
+
+### Kiedy używać {#when-to-use-1}
+
+Używaj `media_links.thumbnail`, gdy musisz **wyświetlić podgląd wizualny** zasobu — na przykład w widoku siatki, galerii lub selektorze plików. Ładuje się szybciej niż oryginał i zawsze ma bezpieczny dla sieci format PNG.
+
+### Przykładowe żądanie {#example-request-1}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+### Przykładowa odpowiedź {#example-response-1}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.high_quality {#media_links-high_quality}
+
+Zwraca URL do pobrania **najlepszej dostępnej przetworzonej wersji** zasobu. Frame.io przetwarza przesłane pliki według drabinki rozdzielczości, której maksimum wynosi 2160p. API zwraca najwyższą wersję dostępną **w momencie żądania** — jeśli więc w chwili wysłania żądania przetworzona jest tylko wersja 540p, API zwraca 540p do czasu, aż wyższe wersje będą gotowe.
+
+### Pola {#fields-2}
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `download_url` | string \| null | Podpisany URL najwyższej jakościowo wersji dostępnej w momencie żądania |
+
+### Kiedy używać {#when-to-use-2}
+
+Używaj `media_links.high_quality`, gdy chcesz uzyskać **wersję o najlepszej jakości bez potrzeby korzystania z oryginału** — na przykład eksportując wersję w wysokiej rozdzielczości do dalszego przetwarzania lub prezentując podgląd w pełnej rozdzielczości. Jeśli potrzebujesz najwyższej możliwej jakości, sprawdź pole `status` pliku i poproś o ten include, gdy plik będzie miał status `ready`, aby mieć pewność, że cała drabinka rozdzielczości została przetworzona.
+
+### Przykładowe żądanie {#example-request-2}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.high_quality
+```
+
+### Przykładowa odpowiedź {#example-response-2}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "high_quality": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.efficient {#media_links-efficient}
+
+Zwraca URL do pobrania **najmniejszej dostępnej przetworzonej wersji**. Jest to przeciwieństwo `high_quality` — Frame.io wybiera wersję o najniższej dostępnej rozdzielczości.
+
+### Pola {#fields-3}
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `download_url` | string \| null | Podpisany URL najmniejszej/najbardziej wydajnej wersji |
+
+### Kiedy używać {#when-to-use-3}
+
+Używaj `media_links.efficient`, gdy **przepustowość lub rozmiar pliku są ważniejsze niż jakość** — na przykład przy generowaniu szybkich podglądów w środowisku o niskiej przepustowości lub zasilaniu potoku miniatur, który nie wymaga pełnej rozdzielczości.
+
+### Przykładowe żądanie {#example-request-3}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.efficient
+```
+
+### Przykładowa odpowiedź {#example-response-3}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "efficient": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.video_h264_180 {#media_links-video_h264_180}
+
+Zwraca adresy URL do strumieniowania i pobierania **transkodowanego wideo H264 o niskiej rozdzielczości 180p** dla danego zasobu.
+
+<Warning>
+
+Jest to starszy include. Będzie miał wartość `null`, jeśli dla zasobu nie wygenerowano transkodu 180p. W większości przypadków lepiej używać `media_links.efficient`, który wybiera najlepszą dostępną wersję niskiej jakości, zamiast polegać na istnieniu konkretnego transkodu.
+
+</Warning>
+
+### Pola {#fields-4}
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `download_url` | string \| null | Podpisany URL do pobrania wideo H264 180p |
+| `url` | string \| null | Podpisany URL do strumieniowania wideo H264 180p |
+
+### Kiedy używać {#when-to-use-4}
+
+Używaj `media_links.video_h264_180`, gdy potrzebujesz konkretnie gwarantowanego transkodu H264 180p — na przykład przy integracji ze starszym odtwarzaczem lub potokiem wymagającym dokładnie tego formatu. Jeśli dla danego zasobu transkod nie istnieje, oba adresy URL będą miały wartość `null`.
+
+<Warning>
+
+Plik video_h264_180 nie zawiera ścieżki dźwiękowej. Jest przeznaczony do bardzo wydajnych podglądów, gdy są potrzebne.
+
+</Warning>
+
+### Przykładowe żądanie {#example-request-4}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.video_h264_180
+```
+
+### Przykładowa odpowiedź {#example-response-4}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "video_h264_180": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.scrub_sheet {#media_links-scrub_sheet}
+
+Zwraca **arkusz sprite'ów WebP** — pojedynczy obraz zawierający siatkę miniatur klatek wideo pobranych równomiernie w całym czasie trwania filmu. Służy do budowania interfejsu przewijania wideo, w którym odtwarzacz wyświetla klatkę podglądu, gdy użytkownik przeciąga wskaźnik po osi czasu.
+
+<Info>
+
+Arkusze przewijania są generowane **wyłącznie dla zasobów wideo**. W przypadku obrazów, plików PDF i innych plików niebędących wideo include zwróci adresy URL o wartości `null`.
+
+</Info>
+
+### Pola {#fields-5}
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `download_url` | string \| null | Podpisany URL do pobrania arkusza sprite'ów WebP |
+| `url` | string \| null | Podpisany URL do załadowania arkusza sprite'ów WebP inline |
+| `metadata` | object \| null | Informacje o układzie kafelków umożliwiające wyodrębnienie poszczególnych klatek (tylko eksperymentalne API) |
+
+**Pola `metadata`:**
+
+| Pole | Typ | Opis |
+| --- | --- | --- |
+| `tile_x` | integer | Liczba kolumn miniatur w siatce |
+| `tile_y` | integer | Liczba wierszy miniatur w siatce |
+| `thumb_width` | integer | Szerokość każdej miniatury w pikselach |
+| `thumb_height` | integer | Wysokość każdej miniatury w pikselach |
+| `padding` | integer | Odstęp w pikselach między miniaturami |
+| `frames` | integer | Łączna liczba klatek pobranych do arkusza |
+
+### Kiedy używać {#when-to-use-5}
+
+Używaj `media_links.scrub_sheet` podczas budowania niestandardowego odtwarzacza wideo lub interfejsu osi czasu, który musi wyświetlać miniaturę podglądu podczas przewijania przez użytkownika. Zamiast wysyłać osobne żądanie dla każdej klatki, arkusz sprite'ów łączy wszystkie klatki podglądu w jeden pobierany obraz.
+
+### Przykładowe żądanie {#example-request-5}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.scrub_sheet
+```
+
+### Przykładowa odpowiedź {#example-response-5}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "scrub_sheet": {
+        "download_url": "https://assets.frame.io/...",
+        "url": "https://assets.frame.io/...",
+        "metadata": {
+          "tile_x": 10,
+          "tile_y": 10,
+          "thumb_width": 160,
+          "thumb_height": 90,
+          "padding": 1,
+          "frames": 100
+        }
+      }
+    }
+  }
+}
+```
+
+### Wyodrębnianie klatki z arkusza sprite'ów {#extracting-a-frame-from-the-sprite-sheet}
+
+Arkusz sprite'ów to siatka złożona z `tile_x` kolumn × `tile_y` wierszy. Aby wyświetlić miniaturę dla danego indeksu klatki (liczonego od zera), oblicz jej położenie w obrazie:
+
+```javascript
+function getFrameOffset(frameIndex, metadata) {
+  const { tile_x, thumb_width, thumb_height, padding } = metadata;
+
+  const col = frameIndex % tile_x;
+  const row = Math.floor(frameIndex / tile_x);
+
+  return {
+    x: col * (thumb_width + padding),
+    y: row * (thumb_height + padding),
+    width: thumb_width,
+    height: thumb_height,
+  };
+}
+```
+
+Następnie możesz użyć właściwości CSS `background-position`, aby wyświetlić właściwy kafelek z arkusza sprite'ów:
+
+```javascript
+function applyFrameToElement(el, frameIndex, scrubSheet) {
+  const { x, y, width, height } = getFrameOffset(frameIndex, scrubSheet.metadata);
+
+  el.style.backgroundImage = `url(${scrubSheet.url})`;
+  el.style.backgroundPosition = `-${x}px -${y}px`;
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+}
+```
+
+Aby przypisać pozycję odtwarzania (w sekundach) do indeksu klatki, użyj całkowitego czasu trwania wideo i liczby klatek w arkuszu:
+
+```javascript
+function positionToFrameIndex(currentSeconds, durationSeconds, metadata) {
+  const progress = currentSeconds / durationSeconds;
+  return Math.min(
+    Math.floor(progress * metadata.frames),
+    metadata.frames - 1
+  );
+}
+```
+
+<Info>
+
+Pole `metadata` jest dostępne tylko w eksperymentalnej wersji API. W stabilnym API v4 `scrub_sheet` zwraca wyłącznie `download_url` i `url`.
+
+</Info>
+
+## Łączenie wielu includes {#combining-multiple-includes}
+
+W jednym wywołaniu API możesz poprosić o wiele includes:
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      },
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## Wybór odpowiedniego include {#choosing-the-right-include}
+
+| Cel | Include do użycia |
+| --- | --- |
+| Wyświetlenie obrazu podglądu w interfejsie | `media_links.thumbnail` |
+| Umożliwienie użytkownikowi pobrania oryginalnego pliku | `media_links.original` |
+| Otwarcie oryginalnego pliku bezpośrednio w przeglądarce | `media_links.original` → `inline_url` |
+| Uzyskanie wersji o najlepszej jakości do eksportu | `media_links.high_quality` |
+| Uzyskanie małej wersji przy ograniczonej przepustowości | `media_links.efficient` |
+| Strumieniowanie lub pobranie wideo w niskiej rozdzielczości (starsze) | `media_links.video_h264_180` |
+| Zbudowanie interfejsu przewijania wideo z podglądem klatek | `media_links.scrub_sheet` |
+| Przekierowanie użytkownika do pliku we Frame.io | Użyj `view_url` z podstawowej odpowiedzi dotyczącej pliku |
+
+<Info>
+
+`view_url` — dostępny w każdej odpowiedzi dotyczącej pliku bez potrzeby używania include — to stały głęboki link (deep link) do aplikacji webowej Frame.io. **Nie** jest to URL multimediów; otwiera interfejs Frame.io i nie wygasa. Używaj go, gdy chcesz skierować użytkownika do przejrzenia lub skomentowania zasobu bezpośrednio we Frame.io, a nie wtedy, gdy musisz programowo udostępnić lub pobrać plik.
+
+</Info>
+
+## Dostępność includes {#include-availability}
+
+Includes linków do multimediów są wypełniane dopiero wtedy, gdy Frame.io zakończy przetwarzanie przesłanego pliku. Jeśli poprosisz o include natychmiast po przesłaniu, adresy URL mogą mieć wartość `null`, dopóki trwa transkodowanie. Sprawdź pole `status` obiektu pliku — includes będą dostępne, gdy status zmieni się na `ready`.

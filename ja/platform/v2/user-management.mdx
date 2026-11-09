@@ -1,0 +1,203 @@
+---
+title: "ユーザー管理"
+---
+
+## 概要 {#overview}
+
+このチュートリアルでは、Frame.io API を使った User の基本的な管理について説明します。読者がすでに OAuth2.0 または開発者トークンで[認証](/ja/platform/v2/authentication)を設定していることを前提としています。
+
+### 基本概念 {#core-concepts}
+
+Team Member のさまざまなロールや権限の細かな違いはさておき、Frame.io API で User を管理する際に理解しておくべき重要なポイントが 2 つあります。
+
+1. **Team Member は Team に所属し**、その Team 内の非公開でないすべての Project にアクセスできます。Team Manager と Admin は、いずれも Team Member ロールの拡張です。
+2. **Project のコラボレーターは単一の Project に所属します**。Project の設定によっては、Presentation の作成、Asset のダウンロード、他のコラボレーターの招待ができる場合とできない場合があります。
+
+詳細については、サポートドキュメントの[Team Member とコラボレーターの違い](https://support.frame.io/getting-started/sharing-with-your-team-or-clients/difference-between-team-members-vs-collaborators)と[アカウント管理のロール](https://support.frame.io/enterprise-accounts/enterprise-account-management-roles)を参照してください。
+
+### User が Account に参加する方法 {#how-users-join-accounts}
+
+一般に、新しい User は既存の User から、直接または Project 固有の参加 URL を通じて招待されます。Team Member は次のこともできます。
+
+1. Account 内のパブリックな Team にある非公開でない Project に自分自身を追加する
+2. Account 内のパブリックな Team に自分自身を追加する
+3. Account 内のプライベートな Team への参加をリクエストする
+
+いずれの場合も、参加のアクティビティは一連の論理的なステップを経て処理されます。これには、既存の所属の確認、「保留中」のレコードの作成、必要に応じた招待メールや参加リクエストメールの送信が含まれます。
+
+幸い、こうしたロジックはすべて Frame.io API によって抽象化されています。誰かを Project に追加したい場合は Collaborator のルートを、Team に招待したい場合は Team Member のルートを使用してください。
+
+### 必要なスコープ {#required-scopes}
+
+| スコープ | 理由 |
+| --- | --- |
+| **Teams:** Update | Team Member を追加・削除します。 |
+| **Projects:** Update | Project のコラボレーターを追加・削除します。 |
+
+## Team Member を管理する {#managing-team-members}
+
+### Team Member を追加する {#adding-team-members}
+
+新しい Team Member を Team に追加するには、次のものが必要です。
+
+1. 対象の Team の `id`
+2. 対象の User のメールアドレス
+
+あとは、次のように対象の User のメールアドレスをボディのペイロードに含めて、`https://api.frame.io/v2/teams/:id/members` に認可済みの `POST` を行うだけです。
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**招待した User がすでに組織内の Team Member である場合**、API のレスポンスはそのことを示します。
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>"
+}
+```
+
+**招待した User がまだ組織に所属していない場合**、リクエストによって招待フローが開始され、API のレスポンスは次のようになります。
+
+```json
+{
+    "_type": "pending_team_member",
+    "email": "user@example.com",
+    "id": "<oending-team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>
+}
+```
+
+**注**: User はまだ作成も認識もされていないため、`pending_team_member` のレスポンスには対応付けられる `user_id` は含まれません。
+
+### Team Member を削除する {#removing-team-members}
+
+Team から Team Member を削除するには、次のものが必要です。
+
+1. 対象の Team の `id`
+2. 対象の User のメールアドレス
+
+ここでは、Team Member を追加する場合と同じ URL に対して `DELETE` 呼び出しを行い、特別なクエリ文字列を渡します。
+
+`DELETE` [`https://api.frame.io/v2/teams/:id/members/_?email=user@example.com`](/ja/platform/v2/api-reference/teams/add-team-member)
+
+<Info>
+
+**「include」パターンとは?**
+
+`/_?email=` という構造に**注目してください**。これは Frame.io API における「include」と呼ばれる特別なパターンで、API リクエストで追加のデータ(この場合はユーザーのメールアドレス)を要求できます。
+
+</Info>
+
+呼び出しが成功すると、API は Team Member の追加時と同様のペイロードを返します。Team Member が初めて削除される場合は、呼び出し時刻と一致する `updated_at` 属性が含まれます。Team Member がすでに削除されている場合、このタイムスタンプは更新されません(つまり、Team Member が最初に削除された時刻が反映されます)。
+
+```json
+{
+    "_type": "team_member",
+    "id": "<team-member-record-id>",
+    "role": "member",
+    "team_id": "<team-id>",
+    "user_id": "<user-id>",
+    "updated_at": "<timestamp>"
+}
+```
+
+存在しない Team Member や、一度も Team に関連付けられたことのない Team Member を削除しようとすると、404 エラーになります。
+
+## Project のコラボレーターを管理する {#managing-project-collaborators}
+
+### Project のコラボレーターを追加する {#adding-project-collaborators}
+
+コラボレーターの管理は、Team Member の管理と非常によく似ています。新しいコラボレーターを追加するには、次のものが必要です。
+
+1. 対象の Project の `id`
+2. 対象の User のメールアドレス
+
+あとは、対象の User のメールアドレスをボディのペイロードに含めて、[`https://api.frame.io/v2/projects/:id/collaborators`](/ja/platform/v2/api-reference/projects/add-collaborator-to-project) に認可済みの `POST` を行います。
+
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+**招待した User が認識され**、コラボレーターのロールをすぐに作成できる場合、API のレスポンスはそのことを示し、完全な User オブジェクトを返します。
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+<Info>
+
+**Team のメンバーシップ**
+
+User がすでに組織内の Team Member であっても、対象の Project のメンバーではない場合は、Collaborator のルートを使用でき、API は上記のように応答します。バックグラウンドでは、Team Member が対象の Project に追加され、引き続き Team Member のままとなります。つまり、このルートを使って誤って Team Member を「降格」させてしまうことはありません。
+
+</Info>
+
+**招待した User が組織にとって新規の場合**、リクエストによって招待フローが開始され、API は次のような `pending_collaborator` レコードで応答します。
+
+```json
+{
+    "_type": "pending_collaborator",
+    "email": "user@example.com",
+    "id": "<pending-collaborator-record-id>",
+    "project_id": "<project-id>"
+}
+```
+
+### Project のコラボレーターを削除する {#removing-project-collaborators}
+
+**注:** このプロセスは、基本的に(上記の)Team Member の扱い方と同じです。
+
+Project からコラボレーターを削除するには、次のものが必要です。
+
+1. 対象の Project の `id`
+2. 対象の User のメールアドレス
+
+ここでは、コラボレーターを追加する場合と同じ URL に対して `DELETE` 呼び出しを行い、特別なクエリ文字列を渡します。
+
+`DELETE` [`https://api.frame.io/v2/projects/:id/collaborators/_?email=user@example.com`](/ja/platform/v2/api-reference/teams/add-team-member)
+
+呼び出しが成功すると、API は Project のコラボレーターの追加時と同様のペイロードを返します。
+
+```json
+{
+    "_type": "collaborator",
+    "creator_id": "<inviting-user-id>",
+    "id": "<collaborator-record-id>",
+    "project_id": "<project-id>",
+    "user": {
+        "_type": "user",
+       <...>
+    },
+    "user_id": "<user-id>"
+}
+```
+
+存在しないコラボレーターや、一度も Project に関連付けられたことのないコラボレーターを削除しようとすると、404 エラーになります。
+
+<Warning>
+
+**警告: コラボレーターの削除はべき等ではありません**
+
+Team Member の削除とは異なり、すでに削除されたコラボレーターを削除しようとすると 404 エラーになります
+
+</Warning>

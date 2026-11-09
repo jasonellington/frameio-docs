@@ -1,0 +1,455 @@
+---
+title: "ハウツー: 認可(アプリケーション)"
+sidebarTitle: "ハウツー - 認可(アプリケーション)"
+---
+
+## はじめに {#introduction}
+
+このガイドでは、[Frame.io](http://frame.io/) のプロジェクト上で *C2C アプリケーション*を認証および認可する方法を学びます。
+
+## 必要なもの {#what-will-i-need}
+
+[C2C の実装: セットアップ](/ja/camera-to-cloud/implementing-c2c-setting-up)ガイドをまだ読んでいない場合は、先に進む前にざっと目を通してください。
+
+また、インテグレーションを識別するために使用する `client_id` をチームから受け取っている必要があります。`client_id` を受け取っていない場合は、C2C エコシステムの[こちらの紹介](/ja/camera-to-cloud/getting-started-with-cloud-device-integrations)をご覧のうえ、チームにご連絡ください。
+
+`client_id` ではなく `client_secret` を受け取った場合は、C2C アプリケーションではなくハードウェアデバイスとしてセットアップされています。[ハードウェアデバイスの認証ガイド](/ja/platform/v2/implementing-c2c-authentication-and-authorization-hardware)に従うか、チームに連絡して代わりに `client_id` を発行してもらってください。
+
+## アプリケーションの認証フローを確認する {#walking-through-the-application-auth-flow}
+
+実装しようとしている認可フローで想定されるユーザーエクスペリエンスについて、大まかに理解しておきましょう。ユーザーの視点からこのフローを確認するには、以下のリソースを参照してください。[Zoelog](https://zoelog.io/) をダウンロードして [Frame.io](http://frame.io/) にサインインし、C2C アプリケーションの認可プロセスを体験してみてください。
+
+## OAuth の概要 {#oauth-overview}
+
+C2C アプリケーションは、認証と認可に OAuth 2.0 フローを使用します。これは、サービスに対してサードパーティのアプリケーションやユーザーを認証および認可するために使用できる、標準化された一連の呼び出しです。[OAuth フローの詳細についてはこちら](https://www.digitalocean.com/community/tutorials/an-introduction-to-oauth-2)をご覧ください。
+
+## コールバック/リダイレクト URI {#the-callback-/-redirect-uris}
+
+OAuth フローの一環として、サーバーはあなたが管理する URI/URL に HTTP 呼び出しを行う必要があります。ユーザーがブラウザーで [Frame.io](http://frame.io/) にログインした後、アプリにいくつかの情報を提供するために、ブラウザーをこの URI にリダイレクトします。リダイレクト URI は次の条件を満たす必要があります。
+
+- あなたが所有している
+- 静的である
+
+これら 2 つの条件を満たしていれば、デバイスに複数の有効なリダイレクトを登録できます。
+
+OAuth フロー中に、アプリケーションが要求しているコールバック URI が、登録されている URI のいずれかであることを確認します。そうでない場合、認可フローは失敗します。この確認を行わないと、悪意のある攻撃者が自分の管理するアドレスへのリダイレクトを指定できてしまいます。
+
+開発用に、`http://localhost` での非 HTTPS のコールバックをサポートしています。
+
+## デバイスの識別 {#device-identification}
+
+Camera to Cloud に接続する際、ユーザーのプロジェクトでデバイス接続を一覧表示できるように、アプリの各インストールは自身を一意に識別する必要があります。
+
+C2C アプリケーションでは、これをデバイスの `device_id` と呼びます。実装をセットアップする際は、これをどのように行うかを検討する必要があります。一部のプラットフォームでは、まさにこのユースケースのために、デバイスとアプリに固有の識別子を生成する API が提供されています。
+
+| プラットフォーム | リファレンス |
+| --- | --- |
+| iOS | [identifierForVendor](https://developer.apple.com/documentation/uikit/uidevice/1620059-identifierforvendor) |
+| Android | [FID or GUID](https://developer.android.com/training/articles/user-data-ids) |
+
+<Warning>
+
+**個人を特定できる情報を漏洩しないよう注意してください**
+
+たとえば、ユーザーのメールアドレスは `device_id` として使用できる値ではありません。同様に、*一意の識別子をあなたが所有していることを確認してください*。たとえば、デバイスの MAC アドレスは使用しないでください。MAC アドレスはあなたのソフトウェアが所有するものではなく、個人を特定できる情報と見なされる可能性もあります。
+
+</Warning>
+
+どの値を使用すればよいかわからない場合は、一緒に検討し、インテグレーションをできるだけ簡単にする適切な値を選べるようにお手伝いします。
+
+## ステップ 1: ユーザーを認証する {#step-1-authenticating-the-user}
+
+*YourApp™* で [Frame.io](http://frame.io/) に接続したいと思ったら、[Frame.io](http://frame.io/) の設定セクションに移動し、「Connect to Project」(または同様のもの)を選択します。ボタンを押すと、[Frame.io](http://frame.io/) にリダイレクトされ、ログインしてアプリを認可します。
+
+これは、URL を作成して Web ブラウザーで開くことで行います。Python 風の疑似コードを見てみましょう。
+
+```python title="Python"
+def redirect_to_auth(config):
+    credentials = {
+        "response_type": "code",
+        "redirect_uri": "http://MyApp.io/frameio-callback",
+        "client_id": f"{MYAPP.client_id}",
+        "scope": "offline device.connect asset.create",
+        "state": str(uuid.uuid4()),
+        "device_id": f"{HARDWARE.get_vendor_id('com.mycompany.myapp')}",
+    }
+
+    encoded = parse.urlencode(credentials)
+    url = "https://applications.frame.io/oauth2/auth?" + encoded
+
+    webbrowser.open(url)
+```
+
+「ペイロード」は URL 自体にエンコードされており、完全にエンコードされた URL は次のようになります。
+
+```text
+https://applications.frame.io/oauth2/auth?response_type=code&redirect_uri=http%3A%2F%2FMyApp.io%2Fframeio-callback&client_id=[client_id]&scope=offline+device.connect+asset.create&state=[state]&device_id=62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff
+```
+
+これらのオプションを少し詳しく見てみましょう。
+
+`response_type`: OAuth フローが何を返すかを指定します。この値は常に「code」にする必要があります。これにより、OAuth サーバーはリダイレクト URI にコードを返し、そのコードを使用して実際の認可トークンを取得します。
+
+`redirect_uri`: 認証リクエストに応答する際に、OAuth サーバーが GET を行う URL/URI です。
+
+`client_id`: アプリを識別します。アプリケーションのインテグレーションの場合、この値は Frame.io から提供されます。
+
+`scope`: アプリが要求する権限をスペース区切りで並べたリストです。C2C アプリケーションでは、以下の権限を使用できます。
+
+- `offline`: 最初のトークンの有効期限が切れたときに、アプリが自身の認可を更新できます。
+- `device.connect`: ユーザーが C2C 接続に使用できるアカウントとプロジェクトの一覧をデバイスが取得できます。
+- `asset.create`: アプリが接続先のプロジェクトに Asset をアップロードできます。
+
+これらのスコープの一部のみを要求して付与されることも可能ですが、常に 3 つすべてを要求することをお勧めします。
+
+`state`: このリクエストに関連付けられたランダムな値です。`state` を使用して、リダイレクト URI への呼び出しが有効なリクエストに対するものであることを確認します。
+
+登録した URI でコールバックを受け取ったら、`state` が想定どおりの値であることを検証する必要があります。
+
+<Warning>
+
+**\{'t': '#frag', 'p': \{\}, 'c': \{'t': 'p', 'p': \{\}, 'c': \[\{'t': 'code', 'p': \{\}, 'c': 'state'\}, ' must be random'\]\}\}**
+
+state パラメーターがランダムでない場合、CSRF 攻撃にさらされます。これは、悪意のある攻撃者が state パラメーターを偽装し、コールバックに不正なリクエストを送信する攻撃です。`state` パラメーターの詳細については、[Auth0 のこちらのブログ](https://auth0.com/docs/secure/attack-protection/state-parameters)をご覧ください。
+
+</Warning>
+
+`device_id`: この特定のデバイス/インストールの一意の識別子です。デバイス ID は*あなたが所有する*値である必要があり(MAC アドレスや CPU のシリアル番号などは不可)、*個人を特定できる情報を含んではいけません*(メールアドレス、社会保障番号、指紋のハッシュなどは不可)。詳細については、[device_id に関する上記のセクション](/ja/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application#device-identification)をご覧ください。
+
+## ステップ 2: OAuth レスポンスを受け取る {#step-2-receiving-the-oauth-response}
+
+ユーザーがブラウザーで [Frame.io](http://frame.io/) にサインインし、要求されたスコープを承認すると、コールバック URI に GET リクエストが送信されます。このリクエストには、以下のクエリパラメーターを含む URL エンコードされたペイロードが含まれます。
+
+`code`: Frame.io のバックエンドから実際の認可トークンを取得するために使用するコードです。
+
+`state`: ステップ 1 の最初の認証リクエストに含めた state の値です。
+
+`scope`: 付与されたスコープ/権限です。
+
+完全な URI は次のようになります。
+
+```text
+https://MyApp.io/frameio-callback?code=[authorization_code]&scope=offline+device.connect+asset.create&state=[state]
+```
+
+URI の解析は難しい場合があり、お使いの HTTP/サーバーライブラリには解析に役立つ優れた機能が用意されていることが多いので、自分で解析しようとする前に確認してください。
+
+テスト用に、Python を使用して GET リクエストを確認するためのサーバーをすばやくセットアップできます。コールバック URI は `http://localhost:8888/callback` として設定しておく必要があります。
+
+```shell
+$ python -m http.server 8888
+```
+
+これで、次のテンプレートを使用して [Frame.io](http://frame.io/) へのアクセスを要求できます。`[client_id]` と `[state]` の値を入力してください。`state` には、[こちらでランダムな UUID を生成](https://www.uuidgenerator.net/)できます。
+
+```text
+https://applications.frame.io/oauth2/auth?response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8888%2Fcallback&client_id=[client_id]&scope=offline+device.connect+asset.create&state=[state]&device_id=62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff
+```
+
+認証フローを実行すると、404 エラーが返されます。これは、Python が要求されたリソースを認識できず、どのように応答すればよいかわからないためです。しかし心配はいりません。認証リクエスト自体は成功しています。サーバーは、ターミナルに次のような出力を表示するはずです。
+
+```text
+Serving HTTP on :: port 8888 (http://[::]:8888/) ...
+::1 - - [08/Mar/2022 14:04:34] code 404, message File not found
+::1 - - [08/Mar/2022 14:04:34] "GET /callback?code=[authentication_code]&scope=offline+device.connect+asset.create&state=[state] HTTP/1.1" 404 -
+```
+
+state が送信したものと同じであることを確認してください。`authentication_code` は、次のステップでアクセストークンを取得する際に重要になります。
+
+実際のアプリでは、コールバックハンドラーは次のようになります。
+
+```python title="Python"
+@handler("/frameio-callback")
+def do_get(request):
+    params = url.parse_query(request.url.parts.query)
+    if "error" in params:
+       raise AuthError(params["error"])
+
+    # Handles sending the authentication code and state to the proper user
+    MyApp.frameio_oauth_success(state=params["state"], code=params["code"])
+
+    # Render some sort of confirmation page for the user.
+    request.send_response(
+        code=200, 
+        headers={"Content-type": "text/html"}, 
+        data=OauthSuccessPage()
+    )
+```
+
+## ステップ 3: アクセストークンを取得する {#step-3-retrieving-our-access-tokens}
+
+`authorization_code` を取得したので、アクセストークンを取得できます。この時点でアクセストークンはすでに付与されているので、あとはバックエンドに要求するだけです。
+
+次のリクエストを実行します。
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'state=[state]' \
+    --form 'code=[authorization_code]' \
+    --form 'redirect_uri=http://localhost:8888/callback' \
+    --form 'grant_type=authorization_code' \
+    --form 'scope=offline device.connect asset.create' \
+    | python -m json.tool
+```
+
+<Info>
+
+**OAuth エンドポイント**
+
+このリクエストのホストは、ほとんどのリクエストで使用する `api.frame.io` ではなく、`applications.frame.io` であることに注意してください。また、ここでは JSON データではなくフォームデータを使用していることにも注意してください。*C2C の OAuth エンドポイントはフォームデータのみを受け付けます。*
+
+</Info>
+
+認証が完了すると、他のエンドポイントは `application/json` のペイロードを受け付けますが、認証エンドポイントでは、`application/x-www-form-urlencoded` データではなく JSON を送信するとエラーが返されます。
+
+これらのパラメーターを確認しましょう。
+
+`client_id`: [Frame.io](http://frame.io/) から発行された OAuth アプリの識別子です。
+
+`state`: ブラウザーへの最初の認可リクエストに含め、コールバックで受け取った state の値です。
+
+`code`: コールバックで受け取った認可コードです。
+
+`redirect_uri`: Frame.io のバックエンドに登録したものと同じリダイレクト URI です。この値が、[Frame.io](http://frame.io/) がインテグレーション用に記録しているカンマ区切りの URL リストに含まれていない場合、このリクエストは失敗します。
+
+`grant type`: ソフトウェアデバイスの認可フローでは、常に `authorization_code` です。
+
+`scope`: コールバックで返された承認済みのスコープと一致している必要があります。
+
+次のようなレスポンスが返されます。
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+これで、デバイスは Frame.io で正常に認可されました。残りのリクエストで必要になるので、これらの値は手元に保管しておいてください。ペイロードの内容を見てみましょう。
+
+`access_token`: [Frame.io](http://frame.io/) バックエンドの他の部分にアクセスするためのキーです。これらのチュートリアルで行う残りのリクエストのヘッダーに、これを追加する必要があります。
+
+`expires_in`: `access_token` の有効期限が切れるまでの秒数です。トークンの期限が切れたら更新する必要があります。これについては今後のチュートリアルで説明します。
+
+`refresh_token`: `access_token` を管理するために使用できるトークンです。最も一般的には認可の更新に使用しますが、認可の取り消しにも使用できます。
+
+`token_type`: C2C API では常に `bearer` であり、対応は不要です。
+
+実際にプロジェクトに接続するまでにはまだいくつかのステップがあるので、ここまでを押さえたら先に進みましょう。
+
+## ステップ 4: アカウントを一覧表示する {#step-4-list-accounts}
+
+次に、ユーザーが接続できるアカウントの一覧を取得する必要があります。これはアクセストークンを必要とする最初の呼び出しで、トークンをヘッダーに追加します。
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/accounts \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/devices/accounts` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/applications-auth/device-list-accounts)にあります
+
+</Info>
+
+<Info>
+
+**Authorization ヘッダー**
+
+認可が必要なすべてのエンドポイントでは、`Authorization` ヘッダーに `access_token` を追加する必要があります。値として、アクセストークンの前に `Bearer `(スペースを含む)を付ける必要があることに注意してください。
+
+</Info>
+
+この呼び出しは、ユーザーが接続できるアカウントの一覧を返します。
+
+```json
+[
+    {
+        "_type": "account",
+        "display_name": "Hogwarts General",
+        "id": "46b7ea11-3041-4e2b-97f7-98fbf5c974c9"
+    },
+    {
+        "_type": "account",
+        "display_name": "Gryffindor",
+        "id": "e6007a3d-cad7-4666-9ee3-23c1af032060"
+    },
+    {
+        "_type": "account",
+        "display_name": "QUIDDITCH LEGENDS -- LETS GOOOOOOOOOO",
+        "id": "cc94119d-f957-4d6e-b8cf-0c095211b1b9"
+    }
+]
+```
+
+この時点で、この一覧をユーザーに表示し、接続したいアカウントを選択してもらいます。次のステップでは、そのアカウントの `id` を使用して、ユーザーが C2C デバイスを接続できるプロジェクトを一覧表示します。
+
+## ステップ 5: プロジェクトを一覧表示する {#step-5-list-projects}
+
+次に、対象のアカウントのプロジェクト一覧を取得する必要があります。
+
+```shell
+curl -X GET https://api.frame.io/v2/devices/accounts/[account_id]/projects \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/devices/accounts/[account_id]/projects` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/applications-auth/device-list-projects)にあります
+
+</Info>
+
+プロジェクトを一覧表示したい `account_id` を URL に追加する必要があります。また、リソースパス全体が `/devices/...` で始まっていることに注意してください。ここでは単にプロジェクトを一覧表示しているのではなく、*ユーザーが C2C デバイスの管理権限を持っている*プロジェクトを一覧表示しています。ユーザーが所属しているプロジェクトが一覧に表示されない場合、そのユーザーはそのプロジェクトの C2C デバイス管理権限を持っていないことを意味します。
+
+アカウントの場合と同様のレスポンスが返されます。
+
+```json
+[
+    {
+        "_type": "project",
+        "id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+        "name": "Match Recordings"
+    },
+    {
+        "_type": "project",
+        "id": "ed5dbf4a-f146-416b-add0-74de98201876",
+        "name": "Year Book Material"
+    }
+]
+```
+
+アカウントの場合と同様に、この一覧をユーザーに表示して接続したいプロジェクトを選択してもらいます。また、アカウントの場合と同様に、次のステップではプロジェクトの `id` が必要になります。
+
+## ステップ 6: プロジェクトに接続する {#step-6-connecting-to-a-project}
+
+ユーザーが接続したいプロジェクトを選択したので、準備は万端です。ソフトウェアデバイスと [Frame.io](http://frame.io/) プロジェクトのペアリングを完了するための最後のステップは 1 つだけです。
+
+```shell
+curl -X POST https://api.frame.io/v2/devices/connect?project_id={project_id} \
+    --header "x-client-version: 2.0.0" \
+    --header "Authorization: Bearer [access_token]" \
+    | python -m json.tool
+```
+
+<Info>
+
+**API エンドポイントの仕様**
+
+`/v2/devices/connect` のドキュメントは[こちら](/ja/camera-to-cloud/api-reference/applications-auth/device-project-connect)にあります
+
+</Info>
+
+プロジェクト ID は URL のクエリパラメーターで指定し、引き続き Authorization ヘッダーも渡す必要があります。
+
+次のようなレスポンスが返されます(簡潔にするため一部のデータを省略しています)。
+
+```json
+{
+    "_type": "project_device",
+    "asset_type": "video",
+    "authorization": {
+        "_type": "project_device_authorization",
+        "creator": {
+            "_type": "user",
+            "account_id": "93f872fb-9924-4e31-a430-2574e0742260",
+            "deleted_at": null,
+            "email": "hpotter@hoggyhoggyhogwarts.edu",
+            "id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+            ...
+            "name": "Harry Potter",
+            ...
+        },
+        "creator_id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+        "expires_at": null,
+        "id": "ee9f5949-b7fa-4c71-8480-6d4c60877c51",
+        "inserted_at": "2022-03-09T18:14:21.893283Z",
+        "project_device_id": "6a55d7f6-dfb7-46a1-bff8-a3acb2d3d1aa",
+        "scopes": {
+            ...
+            "asset_create": true,
+            ...
+            "id": "1e174fe9-5b53-48db-b556-c310c0848898",
+            "offline": true,
+            ...
+        }
+    },
+    "channels": [
+        {
+            "_type": "project_device_channel",
+            "asset_type": "video",
+            ...
+        }
+    ],
+    "creator_id": "d473b5e1-08d2-4842-82ac-a6b01233dc2c",
+    "deleted_at": null,
+    "device_id": "a8a4f3bf-196c-4748-832b-28f1d0801515",
+    "id": "93af90e7-ee89-4b47-86e6-c2750f3790b6",
+    ...
+    "name": "MyApp-62f88d2a-1ae1-45e7-a6a0-81954e0cf2ff",
+    "project": {
+        "_type": "project",
+        "id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+        "name": "Testbed"
+    },
+    "project_id": "921480ec-1225-424a-9447-19c61a3a1ef2",
+    "status": "online",
+    ...
+}
+```
+
+<Info>
+
+**一度に 1 つのプロジェクト**
+
+デバイスは一度に 1 つのプロジェクトとのみペアリングできます。別のプロジェクトとのペアリング操作を行うと、以前に接続していたプロジェクトとの接続は解除されます。
+
+</Info>
+
+レスポンスのペイロードがこのようになっていれば、おめでとうございます。初めての Camera to Cloud デバイスの認可に成功しました。少し時間をとってお祝いしましょう。
+
+お祝いが済んだら、接続したプロジェクトをユーザーが確認できるように、プロジェクト名をユーザーに表示してください。
+
+## サードパーティの OAuth ライブラリを使用する {#using-a-third-party-oauth-library}
+
+[Frame.io](http://frame.io/) は標準の OAuth 2.0 フローを使用しています。セキュリティのため、PKCE を必須としています。インテグレーションのこの部分を処理してくれるライブラリは数多くあります。
+
+以下は、人気のある OAuth ライブラリの例です。
+
+| プログラミング言語 | 名前 | URL |
+| --- | --- | --- |
+| Swift | `OAuthSwift` | [Github](https://github.com/OAuthSwift/OAuthSwift) |
+| Python | `requests-oauthlib` | [Github](https://github.com/requests/requests-oauthlib) |
+| Flutter | `oauth2_client` | [Github](https://pub.dev/packages/oauth2_client) |
+
+[Frame.io](http://frame.io/) は、特定のデバイスを識別するために `device_id` フィールドを追加していることを忘れないでください。これは追加のカスタムフィールドです。選択したライブラリはほぼ確実にカスタムフィールドをサポートしていますが、追加し忘れないようにしてください。
+
+## トラブルシューティング {#troubleshooting}
+
+このセクションをご覧になっているということは、何か問題が発生したということです。サードパーティとのインテグレーションにエラーはつきものです。このセクションでは、よくある問題とその解決に最も効果的な手順を紹介します。以下の一覧に目を通し、問題に当てはまるものがないか確認してください。API エラーを調べるには、[エラーガイド](/ja/camera-to-cloud/how-to-handle-errors)も優れたリソースです。
+
+ここで解決策が見つからない場合は、ぜひ発生した問題をお知らせください。ここに追加いたします。
+
+**接続したいアカウントまたはプロジェクトが返されない:** アカウントやプロジェクトを一覧表示した際に、接続したいものが表示されない場合は、いくつかの原因が考えられます。Frame.io で接続したいプロジェクトに移動し、`C2C Connections` タブをクリックしてください。問題の原因を突き止めるのに役立ちます。
+
+- **アカウントで C2C が有効になっていない:** 画面が空白で、アカウントで C2C を利用できないというメッセージが表示される場合は、アカウントマネージャーがアカウント設定でプロジェクトの C2C を有効にする必要があります。
+- **デバイスマネージャーではない**: 画面が空白で、権限がないというメッセージが表示される場合は、アカウントマネージャーが C2C デバイスを接続できるユーザーの権限を変更するか、その権限を持つロールにあなたを追加する必要があります。
+
+**Invalid Client エラー:** `invalid_client` は、デバイスについて提供された情報が記録と一致しない場合に返されます。これは、`client_secret`、`client_id`、または `redirect_uri` が、Frame.io のバックエンドに登録されている内容と一致していない可能性が高いことを意味します。
+
+**Bad Request エラー:** `bad_request` は、リクエストデータの形式に何らかの誤りがある場合に返されます。フィールド名のスペルミスや、必須フィールドの追加漏れがないか再確認してください。
+
+## 次のステップ {#next-up}
+
+まだの場合は、ぜひチームにご連絡のうえ、次のガイドに進んでください。ご連絡をお待ちしております。

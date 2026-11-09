@@ -1,0 +1,134 @@
+---
+title: "監査ログの操作"
+---
+
+## 概要 {#overview}
+
+Frame.io は、アプリケーション内で行われるほぼすべてのアクティビティについて監査ログ (Audit Logs) をサポートし、保持しています。これには、コアリソースに対する基本的な CRUD 操作と、いくつかの特殊な抽象化 (例: `AssetVersioned`) の両方が含まれます。
+
+<Warning>
+
+**監査ログは 30 日後に切り捨てられます**
+
+Frame.io の監査ログは、直近 30 日間のローリングウィンドウの範囲で API から利用でき、その後はコールドストレージに移動されます。そのため、Frame.io のイベント履歴を長期間保持したい場合は、過去のログデータを独自に保存するようにしてください。
+
+</Warning>
+
+### スコープと権限 {#scope-and-permissions}
+
+アカウントの監査ログにアクセスできるのはアカウント管理者 (Account Admin) のみです。また、監査ログエンドポイントへのすべての呼び出しは、次のように `account_id` にスコープされている必要があります。
+
+```
+GET https://api.frame.io/v2/accounts/:id/audit_logs
+```
+
+### レスポンス {#responses}
+
+監査ログのレスポンスはすべて同様の形式です。
+
+```json
+{
+    "_type": "audit",
+    "account_id": "<account-id>",
+    "action": "<ActionTaken>",
+    "actor": {
+        "_type": "user",
+        "id": "<user-id>",
+    },
+    "actor_id": "<user-id>",
+    "id": "<audit-id>",
+    "inserted_at": "<ISO-8601-datetime>",
+    "item_id": "<resource-id>",
+    "item_type": "<ResourceType>",
+    "resource": {...},
+    "team_id": "<team-id>",
+    "updated_at": "<ISO-8601-datetime>"
+}
+```
+
+<Info>
+
+**ページネーションを忘れずに!**
+
+監査ログのレスポンスデータはかなり大量になることがあるため、[ページネーション](/ja/platform/v2/key-concepts#pagination)について十分に理解しておいてください。
+
+</Info>
+
+## フィルター {#filters}
+
+監査ログは、日付範囲を含むさまざまなフィルターをサポートしています。Frame.io の[検索](/ja/platform/v2/search-for-assets)エンドポイントとは異なり、フィルターは `GET` のクエリ文字列パラメーターとしてのみ送信できます。
+
+フィルターはすべて同じ形式に従います。
+
+### GET + クエリ文字列 {#get-+-query-string}
+
+```html
+GET
+https://api.frame.io/accounts/:id/audit_logs?filter[filter_type1]=value1&filter[filter_type2]=value2
+```
+
+<Info>
+
+**フィルタータイプごとに 1 つの値**
+
+現在、監査ログはフィルタータイプごとに 1 つの値をサポートしています。同じタイプのフィルターを 2 つ指定した場合 (例: `filter[action]=ActionOne&filter[action]=ActionTwo`)、2 番目のフィルターが優先されます。
+
+</Info>
+
+### 主なフィルタータイプ {#key-filter-types}
+
+監査ログの絞り込みやナビゲーションに使用する主なフィルタータイプは次のとおりです。
+
+| フィルタータイプ | 説明 | 値の例 |
+| --- | --- | --- |
+| `item_type` | 単一タイプのすべてのリソースを絞り込みます。 | *Presentation*, *Comment*, *ReviewLink*, *Asset* |
+| `item_id` | Asset や Presentation など、特定の単一リソースを絞り込みます。 | *&lt;asset-id>*, *&lt;presentation-id>* |
+| `action` | 単一のアクションを絞り込みます。通常は `item_type` に関連付けられています。 | *ProjectCreated*, *AssetVersioned*, *CommentDeleted* |
+| `actor_id` | 特定のユーザー (アクター) の ID で絞り込みます。 | *&lt;user-id>* |
+| `team_id` | 単一のチームに関連するアクティビティを絞り込みます。このフィルターは、複数のチームを持つ場合にのみ有用です。 | *&lt;team-id>* |
+| `inserted_at` | 特定の日時より前または後に発生した監査イベントを絞り込みます。ISO-8601 形式 (UTC) である必要があります。 | *2022-08-25T00:00:00Z* |
+
+### アイテムタイプとアクション {#item-types-and-actions}
+
+| リソース | アクション |
+| --- | --- |
+| **Account** | `AccountCreated`, `AccountUpdate`, `AccountLocked` |
+| **Asset** | `AssetCopied`, `AssetCreated`, `AssetDeleted`, `AssetUpdated`, `AssetVersioned`, `AssetUnversioned`, `AssetLabelUpdated`, `AssetMoved`, `AssetPreserved`, `AssetPrivatized`, `AssetPublicized`, `AssetRestored` |
+| **Collaborator** | `CollaboratorCreated`, `CollaboratorDeleted` |
+| **Comment** | `CommentCreated`, `CommentCompleted`, `CommentDeleted`, `CommentLiked`, `CommentUncompleted`, `CommentUnliked`, `CommentUpdated`, `ReplyCreated` |
+| **Presentation** | `PresentationCreated`, `PresentationDeleted`, `PresentationUpdated` |
+| **Project** | `ProjectCreated`, `ProjectDeleted`, `ProjectMoved`, `ProjectRestored`, `ProjectUpdated` |
+| ReviewLink | `ReviewLinkCreated`, `ReviewLinkDeleted`, `ReviewLinkUpdated` |
+| **Team** | `TeamCreated`, `TeamUpdated`, `TeamDeleted` |
+| **TeamMember** | `TeamMemberCreated`, `TeamMemberAccepted`, `TeamMemberDeclined`, `TeamMemberRemoved`, `TeamMemberUpdated` |
+
+## フィルターの例 {#filter-examples}
+
+上で説明したとおり、フィルターはすべて同様の形式に従います。以下は、特定のユースケースを対象としたいくつかの例で、使い始める際の参考になります。
+
+| シナリオ | クエリ文字列 |
+| --- | --- |
+| 単一のユーザーが行ったアクション。 | `?filter[actor_id]=<user-id>` |
+| 特定の Presentation に関するすべてのアクティビティ。 | `?filter[item_id]=<presentation-id>` |
+| ユーザーが残したコメント。 | `?filter[action]=CommentCreated&filter[actor_id]=<user-id>` |
+| チーム内のすべてのレビューリンクのアクティビティ。 | `?filter[item_type]=ReviewLink&filter[team_id]=<team-id>` |
+
+## 日付範囲 {#date-ranges}
+
+日付範囲はやや特殊なケースで、`inserted_at` の日時 `value` と、その日時に適用する演算 (`op`) の両方を指定する必要があります。
+
+そのため、日付範囲のクエリには常に 2 つのフィルター要素があり、それぞれが `[inserted_at]` パラメーターの横にネストされます。
+
+サポートされている演算は次のとおりです。
+
+- **gt**: より大きい
+- **gte**: 以上
+- **lt**: より小さい
+- **lte**: 以下
+
+### 日付範囲の例 {#date-range-examples}
+
+| シナリオ | クエリ文字列 |
+| --- | --- |
+| 特定の日付以降のすべての監査ログレコード。 | `?filter[inserted_at][op]=gt&filter[inserted_at][value]=2019-03-25T00:00:00Z` |
+| 特定のユーザーが特定の日付までにアップロードしたすべての Asset。 | `?filter[inserted_at][op]=lt&filter[inserted_at][value]=2019-03-25T00:00:00Z&filter[actor_id]=<user-id>&filter[action]=AssetCreated` |

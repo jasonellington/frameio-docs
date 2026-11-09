@@ -1,0 +1,540 @@
+---
+title: "Frame.io TypeScript SDK — 身份验证指南"
+sidebarTitle: "Typescript SDK"
+---
+
+本指南介绍如何使用 **Frame.io TypeScript SDK**（`frameio`）对 Frame.io API 进行身份验证。Frame.io V4 API 使用 [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/)，即 Adobe 的 OAuth 2.0 身份平台。
+
+这是一份面向 TypeScript/JavaScript 开发者的独立参考文档。下文中的所有代码示例和流程仅适用于 `frameio` 包。
+
+---
+
+## TypeScript SDK 中的身份验证类型 {#authentication-types-in-the-typescript-sdk}
+
+TypeScript SDK 支持四种 OAuth 身份验证类，以及直接使用令牌：
+
+| 方式 | 使用场景 | 需要用户交互？ | 需要 client secret？ |
+| --- | --- | --- | --- |
+| **静态令牌** | 快速脚本、测试，或您已拥有令牌 | 否 | 否 |
+| **Server-to-Server** | 后端服务、cron 任务、自动化 | 否 | 是 |
+| **Web App** | 服务端应用（Express、Fastify、Next.js） | 是 | 是 |
+| **SPA (PKCE)** | 无法存储密钥的浏览器应用 | 是 | 否 |
+| **Native App (PKCE)** | 使用自定义 URI scheme 重定向的桌面/移动应用 | 是 | 否 |
+
+**Server-to-Server** 让您的应用以服务账户身份运行，无需用户交互。它仅适用于通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理的 Frame.io V4 账户。
+
+**Web App** 和 **SPA** 让您的应用以特定用户身份运行。两者底层都使用 Adobe IMS：用户授权您的应用，然后 SDK 将获得的授权码交换为令牌。TypeScript SDK 会为您处理 IMS `/authorize/v2` 和 `/token/v3` 流程。Web App 需要 client secret；SPA 则改用 [PKCE](https://datatracker.ietf.org/doc/html/rfc7636)。
+
+**Native App** 遵循与 SPA 相同的 PKCE 流程，但使用 Adobe 为您的 Native App 凭据分配的 `adobe+<hash>://callback` 重定向 URI。这使您的应用能够在授权后于操作系统层面拦截重定向。
+
+---
+
+## 服务账户用户 {#service-account-users}
+
+使用 Server-to-Server 身份验证时，您的应用将作为**服务账户用户**运行，这是一种独立的账户类型，可以代表服务执行操作。这些账户对 Frame.io 中的其他用户可见：当服务账户执行操作时，其名称会显示在界面中。
+
+您可以通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 和 [Developer Console](https://developer.adobe.com/console) 授予和撤销服务账户访问权限。服务账户名称在 Frame.io 界面中管理。默认情况下，您的第一个 S2S 连接名为 **Service Account User**，第二个名为 **Service Account User 2**，依此类推。
+
+<Info>
+
+有关更多信息，请参阅 [Automate your setup using Frame.io server to server
+support](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html)。
+
+</Info>
+
+---
+
+## 快速入门 {#quick-start}
+
+### 前提条件 {#prerequisites}
+
+1. 来自 [Adobe Developer Console](https://developer.adobe.com/console) 的**凭据**：
+
+   - **Client ID** — 所有 OAuth 流程都需要
+   - **Client Secret** — Server-to-Server 和 Web App 流程需要
+   - **Redirect URI** — Web App、SPA 和 Native App 流程需要；必须在您的 Adobe 项目中注册
+
+2. **安装 SDK：**
+
+```bash
+npm install frameio
+```
+
+### 选择方式 {#choosing-a-method}
+
+- **不涉及用户？** 使用 **Server-to-Server**（`ServerToServerAuth`）。
+- **涉及用户，且您可以存储密钥？** 使用 **Web App**（`WebAppAuth`）。
+- **涉及用户，但您无法存储密钥？** 浏览器应用使用 **SPA**（`SPAAuth`），桌面/移动应用使用 **Native App**（`NativeAppAuth`）。
+
+---
+
+## 访问令牌 {#access-token}
+
+如果您已经拥有访问令牌（来自其他 OAuth 系统或之前的交换，例如通过我们的 [API Explorer](/cn/platform/api-reference/accounts/index?explorer=true)），可以直接传入：
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: "YOUR_ACCESS_TOKEN" });
+```
+
+这是最简单的方式，但令牌最终会过期，并且 SDK 不会为您刷新它。
+
+### 旧版开发者令牌 {#legacy-developer-tokens}
+
+对于已迁移到 V4 但尚未通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理的账户，您可以继续使用来自 [Frame.io 开发者网站](https://developer.frame.io/app/tokens)的旧版开发者令牌。您必须包含 `x-frameio-legacy-token-auth` 请求头并将其设置为 `true`：
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({
+    token: "YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers: { "x-frameio-legacy-token-auth": "true" },
+});
+```
+
+旧版开发者令牌不会过期，但它们只是一种过渡机制。对于新的集成和生产工作负载，我们建议使用下文中的某种 OAuth 2.0 流程。详情请参阅[迁移指南](/cn/platform/docs/resources/migration#authentication)。
+
+---
+
+## Server-to-Server（客户端凭据） {#server-to-server-client-credentials}
+
+此方式适用于需要在无用户交互的情况下访问 Frame.io 的后端服务和脚本。此流程仅适用于通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理的 Frame.io V4 账户。您的应用以[服务账户用户](#service-account-users)身份进行身份验证，全程无需人工参与。
+
+```typescript
+import { FrameioClient, ServerToServerAuth } from "frameio";
+
+const auth = new ServerToServerAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+});
+
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+就是这样。`auth.getToken()` 是一个异步函数，SDK 会在每次请求时调用它。如果当前令牌仍然有效，它会立即返回。如果令牌即将过期，它会先获取一个新令牌，整个过程完全透明。
+
+### 工作原理 {#how-it-works}
+
+您的客户端凭据（client ID + secret）**永不过期**。您只需出于安全考虑手动轮换它们。S2S 实际上为您提供了永久、不间断的 API 访问，且无需任何人工干预。
+
+底层机制：
+
+1. 首次调用 API 时，`getToken()` 使用 `client_credentials` 授权类型向 Adobe IMS 请求新的访问令牌。
+2. 令牌缓存在内存中。单个访问令牌会过期（通常为 24 小时），但这已为您处理好。
+3. 当缓存的令牌进入刷新缓冲期（默认：过期前 60 秒）时，SDK 会使用相同的客户端凭据自动获取新令牌。
+4. 不涉及刷新令牌。客户端凭据本身就是长期有效的密钥，随时可用于生成新的访问令牌。
+
+### 显式身份验证 {#explicit-authentication}
+
+如果您希望提前获取令牌（例如，在启动时对错误的凭据快速失败）：
+
+```typescript
+const auth = new ServerToServerAuth({ clientId: "...", clientSecret: "..." });
+await auth.authenticate(); // throws AuthenticationError if credentials are invalid
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+---
+
+## Web App（授权码） {#web-app-authorization-code}
+
+此方式适用于用户使用 Adobe ID 登录的服务端应用。此流程需要 client secret，并且必须安全地存储在您的服务器上。
+
+<Steps>
+
+<Step title="将用户重定向到 Adobe IMS">
+
+```typescript
+import { WebAppAuth } from "frameio";
+import crypto from "crypto";
+
+const auth = new WebAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+    redirectUri: "https://yourapp.com/callback",
+});
+
+// Generate a cryptographically random state value to prevent CSRF attacks
+const state = crypto.randomBytes(32).toString("hex");
+
+const authorizationUrl = auth.getAuthorizationUrl({ state });
+// Store `state` in the user's session, then redirect them to `authorizationUrl`
+```
+
+</Step>
+
+<Step title="处理回调">
+
+当 Adobe IMS 将用户重定向回您的 `redirectUri` 时，提取 `code` 和 `state` 参数。验证 state 与您存储的值一致，然后将授权码交换为令牌：
+
+```typescript
+// In your callback handler (e.g. an Express route):
+await auth.exchangeCode(req.query.code as string);
+```
+
+这会将授权码交换为访问令牌和刷新令牌，并在内部存储这两者。
+
+</Step>
+
+<Step title="使用客户端">
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+就是这样。从这时起，`getToken()` 会自动管理令牌生命周期。当访问令牌即将过期时，SDK 会使用刷新令牌获取新令牌，无需用户交互。
+
+</Step>
+
+</Steps>
+
+### 完整 Express 示例 {#full-express-example}
+
+```typescript
+import crypto from "crypto";
+import express from "express";
+import session from "express-session";
+import { FrameioClient, WebAppAuth } from "frameio";
+
+const auth = new WebAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    clientSecret: "YOUR_CLIENT_SECRET",
+    redirectUri: "http://localhost:3000/callback",
+});
+
+const app = express();
+app.use(session({ secret: crypto.randomBytes(32).toString("hex"), resave: false, saveUninitialized: false }));
+
+app.get("/login", (req, res) => {
+    const state = crypto.randomBytes(32).toString("hex");
+    (req.session as any).oauthState = state;
+    res.redirect(auth.getAuthorizationUrl({ state }));
+});
+
+app.get("/callback", async (req, res) => {
+    if (req.query.state !== (req.session as any).oauthState) {
+        return res.status(403).send("Invalid state parameter");
+    }
+
+    await auth.exchangeCode(req.query.code as string);
+
+    const client = new FrameioClient({ token: () => auth.getToken() });
+    const accounts = await client.accounts.index();
+    res.json(accounts);
+});
+
+app.listen(3000);
+```
+
+---
+
+## 单页应用 / PKCE（授权码 + PKCE） {#single-page-app-/-pkce-authorization-code-+-pkce}
+
+此方式适用于无法安全存储 client secret 的浏览器应用、桌面应用或 CLI 工具。此流程使用 [PKCE (RFC 7636)](https://datatracker.ietf.org/doc/html/rfc7636) 来保护授权码交换。
+
+<Steps>
+
+<Step title="生成授权 URL">
+
+```typescript
+import { SPAAuth } from "frameio";
+
+const auth = new SPAAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "https://yourapp.com/callback",
+});
+
+const state = crypto.randomUUID();
+const result = await auth.getAuthorizationUrl({ state });
+// result.url            -> redirect the user here
+// result.codeVerifier   -> store this securely until the callback
+```
+
+`getAuthorizationUrl` 返回一个 `AuthorizationUrlResult`，其中包含完整的 URL（已嵌入 PKCE `code_challenge`）以及下一步需要用到的 `codeVerifier`。
+
+</Step>
+
+<Step title="使用 verifier 交换授权码">
+
+当用户被重定向回来时：
+
+```typescript
+await auth.exchangeCode({
+    code: "CODE_FROM_CALLBACK",
+    codeVerifier: result.codeVerifier,
+});
+```
+
+</Step>
+
+<Step title="使用客户端">
+
+```typescript
+import { FrameioClient } from "frameio";
+
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+就是这样。刷新的工作方式与 Web App 相同 — SDK 会自动使用刷新令牌。区别在于刷新期间不会发送 client secret，因为 SPA 流程是为公共客户端设计的。
+
+</Step>
+
+</Steps>
+
+<Warning>
+
+在授权请求和授权码交换之间，`codeVerifier` 必须安全地存储在客户端。在浏览器应用中请使用
+`sessionStorage` 或同等机制。
+
+</Warning>
+
+---
+
+## Native App（授权码 + PKCE） {#native-app-authorization-code-+-pkce}
+
+此方式适用于桌面和移动应用。当您在 [Adobe Developer Console](https://developer.adobe.com/console) 中创建 Native App 凭据时，Adobe 会为您分配一个 `adobe+<hash>://callback` 形式的重定向 URI — 您需要在操作系统层面注册您的应用以处理该自定义 URI scheme。本地开发时也支持回环重定向（`http://127.0.0.1:<port>/callback`）。该流程与 SPA 相同 — 使用 PKCE，不需要 client secret。
+
+```typescript
+import { NativeAppAuth } from "frameio";
+
+const auth = new NativeAppAuth({
+    clientId: "YOUR_CLIENT_ID",
+    redirectUri: "adobe+abc123def456://callback", // from your Adobe Developer Console Native App credential
+    // Also supports loopback: "http://127.0.0.1:8080/callback"
+});
+
+const { url, codeVerifier } = await auth.getAuthorizationUrl({
+    state: crypto.randomUUID(),
+});
+
+// Open system browser to `url`
+// Listen for redirect on your custom URI scheme or loopback server
+
+await auth.exchangeCode({ code: "CODE_FROM_REDIRECT", codeVerifier });
+const client = new FrameioClient({ token: () => auth.getToken() });
+```
+
+### 重定向 URI 规则 {#redirect-uri-rules}
+
+Adobe 在两个环节强制执行重定向 URI 规则：在 [Adobe Developer Console](https://developer.adobe.com/console) 中注册凭据时，以及 `redirect_uri` 参数到达 `/authorize/v2` 端点时。您在此 SDK 中传给 `redirectUri` 的值必须与您在凭据上注册的某个“Redirect URI patterns”相匹配 — 否则 Adobe 会改为重定向到该凭据的 Default Redirect URI。
+
+- **Web App** 和 **SPA** 凭据要求使用 HTTPS。
+- **Native App** 凭据使用非 HTTPS 重定向 — 通常是 Developer Console 中为该凭据显示的 `adobe+<hash>://callback` URI。
+
+有关您的凭据所接受的确切模式，请参阅 [Adobe Developer Console](https://developer.adobe.com/console)。
+
+<Note>
+
+Python SDK 不包含 Native App 凭据类，因为 Python 没有注册自定义 URI scheme 处理程序的标准方式。
+TypeScript SDK 支持全部四种凭据类型，包括 Native App。
+
+</Note>
+
+---
+
+## 手动刷新令牌 {#manual-token-refresh}
+
+对于 Web App、SPA 和 Native App 流程，SDK 会通过 `getToken()` 自动刷新令牌。如果您需要显式控制，可以直接调用 `refresh()`：
+
+```typescript
+await auth.refresh(); // fetches a new access token using the refresh token
+```
+
+当您希望在关键操作之前强制刷新，而不是依赖自动刷新缓冲期时，这非常有用。
+
+`refresh()` 可用于 `WebAppAuth`、`SPAAuth` 和 `NativeAppAuth`。如果没有可用的刷新令牌（即您必须先调用 `exchangeCode()`），它会抛出 `ConfigurationError`。`ServerToServerAuth` 没有 `refresh()` 方法 — 它改用 `authenticate()` 通过客户端凭据获取新令牌。
+
+---
+
+## 令牌持久化 {#token-persistence}
+
+所有身份验证类都支持 `exportTokens()` 和 `importTokens()`，用于在重启之间持久化令牌状态。对于 Web App、SPA 和 Native App 流程，这一点尤为重要，因为访问令牌和刷新令牌默认保存在内存中 — 如果您的应用重启，除非您将其持久化，否则用户需要重新进行身份验证。对于 Server-to-Server，持久化是可选的（客户端凭据随时可以生成新令牌），但导入缓存的令牌可以避免启动时额外的一次往返请求。
+
+### 导出和导入 {#export-and-import}
+
+```typescript
+// After exchangeCode(), save the token state
+const tokenData = auth.exportTokens();
+// tokenData is: { access_token: "...", refresh_token: "...", expires_at: 1234567890.0 }
+// Save it to your database, file, or secret store
+
+// On next startup, restore it
+auth.importTokens(tokenData);
+const client = new FrameioClient({ token: () => auth.getToken() });
+// The SDK will automatically refresh if the token is near expiry
+```
+
+<Warning>
+
+请安全地存储导出的令牌。它们包含可授予 API 访问权限的访问令牌和刷新令牌。在生产环境中，避免将令牌
+写入明文文件。
+
+</Warning>
+
+### 使用 `onTokenRefreshed` 自动持久化 {#automatic-persistence-with-ontokenrefreshed}
+
+要在每次刷新令牌时自动持久化令牌，请使用 `onTokenRefreshed` 回调：
+
+```typescript
+import fs from "fs/promises";
+
+const TOKEN_FILE = "tokens.json";
+
+const auth = new WebAppAuth({
+    clientId: "...",
+    clientSecret: "...",
+    redirectUri: "...",
+    onTokenRefreshed: (tokens) => {
+        fs.writeFile(TOKEN_FILE, JSON.stringify(tokens));
+    },
+});
+
+// On startup, restore if available
+try {
+    const saved = JSON.parse(await fs.readFile(TOKEN_FILE, "utf-8"));
+    auth.importTokens(saved);
+} catch {
+    // No saved tokens — user will need to authenticate
+}
+```
+
+该回调接收的数据结构与 `exportTokens()` 相同，并在每次成功刷新令牌后触发。
+
+---
+
+## 撤销令牌 {#revoking-tokens}
+
+要让用户退出登录并在 Adobe IMS 中使其令牌失效：
+
+```typescript
+await auth.revoke();
+```
+
+这会向 Adobe IMS 并行发出两个尽力而为的撤销请求 — 一个针对访问令牌，一个针对刷新令牌 — 并清除所有本地令牌状态。对于机密客户端（`WebAppAuth`），撤销请求使用 HTTP Basic Auth；对于公共客户端（`SPAAuth`、`NativeAppAuth`），`client_id` 作为查询参数发送。撤销错误会被记录，但不会抛出。撤销后，用户需要重新进行身份验证。
+
+---
+
+## 错误处理 {#error-handling}
+
+所有身份验证错误都继承自 `FrameioAuthError`，因此您可以统一捕获它们，也可以处理特定情况：
+
+```typescript
+import {
+    FrameioAuthError,
+    AuthenticationError,
+    TokenExpiredError,
+    ConfigurationError,
+    NetworkError,
+    RateLimitError,
+} from "frameio";
+
+try {
+    await auth.exchangeCode("...");
+} catch (error) {
+    if (error instanceof TokenExpiredError) {
+        // The refresh token has expired; redirect the user to sign in again
+    } else if (error instanceof AuthenticationError) {
+        // Token exchange failed
+        console.error(`Error: ${error.errorCode} - ${error.errorDescription}`);
+    } else if (error instanceof NetworkError) {
+        // Timeout or connection failure (after retries)
+    } else if (error instanceof RateLimitError) {
+        // 429 from Adobe IMS; retry after error.retryAfter seconds
+    } else if (error instanceof FrameioAuthError) {
+        // Catch-all for any other auth error
+    }
+}
+```
+
+### 错误参考 {#error-reference}
+
+| 异常 | 抛出时机 |
+| --- | --- |
+| `ConfigurationError` | 配置缺失或无效（例如 `clientId` 为空、重定向 URI 非 HTTPS、`imsBaseUrl` 非 HTTPS） |
+| `AuthenticationError` | 令牌交换或刷新被 Adobe IMS 拒绝（包含 `.errorCode` 和 `.errorDescription`） |
+| `TokenExpiredError` | 刷新令牌本身已过期；用户必须重新进行身份验证 |
+| `NetworkError` | 所有重试后仍出现 HTTP 超时或连接失败 |
+| `RateLimitError` | Adobe IMS 返回 429；请查看 `.retryAfter` 以获取退避指导 |
+| `PKCEError` | 供使用者在 PKCE 流程中使用；SDK 内部不会抛出 |
+
+### 在生产环境中处理过期的刷新令牌 {#handling-expired-refresh-tokens-in-production}
+
+<Warning>
+
+对于 Web App、SPA 和 Native App 流程，刷新令牌最终会过期。发生这种情况时，`getToken()`
+会抛出 `TokenExpiredError`。您应捕获该错误，并引导用户重新完成授权流程。
+
+</Warning>
+
+```typescript
+import { TokenExpiredError } from "frameio";
+
+try {
+    const client = new FrameioClient({ token: () => auth.getToken() });
+    const assets = await client.files.list({ projectId: "..." });
+} catch (error) {
+    if (error instanceof TokenExpiredError) {
+        // Clear persisted tokens and redirect user to login
+        await auth.revoke();
+        return res.redirect("/login");
+    }
+}
+```
+
+---
+
+## 配置参考 {#configuration-reference}
+
+这些参数都有合理的默认值，很少需要设置。如果您确实需要自定义行为 — 指向预发布 IMS、注入自定义 `fetch`、调整超时或接入日志记录器 — 可以在构造身份验证类时将它们作为可选参数传入：
+
+| 参数 | 默认值 | 描述 |
+| --- | --- | --- |
+| `scopes` | 因流程而异的默认值 | 以空格分隔的 OAuth 作用域。S2S 默认为 `openid AdobeID frame.s2s.all`；面向用户的流程默认为 `openid email profile offline_access additional_info.roles`。 |
+| `imsBaseUrl` | `https://ims-na1.adobelogin.com` | Adobe IMS 基础 URL。可在预发布或非生产环境中覆盖。必须使用 HTTPS。 |
+| `fetch` | `globalThis.fetch` | 用于代理、mTLS 或自定义 HTTP 处理的自定义 `fetch` 实现。 |
+| `timeout` | `30000` | 令牌端点调用的 HTTP 请求超时时间（毫秒）。 |
+| `maxRetries` | `2` | 针对瞬时故障（5xx、超时）的最大重试次数。速率限制重试（429）单独计算。 |
+| `refreshBuffer` | `60` | 在令牌过期前多少秒触发主动刷新。 |
+| `onTokenRefreshed` | `undefined` | 每次成功刷新令牌后触发的回调。接收一个包含 `access_token`、`refresh_token` 和 `expires_at` 的对象。 |
+| `logger` | 无操作（静默） | 具有 `debug`、`info`、`warn`、`error` 方法的日志记录器实例（例如 `console`、`pino`、`winston`）。 |
+
+### 预发布环境 {#staging-environments}
+
+通过覆盖 `imsBaseUrl` 指向预发布的 Adobe IMS 实例。如果您需要以编程方式引用生产环境的值，SDK 还导出了 `DEFAULT_IMS_BASE_URL`（`https://ims-na1.adobelogin.com`）。
+
+```typescript
+const auth = new ServerToServerAuth({
+    clientId: "...",
+    clientSecret: "...",
+    imsBaseUrl: "https://ims-na1-stg1.adobelogin.com",
+});
+```
+
+### 自定义 fetch {#custom-fetch}
+
+用于代理支持或自定义 TLS 配置：
+
+```typescript
+import { ProxyAgent } from "undici";
+
+const proxyAgent = new ProxyAgent("http://corporate-proxy:8080");
+
+const auth = new ServerToServerAuth({
+    clientId: "...",
+    clientSecret: "...",
+    fetch: (url, init) => fetch(url, { ...init, dispatcher: proxyAgent }),
+});
+```
+
+---
+
+## 并发安全 {#concurrency-safety}
+
+TypeScript SDK 可安全地并发使用。当多个 `getToken()` 调用同时发生且需要刷新时，只会发出一个刷新请求。其他调用会等待同一个 promise 并获得相同的结果。无需任何外部锁。
+
+这种去重机制利用了 JavaScript 的单线程事件循环和共享的 `Promise` — 如果刷新已在进行中，并发调用方会加入该刷新，而不是发起第二个请求。
+
+如果在刷新进行中调用了 `revoke()`，该刷新会以 `AuthenticationError` 被拒绝，且令牌保持清除状态 — 撤销始终优先。

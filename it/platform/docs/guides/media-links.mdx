@@ -1,0 +1,480 @@
+---
+title: "Media Links"
+---
+
+Frame.io archivia ed elabora i file caricati nei tuoi progetti: immagini, video, PDF e altro ancora. Quando recuperi un file tramite l’API, la risposta di base include i metadati principali, come il nome del file, lo stato e un `view_url` per aprirlo nell’app Frame.io. Per accedere al contenuto effettivo del file (l’originale, un’anteprima o rendition di qualità diverse) si utilizzano gli **include**.
+
+Questa guida illustra gli include dei media link disponibili negli endpoint **List Files** e **Get File**, cosa restituisce ciascuno e quando utilizzarli.
+
+## Cosa sono gli include? {#what-are-includes}
+
+Gli include sono campi facoltativi che puoi richiedere insieme alla risposta relativa a un file. Per impostazione predefinita, l’API restituisce solo i metadati principali del file: nome, stato, tipo, timestamp e `view_url`. Gli include ti consentono di richiedere dati aggiuntivi, mantenendo le risposte leggere quando non hai bisogno di tutto.
+
+### Come aggiungere gli include {#how-to-add-includes}
+
+Passa un elenco di nomi di include separati da virgole come parametro di query `include` in qualsiasi richiesta **Get File** o **List Files**:
+
+```bash title="Single include"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+```bash title="Multiple includes"
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```bash title="Includes on List Files"
+GET /v4/accounts/{account_id}/folders/{folder_id}/files?include=media_links.thumbnail
+```
+
+Gli include funzionano allo stesso modo sia sull’endpoint per il singolo file sia su quello di elenco. Quando vengono utilizzati su List Files, gli include vengono risolti per ogni file presente nella risposta.
+
+### Esempi con gli SDK {#sdk-examples}
+
+<CodeGroup>
+
+```python title="Python SDK"
+import frameio
+
+client = frameio.Frameio(auth="<YOUR_TOKEN>")
+
+file = client.files.get(
+    file_id="93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    include=["media_links.thumbnail", "media_links.original"]
+)
+
+print(file.media_links.thumbnail.url)
+```
+
+```typescript title="TypeScript SDK"
+import Frameio from "frameio";
+
+const client = new Frameio({ auth: "<YOUR_TOKEN>" });
+
+const file = await client.files.get("93e4079d-0a8a-4bf3-96cd-e6a03c465e5e", {
+  include: ["media_links.thumbnail", "media_links.original"],
+});
+
+console.log(file.media_links?.thumbnail?.url);
+```
+
+</CodeGroup>
+
+Gli include non richiesti vengono omessi completamente dalla risposta.
+
+## Panoramica degli include dei media link {#media-link-includes-overview}
+
+<CardGroup cols={2}>
+
+<Card title="media_links.original" icon="file-arrow-down" iconType="solid">
+
+Il file originale caricato, esattamente com’è stato caricato
+
+</Card>
+
+<Card title="media_links.thumbnail" icon="image" iconType="solid">
+
+Un’immagine di anteprima PNG a scopo di visualizzazione
+
+</Card>
+
+<Card title="media_links.high_quality" icon="star" iconType="solid">
+
+La migliore rendition elaborata disponibile
+
+</Card>
+
+<Card title="media_links.efficient" icon="bolt" iconType="solid">
+
+La rendition più piccola disponibile, per casi d’uso con larghezza di banda ridotta
+
+</Card>
+
+<Card title="media_links.video_h264_180" icon="film" iconType="solid">
+
+Una transcodifica video H264 a bassa risoluzione (180p) per lo streaming e la riproduzione
+
+</Card>
+
+<Card title="media_links.scrub_sheet" icon="table-cells" iconType="solid">
+
+Uno sprite sheet WebP di miniature dei fotogrammi del video per creare un’interfaccia di scrubbing
+
+</Card>
+
+</CardGroup>
+
+## media_links.original {#media_links-original}
+
+Restituisce URL firmati che puntano al **file originale esattamente com’è stato caricato**, senza elaborazioni né conversioni.
+
+### Campi {#fields}
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `download_url` | string \| null | URL firmato che forza il download del file (`Content-Disposition: attachment`) |
+| `inline_url` | string \| null | URL firmato che apre il file direttamente nel browser (`Content-Disposition: inline; filename=<name>`) |
+
+### Quando usarlo {#when-to-use}
+
+Usa `media_links.original` quando ti serve il file sorgente, ad esempio per consentire a un utente di scaricare il MOV, MP4, MXF, AVI, PSD, PNG o TIFF originale, oppure per passare i byte originali a un altro sistema.
+
+### Esempio di richiesta {#example-request}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.original
+```
+
+### Esempio di risposta {#example-response}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+<Warning>
+
+Questi URL sono **URL S3 firmati temporanei**: scadono. Non memorizzarli nella cache né conservarli; richiedi un URL nuovo ogni volta che ne hai bisogno.
+
+</Warning>
+
+## media_links.thumbnail {#media_links-thumbnail}
+
+Restituisce un’**immagine di anteprima PNG** dell’asset, con un’altezza massima di 540px. Si tratta di una rendition elaborata, non del file originale, e potrebbero essere applicate filigrane a seconda delle impostazioni del tuo account.
+
+### Campi {#fields-1}
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `download_url` | string \| null | URL firmato che forza il download della miniatura PNG |
+| `url` | string \| null | URL firmato che fornisce la miniatura PNG inline, senza header `Content-Disposition` |
+
+### Quando usarlo {#when-to-use-1}
+
+Usa `media_links.thumbnail` quando devi **visualizzare un’anteprima** dell’asset, ad esempio in una vista a griglia, in una galleria o in un selettore di file. Si carica più velocemente dell’originale ed è sempre in formato PNG adatto al web.
+
+### Esempio di richiesta {#example-request-1}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail
+```
+
+### Esempio di risposta {#example-response-1}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.high_quality {#media_links-high_quality}
+
+Restituisce un URL di download per la **migliore rendition elaborata disponibile** dell’asset. Frame.io elabora i caricamenti attraverso una scala di risoluzioni che arriva fino a 2160p. L’API restituisce la rendition più alta disponibile **al momento della richiesta**: quindi, se al momento della richiesta è stata completata solo l’elaborazione di una rendition a 540p, l’API restituisce la 540p finché non saranno pronte le rendition superiori.
+
+### Campi {#fields-2}
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `download_url` | string \| null | URL firmato per la rendition di qualità più alta disponibile al momento della richiesta |
+
+### Quando usarlo {#when-to-use-2}
+
+Usa `media_links.high_quality` quando vuoi la **versione di qualità migliore senza bisogno dell’originale**, ad esempio per esportare una rendition ad alta risoluzione per l’elaborazione a valle o per presentare un’anteprima a piena risoluzione. Se ti serve la qualità più alta possibile, controlla il campo `status` del file e richiedi questo include quando il file è `ready`, per assicurarti che l’intera scala di risoluzioni sia stata elaborata.
+
+### Esempio di richiesta {#example-request-2}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.high_quality
+```
+
+### Esempio di risposta {#example-response-2}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "high_quality": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.efficient {#media_links-efficient}
+
+Restituisce un URL di download per la **rendition elaborata più piccola disponibile**. È l’opposto di `high_quality`: Frame.io sceglie la rendition con la risoluzione più bassa disponibile.
+
+### Campi {#fields-3}
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `download_url` | string \| null | URL firmato per la rendition più piccola/più efficiente |
+
+### Quando usarlo {#when-to-use-3}
+
+Usa `media_links.efficient` quando **la larghezza di banda o le dimensioni del file contano più della qualità**, ad esempio per generare anteprime rapide in un ambiente con larghezza di banda ridotta o per alimentare una pipeline di miniature che non richiede la piena risoluzione.
+
+### Esempio di richiesta {#example-request-3}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.efficient
+```
+
+### Esempio di risposta {#example-response-3}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "efficient": {
+        "download_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.video_h264_180 {#media_links-video_h264_180}
+
+Restituisce URL di streaming e di download per una **transcodifica video H264 a bassa risoluzione (180p)** dell’asset.
+
+<Warning>
+
+Questo è un include legacy. Sarà `null` se per l’asset non è stata generata una transcodifica a 180p. Nella maggior parte dei casi d’uso è preferibile `media_links.efficient`, che seleziona la migliore rendition a bassa qualità disponibile anziché dipendere dall’esistenza di una transcodifica specifica.
+
+</Warning>
+
+### Campi {#fields-4}
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `download_url` | string \| null | URL firmato per scaricare il video H264 a 180p |
+| `url` | string \| null | URL firmato per lo streaming del video H264 a 180p |
+
+### Quando usarlo {#when-to-use-4}
+
+Usa `media_links.video_h264_180` quando ti serve specificamente una transcodifica H264 a 180p garantita, ad esempio per l’integrazione con un player o una pipeline legacy che richiede esattamente questo formato. Se la transcodifica non esiste per un determinato asset, entrambi gli URL saranno `null`.
+
+<Warning>
+
+Il file video_h264_180 non include l’audio. È pensato per essere utilizzato per anteprime molto efficienti, quando necessario.
+
+</Warning>
+
+### Esempio di richiesta {#example-request-4}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.video_h264_180
+```
+
+### Esempio di risposta {#example-response-4}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "video_h264_180": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## media_links.scrub_sheet {#media_links-scrub_sheet}
+
+Restituisce uno **sprite sheet WebP**: un’unica immagine contenente una griglia di miniature dei fotogrammi del video, campionate in modo uniforme lungo la durata del video. Viene utilizzato per creare interfacce di scrubbing video, in cui il player mostra un fotogramma di anteprima mentre l’utente trascina lungo la timeline.
+
+<Info>
+
+Gli scrub sheet vengono generati **solo per gli asset video**. L’include restituirà URL `null` per immagini, PDF e altri file non video.
+
+</Info>
+
+### Campi {#fields-5}
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `download_url` | string \| null | URL firmato per scaricare lo sprite sheet WebP |
+| `url` | string \| null | URL firmato per caricare lo sprite sheet WebP inline |
+| `metadata` | object \| null | Informazioni sulla disposizione dei riquadri per estrarre i singoli fotogrammi (solo API sperimentale) |
+
+**Campi di `metadata`:**
+
+| Campo | Tipo | Descrizione |
+| --- | --- | --- |
+| `tile_x` | integer | Numero di colonne di miniature nella griglia |
+| `tile_y` | integer | Numero di righe di miniature nella griglia |
+| `thumb_width` | integer | Larghezza di ogni miniatura in pixel |
+| `thumb_height` | integer | Altezza di ogni miniatura in pixel |
+| `padding` | integer | Spazio in pixel tra le miniature |
+| `frames` | integer | Numero totale di fotogrammi campionati nello sheet |
+
+### Quando usarlo {#when-to-use-5}
+
+Usa `media_links.scrub_sheet` quando crei un player video personalizzato o un’interfaccia di timeline che deve mostrare una miniatura di anteprima mentre l’utente esegue lo scrubbing. Anziché effettuare una richiesta separata per ogni fotogramma, lo sprite sheet raggruppa tutti i fotogrammi di anteprima in un unico download di immagine.
+
+### Esempio di richiesta {#example-request-5}
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.scrub_sheet
+```
+
+### Esempio di risposta {#example-response-5}
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "interview-clip.mp4",
+    "type": "file",
+    "media_links": {
+      "scrub_sheet": {
+        "download_url": "https://assets.frame.io/...",
+        "url": "https://assets.frame.io/...",
+        "metadata": {
+          "tile_x": 10,
+          "tile_y": 10,
+          "thumb_width": 160,
+          "thumb_height": 90,
+          "padding": 1,
+          "frames": 100
+        }
+      }
+    }
+  }
+}
+```
+
+### Estrarre un fotogramma dallo sprite sheet {#extracting-a-frame-from-the-sprite-sheet}
+
+Lo sprite sheet è una griglia di `tile_x` colonne × `tile_y` righe. Per visualizzare la miniatura di un determinato indice di fotogramma (a base zero), calcolane la posizione all’interno dell’immagine:
+
+```javascript
+function getFrameOffset(frameIndex, metadata) {
+  const { tile_x, thumb_width, thumb_height, padding } = metadata;
+
+  const col = frameIndex % tile_x;
+  const row = Math.floor(frameIndex / tile_x);
+
+  return {
+    x: col * (thumb_width + padding),
+    y: row * (thumb_height + padding),
+    width: thumb_width,
+    height: thumb_height,
+  };
+}
+```
+
+Puoi quindi utilizzare la proprietà CSS `background-position` per mostrare il riquadro corretto dello sprite sheet:
+
+```javascript
+function applyFrameToElement(el, frameIndex, scrubSheet) {
+  const { x, y, width, height } = getFrameOffset(frameIndex, scrubSheet.metadata);
+
+  el.style.backgroundImage = `url(${scrubSheet.url})`;
+  el.style.backgroundPosition = `-${x}px -${y}px`;
+  el.style.width = `${width}px`;
+  el.style.height = `${height}px`;
+}
+```
+
+Per associare una posizione di riproduzione (in secondi) a un indice di fotogramma, utilizza la durata totale del video e il numero di fotogrammi nello sheet:
+
+```javascript
+function positionToFrameIndex(currentSeconds, durationSeconds, metadata) {
+  const progress = currentSeconds / durationSeconds;
+  return Math.min(
+    Math.floor(progress * metadata.frames),
+    metadata.frames - 1
+  );
+}
+```
+
+<Info>
+
+Il campo `metadata` è disponibile solo nella versione sperimentale dell’API. Nell’API v4 stabile, `scrub_sheet` restituisce solo `download_url` e `url`.
+
+</Info>
+
+## Combinare più include {#combining-multiple-includes}
+
+Puoi richiedere più include in un’unica chiamata API:
+
+```bash
+GET /v4/accounts/{account_id}/files/{file_id}?include=media_links.thumbnail,media_links.original
+```
+
+```json
+{
+  "data": {
+    "id": "93e4079d-0a8a-4bf3-96cd-e6a03c465e5e",
+    "name": "hero-banner.png",
+    "type": "file",
+    "media_links": {
+      "thumbnail": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "url": "https://s3.amazonaws.com/..."
+      },
+      "original": {
+        "download_url": "https://s3.amazonaws.com/...",
+        "inline_url": "https://s3.amazonaws.com/..."
+      }
+    }
+  }
+}
+```
+
+## Scegliere l’include giusto {#choosing-the-right-include}
+
+| Obiettivo | Include da usare |
+| --- | --- |
+| Mostrare un’immagine di anteprima nella tua interfaccia | `media_links.thumbnail` |
+| Consentire a un utente di scaricare il file originale | `media_links.original` |
+| Aprire il file originale direttamente nel browser | `media_links.original` → `inline_url` |
+| Ottenere la rendition di qualità migliore per l’esportazione | `media_links.high_quality` |
+| Ottenere una rendition piccola per l’uso con larghezza di banda ridotta | `media_links.efficient` |
+| Riprodurre in streaming o scaricare un video a bassa risoluzione (legacy) | `media_links.video_h264_180` |
+| Creare un’interfaccia di scrubbing video con anteprime dei fotogrammi | `media_links.scrub_sheet` |
+| Indirizzare un utente al file in Frame.io | Usa `view_url` dalla risposta di base del file |
+
+<Info>
+
+`view_url`, disponibile in ogni risposta relativa a un file senza bisogno di un include, è un deep link permanente all’app web di Frame.io. **Non** è un URL multimediale: apre l’interfaccia di Frame.io e non ha scadenza. Usalo quando vuoi indirizzare un utente a revisionare o commentare un asset direttamente in Frame.io, non quando devi fornire o scaricare il file a livello di codice.
+
+</Info>
+
+## Disponibilità degli include {#include-availability}
+
+Gli include dei media link vengono popolati solo dopo che Frame.io ha terminato l’elaborazione del file caricato. Se richiedi un include subito dopo il caricamento, gli URL potrebbero essere `null` mentre la transcodifica è in corso. Controlla il campo `status` nell’oggetto file: gli include saranno disponibili quando lo stato sarà `ready`.

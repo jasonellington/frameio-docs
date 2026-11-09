@@ -1,0 +1,156 @@
+---
+title: "プロジェクトからすべてのコメントを収集する"
+sidebarTitle: "プロジェクトからすべてのコメントを収集する"
+---
+
+## 概要 {#overview}
+
+コメントスクレイパーは、プロジェクト内のすべての Asset を取得し、コメントを収集して .csv ファイルに出力します。このチュートリアルでは、以下のリソースを使用します。
+
+- [Python SDK](https://github.com/Frameio/python-frameio-client) - SDK がページネーションを処理し、開発者トークン(Bearer 認証)で使用できるクライアントをセットアップします。
+- [Python 版コメントスクレイパー](https://github.com/Frameio/comment-scraper-python) - ここで使用するコードサンプルはこちらにあります。
+
+### Glitch で試す {#try-it-on-glitch}
+
+Glitch は、独自のアプリケーションをセットアップし、Glitch のサーバーを使ってテストおよび実行できるシンプルなツールです。Glitch に慣れていない場合は、[Glitch の使用](/ja/platform/v2/using-glitch)に関するガイドをご覧ください。
+
+コメントスクレイパーがサーバー上で動作する様子を確認したい場合は、[Glitch](https://glitch.com) に Flask アプリを用意しています: [Frame.io Comment Scraper in Python](https://glitch.com/~frameio-comment-scraper)。
+
+### 必要なスコープ {#required-scopes}
+
+このガイドを始める前に、少なくとも以下のスコープを含むトークンがあることを確認してください。
+
+| スコープ | 理由 |
+| --- | --- |
+| **Projects:** Read | 厳密には必須ではありませんが、プロジェクトの `root_asset_id` を取得するために必要です。 |
+| **Assets:** Read | API 経由で `asset_ids` をたどるために必要です。 |
+| **Comments:** Read | コメント自体を取得するために必要です。 |
+
+### 1. アプリを準備する {#1-prepare-your-app}
+
+このガイドは [ファイルツリーの読み取り](/ja/platform/v2/reading-the-file-tree)と同様の流れで進めます。そのため、始めるには以下が必要です。
+
+- クロールするプロジェクトの `root_asset_id`
+- [開発者トークン](https://developer.frame.io/authentication/developer-tokens)
+
+また、Python アプリに `FrameioClient` と、いくつかの補助ライブラリをインポートしておきます。
+
+```python title="Python"
+from frameioclient import FrameioClient
+import requests, json, csv, itertools
+
+ROOT_ASSET_ID = "<ROOT_ASSET_ID>"
+TOKEN = "<DEV_TOKEN>"
+```
+
+### 2. プロジェクトをクロールする {#2-crawl-the-project}
+
+次に、すべての Asset を再帰的に取得し、コメントがあるかを確認して、コメントのある Asset をリストに格納します。このリストから .csv ファイルを作成します。
+
+プロジェクトをクロールする際は、各 Asset について以下を確認する必要があります。
+
+- Asset はファイルか?(`"_type": "file"`)
+
+  - ファイルの場合、コメントはあるか?
+
+    - **コメントがある場合は、取得してリストに追加します。**
+
+- Asset はフォルダーか?(`"_type": "folder"`)
+
+  - **フォルダーの場合は、その子要素に対して再帰的に処理します。**
+
+- Asset はバージョンスタックか?(`"_type": "version_stack"`)
+
+  - **バージョンスタックの場合は、すべての子要素を取得してコメントを確認します。**
+
+```python title="Python"
+def all_comments(client, asset_id, comment_list):
+    files = client.get_asset_children(asset_id)
+
+    for asset in files:
+        if asset['type'] == "file":
+            if asset['comment_count'] > 0:
+                asset_parent_id = asset['parent_id']
+                asset_name = asset['name']
+                comments = client.get_comments(asset['id'])
+                my_comment_list = [comment for comment in comments.results]
+                for object in my_comment_list:
+                    object.update({'parent_id':asset_parent_id})
+                    object.update({'name':asset_name})
+                comment_list.append(my_comment_list)
+
+        if asset['type'] == "folder":
+            if asset['item_count'] > 0:
+                all_comments(client, asset['id'], comment_list)
+
+        if asset['type'] == "version_stack":
+            asset_name = asset['name']
+            parent_id = asset['parent_id']
+            vfiles = client.get_asset_children(asset['id'])
+
+            for asset in vfiles.results:
+                asset_name = asset['name']
+                parent_id = asset['parent_id']
+                if asset['type'] == "file":
+                    if asset['comment_count'] > 0:
+                        comments = client.get_comments(asset['id'])
+                        my_comment_list = [comment for comment in comments.results]
+                        for object in my_comment_list:
+                            object.update({'parent_id':parent_id})
+                            object.update({'name':asset_name})
+                        comment_list.append(my_comment_list)
+
+def get_all_project_comments(root_asset_id, token):
+    comment_list = []
+    client = FrameioClient(token)
+
+    all_comments(client, root_asset_id, comment_list)
+
+    return comment_list
+```
+
+<Info>
+
+**ページネーションを忘れずに**
+
+上の例ではページネーションを無視していますが、大規模なコレクションを扱う場合は無視すべきではありません。詳しくは [主要な概念](/ja/platform/v2/key-concepts#pagination)ガイドをご覧ください。
+
+</Info>
+
+### 3. コメントリストをフラット化する {#3-flatten-your-comments-list}
+
+クロール中に処理していない場合は、処理しやすくするためにリストをフラット化します。
+
+```python title="Python"
+# The response list comes back as a list of lists.
+# Flatten out responses to a single list so you can build your .csv file.
+
+flat_response_list = list(itertools.chain.from_iterable(responses))
+```
+
+### 4. リストを絞り込んで .csv を作成する {#4-cull-the-list-and-create-your-csv}
+
+リストがフラットになったら、リスト内包表記を使って各コメントから有用と思われる要素を取り出し、.csv ファイルに出力できます。少なくとも以下を含めることをお勧めします。
+
+- コメント - `text`
+- 親 ID - `parent_id`
+- Asset ID - `asset_id`
+- Asset 名 `name`
+- 所有者 ID - `owner_id`
+- 所有者のメールアドレス - `owner.email`
+- タイムスタンプ - `timestamp`
+- 更新日時 - `updated_at`
+
+最終出力用に、Asset ごとに必要な出力を含む新しいリストを作成したら、.csv ファイルに書き出します。
+
+```python title="Python"
+list_for_csv = [[o['text'], o['parent_id'], o['asset_id'], o['name'], o['owner_id'], o['owner']['email'], o['timestamp'], o['updated_at']] for o in flat_response_list]
+
+# Let's write our new list out to a .csv file. We'll add a heading.
+with open("output.csv", 'w') as myfile:
+     wr = csv.writer(myfile, dialect='excel')
+     wr.writerow(['Comment', 'Parent ID', 'Asset ID', 'Asset Name', 'Owner ID', 'Email', 'Timestamp', 'Updated At'])
+     wr.writerows(list_for_csv)
+```
+
+以上です。これで、Frame.io プロジェクト全体のコメントをフラット化した .csv ファイルができました。

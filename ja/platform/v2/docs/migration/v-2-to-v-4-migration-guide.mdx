@@ -1,0 +1,85 @@
+---
+title: "Frame.io API V3 → V4 移行ガイド"
+sidebarTitle: "V2 から V4 への移行ガイド"
+---
+
+このガイドは、Frame.io API V3(ドキュメントでは「レガシー」または「v2」エンドポイントと呼ばれることもあります)から Adobe Frame.io API V4 への移行を支援します。Dropbox API の移行例のスタイルと構成にならい、エンドポイントの対応関係、ペイロードの変更、認証の更新などを包括的に説明します。
+
+---
+
+## 開発者向け移行チェックリスト {#migration-checklist-for-developers}
+
+1. **現在の V3 の使用状況を把握する:**
+
+   - アプリが行うすべての呼び出し(ファイルの作成、フォルダーの一覧表示、コメントの追加など)をリストアップします。
+   - それぞれを対応表と照らし合わせ、新しい V4 の同等のものを見つけます。
+
+2. **Adobe IMS の認証情報(OAuth 2.0)を取得する:**
+
+   - Adobe Developer Console でインテグレーションを作成します。
+   - OAuth 2.0 のクライアント認証情報とスコープ(Frame.io へのアクセス)を設定します。
+   - 古い Frame.io の開発者トークンを、新しい IMS トークンフローに置き換えます。
+
+3. **エンドポイント URL を更新する:**
+
+   - **V3:** `https://api.frame.io/v2/...` で、Asset は `assets/{asset_id}` を使用して操作します。
+   - **V4:** `https://api.frame.io/v4/` に加えて、エンドポイントには `accounts/{account_id}` と、個別の `folders/{folder_id}` / `files/{file_id}` が含まれます。
+
+4. **リクエストペイロードとレスポンスの解析を調整する:**
+
+   - V4 では通常、データが `data` オブジェクトでラップされます(例: `{"data": {...}}`)。
+   - フォルダーの作成やファイルのアップロードなどでは、新しい JSON フィールド名(例: `file_size`、`media_type`)を使用します。
+   - **Team → Workspace の変更:** `team_id`(V3)を `workspace_id`(V4)に置き換えます。
+
+5. **Webhook の登録をやり直す:**
+
+   - 古い V3 の Webhook(V4 では発火しなくなります)を削除または無効化します。
+   - `POST /v4/accounts/{account_id}/webhooks` で新しい Webhook を登録します。
+
+6. **エラー処理とレート制限をテストする:**
+
+   - 新しい 4xx/5xx レスポンスや、リクエスト/レスポンス形式の変更をコードが処理できることを確認します。
+   - V4 では異なるエラー構造が返される場合があります(例: より構造化された JSON、競合時の 409 など)。
+
+7. **アクセスと権限を確認する:**
+
+   - Adobe IMS トークンが、適切なアカウント/ワークスペース権限を持つユーザー(またはサービスアカウント)のものであることを確認します。
+   - 「チームレベル」のスコープを持つレガシーの V3 トークンは、V4 では無効です。
+
+8. **デプロイと監視:**
+
+   - 更新したコードは、まずサンドボックスまたは開発環境でテストします。
+   - ログで 4xx/5xx や予期しない動作を監視し、本番デプロイの前に問題を修正します。
+
+---
+
+## エンドポイント: V3 → V4 の対応関係 {#endpoints-v3-→-v4-mapping}
+
+以下は、主要な Frame.io V3 エンドポイント(左)と、それに対応する V4 エンドポイント(右)の比較です。このセクションは、Dropbox の「v1 → v2 mapping」表を参考にしています。
+
+> **ヒント:** この表は、一般的なファイル、フォルダー、プロジェクトの操作に焦点を当てています。特殊なエンドポイント(例: Camera to Cloud)は省略しています。
+
+### OAuth と認証 {#oauth-&-authentication}
+
+| **V3** | **V4** |
+| --- | --- |
+| 開発者トークン(Bearer `<token>`)または `Authorization: Bearer <token>` を使用した Frame.io OAuth 2.0 | Adobe IMS OAuth 2.0(Adobe Developer Console でプロジェクトを作成する必要があります)を使用し、`Authorization: Bearer <adobe_access_token>` を指定 |
+
+**注:** レガシーの開発者トークンは自動的に変換できません。新しい IMS OAuth フローを実装する必要があります。<br />
+**ドキュメント:** [Adobe Frame.io アクセストークンの取得方法](https://developer.adobe.com/frameio/api/current/)
+
+### フォルダーとファイルの操作 {#folder-and-file-operations}
+
+#### フォルダーを作成する {#create-a-folder}
+
+- **V3(フォルダーの作成):**
+
+  ```http
+  POST /v2/assets/{parent_asset_id}/children
+  Content-Type: application/json
+
+  {
+    "name": "My New Folder",
+    "type": "folder"
+  }
+  ```

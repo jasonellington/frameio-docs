@@ -1,0 +1,151 @@
+---
+title: "Guide pratique : gérer l'authentification (Application)"
+sidebarTitle: "Guide pratique - Gérer l'authentification (Application)"
+---
+
+## Introduction {#introduction}
+
+Dans ce guide, nous allons apprendre à actualiser, révoquer et stocker les informations d'autorisation d'une *C2C Application* pour Frame.io.
+
+## De quoi ai-je besoin ? {#what-will-i-need}
+
+Si vous n'avez pas lu le guide [Implémenter C2C : configuration](/fr/camera-to-cloud/implementing-c2c-setting-up), jetez-y un coup d'œil rapide avant de continuer !
+
+Vous aurez besoin du `client_id` fourni par notre équipe, ainsi que du même `device_id` que celui utilisé dans le [guide d'authentification et d'autorisation](/fr/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). L'`access_token` et le `refresh_token` sont également nécessaires pour suivre ce guide.
+
+## Jetons d'autorisation {#authorization-tokens}
+
+Dans [le guide précédent](/fr/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application), nous avons appris à *générer* de nouveaux jetons d'autorisation en demandant à l'utilisateur de s'authentifier et d'autoriser un appareil sur un projet.
+
+*Les jetons d'accès ne durent qu'environ 1 heure avant d'expirer*. Nous ne voulons pas que l'utilisateur d'un appareil doive se reconnecter toutes les 8 heures ; c'est pourquoi, dans le guide précédent, nous avons demandé le scope `offline` et obtenu également un *jeton d'actualisation* lors de l'autorisation auprès de Frame.io. Les jetons d'actualisation permettent de générer un nouveau jeton d'accès lorsque le jeton actuel expire.
+
+*Un jeton d'actualisation est valable 30 jours*. En limitant la durée de validité d'un access_token, nous limitons les abus potentiels si l'un d'eux venait à fuiter. Si l'autorisation n'est pas actualisée avant que le *jeton d'actualisation* ne soit utilisé, l'utilisateur devra se réauthentifier.
+
+## Actualiser votre jeton d'accès {#refreshing-your-access-token}
+
+Si vous effectuez un appel à notre API nécessitant un jeton d'accès et obtenez la réponse suivante :
+
+```json
+{
+    "code": 401,
+    "errors": [
+        {
+            "code": 401,
+            "detail": "You are not allowed to access that resource",
+            "status": 401,
+            "title": "Not Authorized"
+        }
+    ],
+    "message": "Not Authorized"
+}
+```
+
+… c'est que votre jeton d'accès a expiré !
+
+Pour actualiser votre jeton, nous effectuerons l'appel suivant :
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/token \
+    --form 'client_id=[client_id]' \
+    --form 'scope=offline device.connect asset.create' \
+    --form 'grant_type=refresh_token' \
+    --form 'refresh_token=[refresh_token]' \
+    | python -m json.tool
+```
+
+<Info>
+
+**Vous ne savez pas à quoi correspondent ces valeurs ?**
+
+Toutes ces valeurs ont été générées dans [le guide précédent](/fr/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application). Consultez-le si ce n'est pas déjà fait, puis revenez ici !
+
+</Info>
+
+En utilisant toutes ces valeurs (au lieu du seul jeton d'actualisation), nous rendons impossible la génération d'une nouvelle autorisation à partir d'un jeton d'actualisation divulgué seul. Si quelqu'un souhaite générer un jeton en se faisant passer pour votre intégration, il aura besoin à la fois du `refresh_token` *et* du `client_id`.
+
+Vous devriez obtenir une réponse semblable à celle-ci :
+
+```json
+{
+    "access_token": "[access_token]",
+    "expires_in": 3599,
+    "refresh_token": "[refresh_token]",
+    "scope": "offline device.connect asset.create",
+    "token_type": "bearer"
+}
+```
+
+Ce sont vos nouveaux jetons d'autorisation. *Une fois vos jetons actualisés, les anciens jetons ne fonctionneront plus*, alors veillez à bien conserver ceux-ci !
+
+Si nous essayons maintenant d'utiliser notre ancien jeton d'actualisation, nous obtiendrons une erreur :
+
+```json
+{
+    "error": "token_inactive",
+    "error_description": "Token is inactive because it is malformed, expired or otherwise invalid. Token validation failed."
+}
+```
+
+Notre jeton a déjà été actualisé : l'utilisation du jeton d'actualisation existant n'est donc plus valide.
+
+<Danger>
+
+**Obtenir une erreur 401 lors d'une actualisation**
+
+Si vous obtenez une réponse `401 Not Authorized` lors de l'actualisation de vos jetons, votre jeton n'est plus valide et vous devrez recommencer le processus d'autorisation depuis le début.
+
+</Danger>
+
+## Manquer une réponse d'actualisation {#missing-a-refresh-response}
+
+*Un jeton d'actualisation ne peut être utilisé qu'une seule fois*. Si vous effectuez un appel à Frame.io pour actualiser un jeton et que vous manquez la réponse, à cause d'une erreur réseau ou d'un redémarrage inattendu, *vous devrez recommencer l'ensemble du flux d'authentification / d'autorisation.*
+
+C'est une éventualité regrettable, mais mieux vaut prévenir que guérir !
+
+## Révoquer des jetons {#revoking-tokens}
+
+Dans certains cas, nous pouvons vouloir nous « déconnecter » de Frame.io. Un utilisateur peut par exemple décider qu'il ne souhaite plus être connecté après la fin d'un tournage. La révocation de l'autorisation est également une bonne pratique si votre application se retrouve dans un état incohérent et doit repartir de zéro. Chaque fois que vous savez que votre application va abandonner son autorisation actuelle, elle doit tenter de la révoquer.
+
+Pour révoquer notre autorisation, nous effectuons l'appel suivant :
+
+<Info>
+
+**Réautorisation**
+
+Après cet appel, vous devrez recommencer le processus d'authentification et d'autorisation détaillé dans [le guide précédent](/fr/platform/v2/implementing-c2c-authentication-and-authorization-c2c-application).
+
+</Info>
+
+```shell
+curl -X POST https://applications.frame.io/oauth2/revoke \
+    --include \
+    --form 'client_id=[client_id]' \
+    --form 'token=[refresh_token]'
+```
+
+La réponse ne contiendra pas de payload. Nous avons utilisé `--include` dans la commande pour afficher les en-têtes renvoyés, qui devraient commencer par un code de statut `200` si notre appel a réussi :
+
+```text
+HTTP/2 200
+...
+```
+
+Maintenant que notre jeton a été révoqué, tous les appels à [Frame.io](http://frame.io/) nécessitant un `access_token` renverront `Not Authorized`, et si l'utilisateur souhaite utiliser à nouveau la connexion Frame.io, il devra se reconnecter à Frame.io et se connecter de nouveau à un projet.
+
+## Stocker les jetons {#storing-tokens}
+
+Pour conserver le fonctionnement après un redémarrage, vous devrez stocker vos en-têtes d'autorisation de manière persistante. Cela peut se faire dans un fichier, une base de données ou votre propre cloud. Voici quelques recommandations pour le stockage des jetons d'autorisation :
+
+**Ne permettez pas à l'utilisateur de voir ou d'accéder aux jetons**. Votre utilisateur ne doit jamais pouvoir consulter ou récupérer ses jetons. Ils doivent être gérés par votre application, et uniquement par elle.
+
+**Chiffrez vos jetons au repos.** Comme pour le `client_id`, les jetons d'accès et d'actualisation doivent être chiffrés au repos dans la mesure du possible afin d'éviter le vol des clés. *Les clés d'autorisation ne doivent pas être stockées en texte clair.*
+
+**Ne stockez pas vos jetons d'autorisation dans le même fichier que votre client_id.** L'exemple d'application Python stocke le `client_id` et le `device_id` dans le même fichier que ses jetons d'autorisation. Cela convient pour une démo, mais ce n'est pas une bonne pratique pour du code de production. Le `client_id` et le `device_id` sont des valeurs statiques pour un appareil, et *l'appareil cessera de fonctionner s'ils sont perdus.*
+
+Les jetons d'autorisation ne sont pas statiques et devront être réécrits de nombreuses fois au cours de la durée de vie de l'appareil. Si l'appareil perdait son alimentation pendant la mise à jour d'un fichier avec de nouveaux jetons, ce fichier pourrait être corrompu et le `client_id` perdu, ce qui empêcherait l'appareil de se réauthentifier auprès de Frame.io *à tout jamais*. En séparant les jetons, au pire, l'utilisateur devra se reconnecter à Frame.io.
+
+Le meilleur endroit pour stocker les jetons serait une base de données éprouvée comme SQLite, mais au minimum, les données d'autorisation doivent être séparées de nos autres valeurs.
+
+## Et ensuite {#next-up}
+
+Si ce n'est pas déjà fait, nous vous encourageons à contacter notre équipe, puis à passer au guide suivant. Nous avons hâte d'avoir de vos nouvelles !

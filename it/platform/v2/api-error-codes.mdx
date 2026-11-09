@@ -1,0 +1,37 @@
+---
+title: "Codici di errore dell’API"
+---
+
+L’API di Frame.io può restituire i seguenti errori comuni:
+
+| Codice | Dettagli | Motivo/i |
+| --- | --- | --- |
+| `401` | **Unauthorized**: token API non valido. Verifica di utilizzare l’autenticazione con Bearer Token e di passare il token tramite l’header Authorization. |  |
+| `402` | **Usage exceeded**: hai superato i limiti del tuo piano Frame.io. |  |
+| `403` | **Forbidden**: non hai accesso a questa risorsa. Viene restituito sia per l’accesso dell’utente sia per lo scope del token. |  |
+| `404` | **Not Found**: risorsa non trovata. | La risorsa è stata spostata o eliminata. |
+| `422` | **Invalid arguments**: uno o più parametri forniti non sono validi. |  |
+| `429` | **Rate Limited**: hai raggiunto il limite di frequenza dell’API. |  |
+| `500` | **Server Error**: il nostro server non sa come interpretare la tua richiesta oppure non è riuscito a completarla entro il tempo disponibile (30 secondi). | URL o corpo della richiesta non validi, oppure impossibilità di completarla per qualche altro motivo. |
+
+# Risoluzione degli errori comuni {#troubleshooting-common-errors}
+
+Quando si utilizza un token API valido per eseguire attività comuni, gli errori più frequenti sono `403`, `404` e `500`.
+
+Un errore **403** indica in genere uno di tre scenari:
+
+1. Il token utilizzato nella richiesta e/o l’utente a cui appartiene il token non dispone di un accesso sufficiente all’area dell’account Frame.io in cui è stata richiesta la risorsa.
+2. Il token non dispone di scope sufficienti per la risorsa richiesta. Ad esempio: chiamare `GET /comments/` senza lo scope `comments.read`.
+3. Un problema di traffico di rete impedisce all’API di Frame.io di elaborare la richiesta.  *Se sospetti che le tue richieste vengano bloccate da un problema di traffico di rete, contatta l’assistenza clienti.*
+
+Un errore **404** indica in genere che una risorsa non esiste più: è stata spostata o eliminata.
+
+Un errore **500** indica in genere un URL o un corpo della richiesta non validi, ma può verificarsi anche quando non riusciamo a completare la richiesta entro il tempo disponibile (30 s).
+
+# Limitazione della frequenza {#rate-limiting}
+
+L’API di Frame.io applica limiti di frequenza per token. Il limite predefinito per un token è di 50 chiamate al secondo. Alcuni metodi hanno limiti inferiori (ad es. POST `/assets/:id/children` è limitato a 5 asset al secondo).
+
+Tutti i limiti sono soggetti a modifiche e, quando vengono raggiunti, restituiscono un errore HTTP 429. Ti consigliamo di utilizzare un approccio di back-off esponenziale per gestire la limitazione della frequenza.
+
+Consulta [la nostra guida](/it/platform/v2/rate-limits) sui limiti di frequenza per saperne di più.

@@ -1,0 +1,225 @@
+---
+title: "Rechercher des assets"
+---
+
+# Vue d’ensemble {#overview}
+
+L’API de Frame.io prend en charge une recherche approfondie et à facettes des assets sur l’ensemble d’un compte, reproduisant les fonctionnalités de l’application web. Si les filtres les plus utiles sont généralement Équipe, Projet et Statut, filtres et tris peuvent être combinés de manières originales pour produire des ensembles extrêmement précis, pilotés par l’API. En règle générale, tous les filtres autres que `account_id`, `q` (requête) et `sort` suivent la même structure, et tous sont expliqués ci-dessous.
+
+![search-filters.png](/images/platform/v2/search-for-assets/d468e3a3b48184af611e5af020bee1474a328ab3fc5090df704dfd6c9b603ba7.webp)
+
+<Warning>
+
+**Incohérence entre la taille de page demandée et la taille renvoyée**
+
+Depuis mars 2022, un bug connu affecte la fonction de pagination de l’API de recherche. Tant que ce bug n’est pas corrigé, nous déconseillons d’utiliser l’API de recherche pour parcourir plusieurs pages de résultats (c’est-à-dire plus de 100 assets), car la taille de page demandée peut ne pas correspondre au nombre d’assets réellement renvoyés.
+
+</Warning>
+
+## Valeurs par défaut {#defaults}
+
+La requête d’API qui déclenche une recherche est toujours la même :
+
+C’est toujours la même requête
+
+`POST` vers `https://api.frame.io/v2/search/library`
+
+Si elles ne sont pas fournies explicitement, les valeurs par défaut des paramètres de recherche sont les suivantes :
+
+| Attribut | Valeur par défaut | Description |
+| :--- | :--- | :--- |
+| `page_size` | 10 | 10 assets seront renvoyés par page. |
+| `page` | 1 | La requête renverra la première page de la réponse. |
+| `sort` | `relevance` | La « pertinence » tente d’ordonner les assets en fonction d’un ensemble d’attributs spécifiquement ajusté. En l’absence de requête, la pertinence favorise fortement les envois les plus récents. |
+
+## À propos de ce guide {#about-this-guide}
+
+Ce guide décrit la construction d’une requête de recherche qui correspond à :
+
+- Des assets au sein d’un compte
+- Qui correspondent à la requête `"moon"`
+- Qui se trouvent dans un projet spécifique
+- Qui ont été envoyés entre le 1er et le 30 avril 2020
+- Et qui ont été « approuvés »
+
+Le corps de notre recherche ressemblera finalement à ceci :
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-30T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    },
+    "page_size": 10,
+    "page": 1
+}
+```
+
+### Compte, requête et tri {#account-query-and-sort}
+
+Le compte (`account_id`), la requête (`q`) et le tri (`sort`) sont les trois éléments de base qui se situent en dehors de tout attribut `filter` dans une requête de recherche.
+
+#### Contexte du compte {#account-context}
+
+Techniquement, le seul attribut nécessaire pour effectuer une recherche est un `account_id`. Cela renverra simplement tous les assets (y compris les dossiers) du compte, avec les valeurs de pagination par défaut (10 assets par page, à partir de la page 1).
+
+```json
+{
+    "account_id": "<account_id>"
+}
+```
+
+#### Requête de recherche {#search-query}
+
+L’attribut suivant le plus courant (et le plus utile) est la requête elle-même. Remarque : comme la recherche de l’API Frame.io accepte une requête nulle, il n’est pas nécessaire d’utiliser une requête générique (`*`). Soit vous recherchez quelque chose, soit vous demandez un tri (éventuellement filtré) de tous les assets d’un compte.
+
+Dans notre cas, nous rechercherons le terme « moon ».
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon"
+}
+```
+
+### Tri {#sorting}
+
+![sort.png](/images/platform/v2/search-for-assets/bd057586bfc5499df0b46d41ae74d90e53beb6500bb87f639a730545ccb3f1c8.webp)
+
+Frame.io prend en charge plusieurs options de tri. La syntaxe de l’ordre de tri est similaire d’une option à l’autre :
+
+- Il existe un sens de tri par défaut
+- Pour inverser ce sens, préfixez la valeur de tri par un signe moins `-`
+
+Par exemple, pour trier par ordre alphabétique inverse (de Z à A), vous déclarerez `"sort": "-name"`.
+
+L’opération de tri par défaut est « Pertinence ». Elle n’a donc pas besoin d’être déclarée et sera appliquée si aucun attribut `sort` n’est fourni.
+
+| Option de tri | Attribut | Sens par défaut |
+| :--- | :--- | :--- |
+| **Pertinence** | n/a | n/a |
+| **Date d’envoi** | `inserted_at` | Du plus ancien au plus récent |
+| **Nom** | `name` | De A à Z |
+| **Taille** | `filesize` | Du plus petit au plus grand |
+| **Auteur de l’envoi** | `creator.name` | De A à Z |
+
+En construisant notre requête, nous pouvons donc maintenant ajouter notre `sort` sur `name`, de A à Z :
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name"
+}
+```
+
+### Filtres et pagination {#filters-and-pagination}
+
+Les filtres sont à la fois la fonctionnalité la plus délicate et la plus puissante de la recherche d’assets de Frame.io. Les filtres sont écrits dans un seul objet `filter` et suivent tous le même schéma : une opération (`op`) et une valeur (`value`). Les filtres utilisent les abréviations courantes suivantes, les options de comparaison autres que « égal à » étant réservées aux requêtes sur la date et la taille :
+
+- `eq` — égal à
+- `lt` — inférieur à
+- `gt` — supérieur à
+- `lte` — inférieur ou égal à
+- `gte` — supérieur ou égal à
+- `match` — correspondance exacte, utilisée uniquement pour les filtres Auteur de l’envoi et Type de fichier
+
+Par exemple, un `filter` correspondant à un `project_id` connu serait construit comme suit :
+
+```json
+{
+    "filter": {
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        }
+    }
+}
+```
+
+### Options et opérations {#options-and-operations}
+
+Le tableau suivant décrit les options et les opérations associées à chaque type de filtre.
+
+| Option de filtre | Attribut | Opérations prises en charge | Valeurs prises en charge |
+| :--- | :--- | :--- | :--- |
+| **Archivé** | `archived` | `eq` | `true`, `false` |
+| **Date d’envoi** | `inserted_at` | `eq`, `lt`, `gt`, `lte`, `gte` | `<datetime>` (ISO-8601, UTC) |
+| **Supprimé** | `deleted` | `eq` | `true`, `false` |
+| **Type de fichier** | `filetype` | `match` | `<MIME type>` |
+| **Privé** | `private` | `eq` | `true`, `false` |
+| **Projet** | `project_id` | `eq` | `<project_id>` |
+| **Taille** | `filesize` | `eq`, `lt`, `gt`, `lte`, `gte` | `size` (en octets) |
+| **Statut** | `label` | `eq` | `none`, `in_progress`, `needs_review`, `approved` |
+| **Équipe** | `team_id` | `eq` | `<team_id>` |
+| **Type** | `asset_type` | `eq` | `audio`, `document`, `folder`, `image`, `other`, `stream`, `video` |
+| **Auteur de l’envoi** | `creator.name` | `match` | `<name>` |
+
+<Warning>
+
+**L’auteur de l’envoi doit être un membre actif du compte pour figurer dans l’index**
+
+La recherche de créateurs qui ne sont plus membres du compte ne fonctionnera pas, car ces utilisateurs ne figurent plus dans l’index de recherche des utilisateurs.
+
+</Warning>
+
+Pour poursuivre la construction de notre requête, nous pouvons maintenant ajouter un filtre pour les assets qui :
+
+- Se trouvent dans un projet spécifique
+- Ont été envoyés entre le 1er et le 30 avril 2020
+- Sont marqués comme « Approuvés »
+
+```json
+{
+    "account_id": "<account_id>",
+    "q": "moon",
+    "sort": "name",
+    "filter": {
+        "inserted_at": [
+            {
+                "op": "gte",
+                "value": "2020-04-01T04:00:00.000Z"
+            },
+            {
+                "op": "lte",
+                "value": "2020-04-28T03:59:59.999Z"
+            }
+        ],
+        "project_id": {
+            "op": "eq",
+            "value": "<project_id>"
+        },
+        "label": {
+            "op": "eq",
+            "value": "approved"
+        }
+    }
+}
+```
+
+<Note>
+
+**Pagination**
+
+L’endpoint de recherche gère la pagination exactement comme n’importe quel autre endpoint, via les attributs `page_size` et `page` situés au niveau le plus externe du corps de la requête. Pour plus de détails sur la pagination, consultez le guide dédié [ici](/fr/platform/v2/key-concepts#pagination).
+
+</Note>

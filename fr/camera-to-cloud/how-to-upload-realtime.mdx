@@ -1,0 +1,642 @@
+---
+title: "Guide pratique : Téléversement (en temps réel)"
+sidebarTitle: "Téléversement (en temps réel)"
+---
+
+## Introduction {#introduction}
+
+En nous appuyant sur nos connaissances de base du téléversement, voyons comment téléverser des assets en temps réel, pendant leur création. Cette approche permet de téléverser des fichiers pendant l’enregistrement, le rendu ou le streaming, avant même que leur taille finale ne soit connue.
+
+L’API de téléversement en temps réel permet aux assets de devenir lisibles dans Frame.io quelques secondes seulement après la fin de l’enregistrement, ce qui améliore considérablement l’efficacité des workflows.
+
+## Vidéo de démonstration {#demo-video}
+
+Pour un aperçu rapide de cette fonctionnalité, regardez notre [démonstration vidéo](https://f.io/qjwfGmTa). La démo montre un rendu téléversé depuis Adobe Media Encoder en temps réel, la vidéo étant lisible dans Frame.io seulement 5 secondes après la fin du rendu.
+
+## Prérequis {#prerequisites}
+
+Si ce n’est pas déjà fait, veuillez consulter le guide [Implémenter C2C : configuration](/fr/camera-to-cloud/implementing-c2c-setting-up).
+
+Vous aurez besoin de l’`access_token` obtenu lors du [processus d’authentification et d’autorisation](/fr/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+Nous utiliserons le même [asset de test](https://f.io/Rq1q5CzB) que dans le guide de téléversement de base pour nos exemples.
+
+Il est recommandé de connaître le [guide de téléversement de base](/fr/camera-to-cloud/how-to-basic-upload), car nous nous appuierons sur ses concepts.
+
+## Créer un asset en temps réel {#creating-a-real-time-asset}
+
+Les téléversements en temps réel commencent par un processus de création d’asset modifié. Lors de la création de l’asset, définissez `is_realtime_upload` sur `true` et omettez le paramètre `filesize` (ou définissez-le sur `null`), puisque la taille finale n’est pas connue au moment de la création :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation de `/v2/devices/assets` est [disponible ici](/fr/camera-to-cloud/api-reference/device-asset-create).
+
+</Info>
+
+<Warning>
+
+**Extension et nom de fichier**
+
+Les assets en temps réel nécessitent une extension de fichier. Si le nom de fichier n’est pas connu lors de la création de l’asset, vous pouvez utiliser le champ `extension` à la place (format : `'.mp4'`). Cette approche est à privilégier lorsque vous prévoyez de modifier le nom de l’asset ultérieurement.
+
+</Warning>
+
+La réponse pour les assets en temps réel est simplifiée par rapport à la création d’asset standard :
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "C2C_TEST_CLIP.mp4"
+}
+```
+
+Notez l’absence de `upload_urls` : pour les téléversements en temps réel, nous générerons les URL de téléversement à la demande, au fur et à mesure de la création du fichier.
+
+## Demander des URL de téléversement {#requesting-upload-urls}
+
+Demandons une URL pour la première moitié de notre fichier (10 568 125 octets), en utilisant l’`asset_id` de la réponse précédente :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "parts": [
+                {
+                    "number": 1,
+                    "size": 10568125,
+                    "is_final": false
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Spécification de l’endpoint d’API**
+
+La documentation de `/v2/devices/assets/{asset_id}/realtime_upload/parts` est [disponible ici](/fr/camera-to-cloud/api-reference/device-create-realtime-upload-parts).
+
+</Info>
+
+Comprendre les paramètres de la requête :
+
+- `parts` : une liste des parties de téléversement pour lesquelles nous avons besoin d’URL. Demander plusieurs URL en un seul appel améliore l’efficacité.
+
+  - `number` : le numéro séquentiel de la partie, à partir de 1. Des numéros peuvent être sautés et les parties téléversées dans n’importe quel ordre, mais elles seront assemblées séquentiellement. Ne peut pas dépasser 10 000 (limite AWS).
+  - `size` : la taille de la partie en octets. Doit respecter les [restrictions du téléversement multipart d’AWS](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html).
+  - `is_final` : indique s’il s’agit de la dernière partie du fichier.
+
+La réponse contient les URL de téléversement demandées :
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]"
+    ]
+}
+```
+
+La liste `upload_urls` correspond directement à l’ordre des `parts` de la requête.
+
+Téléversez maintenant le premier segment comme dans le guide de téléversement de base :
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+Ensuite, demandez une URL pour la deuxième et dernière partie :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Notez ces ajouts importants :
+
+- `is_final` est défini sur `true` pour la dernière partie, ce qui signale que le téléversement sera terminé après ce segment
+- `asset_filesize` fournit la taille totale du fichier, obligatoire dès qu’une partie a `is_final: true`
+
+Après avoir reçu l’URL dans la réponse :
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ]
+}
+```
+
+Téléversez le dernier segment :
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Warning>
+
+**Gestion de la dernière partie**
+
+Lorsque la dernière partie est téléversée, Frame.io commence à assembler le fichier complet. Ce processus inclut un délai de grâce de 60 secondes pour permettre aux parties restantes de se terminer. Nous recommandons de ne téléverser la dernière partie qu’une fois toutes les autres parties téléversées avec succès.
+
+</Warning>
+
+Et voilà ! Rendez-vous sur Frame.io pour voir votre asset en temps réel téléversé avec succès. 🎉
+
+## Gérer les noms d’assets {#managing-asset-names}
+
+Si le nom de fichier n’est pas connu lors de la création de l’asset, vous pouvez utiliser le champ `extension` sans `name` :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "extension": ".mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Le système attribuera un nom par défaut :
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "[new file].mp4"
+}
+```
+
+Vous pouvez modifier ce nom en incluant un champ `asset_name` lors de la demande d’URL de téléversement :
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_name": "C2C_TEST_CLIP.mp4",
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Le nom ne sera modifié que si l’asset porte encore son nom par défaut ; s’il a été renommé dans l’interface de Frame.io ou déjà modifié auparavant, la requête sera ignorée.
+
+## Optimiser les demandes d’URL {#optimizing-url-requests}
+
+Par souci d’efficacité, demandez des URL pour autant de parties que vous avez actuellement de données disponibles, plutôt qu’une par une. Cette approche est particulièrement utile pour les fichiers volumineux, où la vitesse de téléversement peut être inférieure à celle de génération des données.
+
+## Gérer les en-têtes des fichiers média {#handling-media-file-headers}
+
+Certains formats média nécessitent des en-têtes au début du fichier qui ne sont écrits qu’une fois le fichier entier terminé. Cela pose un problème lorsque l’en-tête est plus petit que la taille minimale de partie d’AWS, soit 5 Mio (5 242 880 octets).
+
+Notre recommandation :
+
+1. Réservez les 5 242 880 premiers octets de données média sans les téléverser
+2. Commencez à téléverser les parties à partir de `part_number=2`
+3. Une fois le fichier terminé, ajoutez l’en-tête au début des données réservées
+4. Demandez une URL pour `part_number=1` et téléversez ce segment combiné
+
+Cette approche garantit que votre premier segment respecte la taille minimale requise tout en préservant la structure correcte du fichier.
+
+## Adapter la taille des parties pour des performances optimales {#scaling-part-size-for-optimal-performance}
+
+AWS impose des limites qui influencent la stratégie de téléversement :
+
+- Taille maximale de fichier : 5 Tio (5 497 558 138 880 octets)
+- Nombre maximal de parties : 10 000
+- Taille minimale de partie : 5 Mio (5 242 880 octets)
+
+Une taille de partie fixe impose des compromis :
+
+- Utiliser la taille minimale (5 Mio) pour les 10 000 parties limite la taille totale du fichier à environ 52,4 Go
+- Répartir uniformément la taille maximale de fichier nécessiterait des segments d’environ 550 Mo, trop volumineux pour un streaming efficace des petits fichiers
+
+Il nous faut une formule qui équilibre ces contraintes, en commençant par de petites parties pour des téléversements réactifs tout en garantissant la prise en charge de très gros fichiers si nécessaire.
+
+### Formule recommandée pour la taille des parties {#recommended-part-size-formula}
+
+Voici l’approche que nous suggérons en Python :
+
+```python title="Python"
+import math
+from typing import Callable
+
+# Constants
+MINIMUM_PART_SIZE = 5_242_880
+MAXIMUM_PART_COUNT = 10_000
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# Maximum uniform data rate that allows for 10,000 parts
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def part_size(part_number: int, format_bytes_per_second: int) -> int:
+    """
+    Returns the payload size for a specific part number given the file's
+    expected data rate.
+    """
+    if part_number < 1:
+        raise ValueError("part_number must be greater than 0")
+
+    if part_number > 10_000:
+        raise ValueError("part_number must be less than 10,000")
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    # Calculate a scalar given our data rate. We will explain this step
+    # futher on in the guides.
+    scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+    part_size = math.floor(scalar * pow(part_number, 2)) + data_rate
+
+    return part_size
+```
+
+… où `part_number` est compris entre `1` et `10_000` inclus, et `format_bytes_per_second` est le nombre moyen d’octets que votre fichier devrait consommer par seconde. Nous verrons comment nous sommes arrivés à cette formule [plus loin](/fr/camera-to-cloud/how-to-upload-realtime#showing-our-work).
+
+<Info>
+
+**Valeur du scalaire**
+
+La variable `scalar` et son calcul peuvent sembler un peu déroutants à première vue, mais il s’agit d’un outil mathématique qui garantit que, quelle que soit la valeur utilisée pour `format_bytes_per_second`, si nous passons à la fonction toutes les valeurs autorisées de `part_number` de `1` à `10_0000`, nous obtiendrons un ensemble de valeurs dont la somme est *exactement* égale à notre limite de taille de fichier de 5 Tio — ou du moins aussi exactement que possible. Nous [détaillons notre démarche](/fr/camera-to-cloud/how-to-upload-realtime#showing-our-work) plus loin pour expliquer comment nous sommes arrivés à cette formule.
+
+</Info>
+
+<Info>
+
+**Arrondi à l’inférieur**
+
+En arrondissant à l’inférieur, nous perdons quelques octets, mais nous garantissons qu’un arrondi classique sur 10 000 parties ne nous fera pas accidentellement dépasser la taille de fichier maximale autorisée. Au maximum, 10 000 octets, soit 10 Ko, seront perdus de cette manière, un compromis acceptable.
+
+</Info>
+
+Les caractéristiques importantes de cette formule sont les suivantes :
+
+- Lors du téléversement de 10 000 parties, la quantité totale de données téléversées sera à moins de 10 Ko de notre limite de taille de fichier de 5 Tio.
+- Elle privilégie des charges utiles plus petites et plus efficaces au début, afin d’améliorer la réactivité pour les clips courts et de longueur moyenne.
+- Pour les clips très longs, la réactivité entre la fin de l’écriture d’un fichier et le moment où il devient lisible dans Frame.io sera réduite.
+
+Le compromis entre le deuxième et le troisième point est atténué par le fait que la plupart des clips n’atteindront pas la taille à partir de laquelle le troisième point entre en jeu. Nous échangeons une réactivité accrue pour la *PLUPART* des fichiers contre une réactivité réduite pour très peu d’entre eux.
+
+Une version plus avancée et plus efficace de notre formule (qui génère une fonction anonyme `part_size_calculator` avec le scalaire statique et le débit de données précalculés et intégrés) pourrait ressembler à ceci :
+
+```python title="Python"
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    static_scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+
+    def part_size_calculator(part_number: int) -> int:
+        """Calculates size in bytes of upload for `part_number`."""
+        if part_number < 1:
+            raise ValueError("part_number must be greater than 0")
+
+        if part_number > 10_000:
+            raise ValueError("part_number must be less than 10,000")
+
+        return math.floor(static_scalar * pow(part_number, 2) + data_rate)
+
+    return part_size_calculator
+```
+
+### Performances de la formule {#how-the-formula-performs}
+
+Examinons les caractéristiques des résultats de la formule ci-dessus pour plusieurs types de fichiers courants.
+
+**Exemple 1** : format web
+
+Pour les formats lisibles sur le web avec un débit d’environ 5,3 Mo/s ou moins (la plupart des fichiers H.264/H.265/HEVC), nous obtenons une progression de la taille des charges utiles qui ressemble à ceci :
+
+| Total Parts | Payload Bytes | Payload MB | Total File Bytes | Total File GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 5,242,896 | 5.2 MB | 5,242,896 | 0.0 GB |
+| 1,000 | 21,575,817 | 21.6 MB | 10,695,361,357 | 10.7 GB |
+| 5,000 | 413,566,329 | 413.6 MB | 706,957,655,928 | 707.0 GB |
+| 10,000 | 1,638,536,679 | 1,638.5 MB | 5,497,558,133,921 | 5,497.6 GB |
+
+**Légende des colonnes du tableau**
+
+- `Total Parts` : le nombre total de parties de fichier téléversées sur AWS.
+- `Payload Bytes` : la taille de la charge utile du PUT AWS lorsque `part_number` est égal à `Total Parts`.
+- `Payload MB` : comme `Payload Bytes`, mais en mégaoctets.
+- `Total File Bytes` : le nombre total d’octets téléversés pour le fichier une fois que `Total Parts` parties séquentielles ont été téléversées.
+- `Total File GB` : comme `Total File Bytes`, mais en Go.
+
+Ces valeurs sont bien équilibrées pour les téléversements en temps réel, en particulier pour les codecs de lecture web comme H.264 ; la plupart des fichiers feront moins de 10,7 Go et seront donc terminés en moins de 1 000 parties. La taille de la charge utile ne dépassera jamais 21,6 Mo.
+
+Même après avoir consommé la moitié de nos parties, la taille de la charge utile ne dépasserait toujours pas 413,5 Mo. Le téléversement totaliserait 707 Go, ce qui est largement suffisant pour la grande majorité des fichiers web.
+
+Ce n’est qu’à l’approche de la fin du nombre de parties autorisé que la taille commence à exploser. Cependant, elle ne dépasse jamais 1,7 Go, bien en dessous de la limite AWS de 5 Gio par partie.
+
+**Exemple 2** : ProRes 422 LT
+
+ProRes 422 LT [a un débit de 102 Mbit/s](https://www.wolframalpha.com/input?i=-%282+%28-68%2C719%2C476%2C736+%2B+125+12%2C750%2C000%29%29%2F8%2C334%2C583%2C375) et génère un tableau comme celui-ci :
+
+| Total Parts | Payload Bytes | Payload MB | Total File Bytes | Total File GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 12,750,016 | 12.8 MB | 12,750,016 | 0.0 GB |
+| 1,000 | 28,857,758 | 28.9 MB | 18,127,308,783 | 18.1 GB |
+| 5,000 | 415,443,954 | 415.4 MB | 735,107,948,432 | 735.1 GB |
+| 10,000 | 1,623,525,817 | 1,623.5 MB | 5,497,558,133,958 | 5,497.6 GB |
+
+Ce tableau révèle des propriétés utiles par rapport à notre formule optimisée pour le web. Au cours des 1 000 premières parties, nous pouvons téléverser 8 Go de fichier supplémentaires. Des charges utiles initiales plus importantes signifient que nous n’aurons pas besoin de demander des URL trop rapidement au début, ce qui rend le téléversement plus efficace pour ce débit de données plus élevé. La taille de nos charges utiles en fin de processus de téléversement reste importante.
+
+**Exemple 2** : RAW caméra
+
+Enfin, essayons un format RAW caméra avec un débit de données de 280 Mo/s. Avec des données arrivant aussi vite, essayer de téléverser des segments de 5 Mio au début n’a tout simplement aucun sens :
+
+| Total Parts | Payload Bytes | Payload MB | Total File Bytes | Total File GB |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 280,000,008 | 280.0 MB | 280,000,008 | 0.3 GB |
+| 1,000 | 288,091,460 | 288.1 MB | 282,701,200,139 | 282.7 GB |
+| 5,000 | 482,286,516 | 482.3 MB | 1,737,245,341,542 | 1,737.2 GB |
+| 10,000 | 1,089,146,065 | 1,089.1 MB | 5,497,558,133,870 | 5,497.6 GB |
+
+Non seulement les premières charges utiles sont plus efficaces, mais nous économisons plus d’un demi-gigaoctet à l’extrémité supérieure, ce qui rendra ces appels réseau moins sensibles aux incidents réseau.
+
+### Détail de notre démarche {#showing-our-work}
+
+Avant de tout rassembler dans un exemple de programme de téléversement, voyons comment nous sommes arrivés à notre formule.
+
+Il nous fallait trouver une formule qui échange des charges utiles volumineuses et lourdes à la fin de nos parties autorisées — que la plupart des téléversements n’atteindront jamais — contre des charges utiles légères et efficaces au début, dont chaque téléversement peut tirer parti. En même temps, nous voulions nous assurer que notre algorithme atteigne approximativement la limite de taille de fichier de 5 Tio *exactement* à la partie numéro 10 000.
+
+Il était temps de sortir l’artillerie mathématique.
+
+Nous voulons que notre courbe croisse de manière exponentielle, notre formule devrait donc ressembler à quelque chose comme :
+
+```text
+n^2
+```
+
+… où `n` est le numéro de la partie. Nous voulons aussi nous assurer que chaque partie soit au minimum égale au débit de données de notre formule, que nous appellerons `r` :
+
+```text
+n^2 + r
+```
+
+Nous devons maintenant trouver une formule qui nous donne la somme de *cette* formule pour les 10 000 premiers entiers naturels (1, 2, 3, …). Le symbole sigma `Σ` désigne une somme. Ajoutons-le à notre formule :
+
+```text
+Σxn^2 + r
+```
+
+… et redéfinissons `n` comme la suite des entiers naturels entre 1 et 10 000 inclus.
+
+L’équation ne nous est pas encore très utile. Elle a intuitivement la bonne forme, mais si nous posons `n=10,000` et `r=5,242,880` comme nous le souhaitons, elle [renvoie simplement un résultat](https://www.wolframalpha.com/input?i=%CE%A3n%5E2+%2B+r+where+n+%3D+1+to+10%2C000+and+r+%3D+5%2C242%2C880) : `385,812,135,000` (385 Go). Non seulement ce résultat est bien inférieur à notre limite de taille de fichier de 5 Tio, mais il n’existe aucun moyen de manipuler la formule pour obtenir ce résultat.
+
+Donnons-nous un paramètre à ajuster :
+
+```text
+Σxn^2 + r
+```
+
+… où `x` est un scalaire que nous pouvons déterminer pour obtenir 5 Tio comme résultat. Nous pouvons maintenant égaler l’équation à notre limite de taille de fichier et résoudre pour `x` :
+
+```text
+Σxn^2 + r = 5,497,558,138,880
+```
+
+Souvent, les sommes doivent être calculées de manière itérative, comme dans une boucle `for` ou `while`. Mais il se trouve qu’il existe une formule parfaite pour nous : [une méthode connue](https://www.math-only-math.com/sum-of-the-squares-of-first-n-natural-numbers.html) pour calculer à moindre coût la somme des carrés des `n` premiers entiers naturels :
+
+```text
+Σn^2 = n(n+1)(2n+1)/6
+```
+
+La réécrire sous forme de polynôme la rend plus lisible :
+
+```text
+Σn^2 = (2n^3 + 3n^2 + n)/6
+```
+
+Nous pouvons ajouter nos variables, `x` et `r`, des deux côtés :
+
+```text
+Σxn^2 + r = x(2n^3 + 3n^2 + n)/6 + rn
+```
+
+Et enfin, nous égalons notre nouvelle formule à 5 Tio :
+
+```text
+x(2n^3 + 3n^2 + n)/6 + rn = 5,497,558,138,880
+```
+
+Il ne nous reste plus qu’à résoudre pour `x` en posant `n=10,000`, notre nombre total de parties. Cela nous donnera un moyen de calculer un scalaire statique pour un débit de données donné.
+
+Plutôt que de le faire à la main, [utilisons Wolfram Alpha](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000) :
+
+```text
+x = -(2 (125 r - 68719476736)) / 8334583375
+```
+
+Nous avançons ! Si notre débit de données était égal à la taille minimale de partie (5 Mio), [nous obtiendrions](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000+and+r+%3D+5%2C242%2C880) un scalaire statique de :
+
+```text
+136,128,233,472 / 8,334,583,375
+```
+
+En informatique, cela correspond à une valeur float64 de `16.33293799427617`. Notre formule pour déterminer la taille des parties serait dans ce cas :
+
+```text
+s = 16.33293799427617n^2 + 5,242,880
+```
+
+Où `s` est la taille de notre partie.
+
+Il nous reste un dernier problème. Dans le monde réel, une charge utile ne peut pas contenir des fractions d’octets. Nous devons arrondir chaque valeur. Nous utiliserons Python, et arrondirons à l’inférieur :
+
+```python title="Python"
+math.floor(16.33293799427617 * pow(part_number, 2)) + 5_242_880
+```
+
+Nous sommes arrivés à un exemple concret de la fonction d’origine présentée dans ce guide.
+
+## Créer un programme de téléversement simple {#building-a-basic-uploader}
+
+Examinons un pseudo-code simple, proche de Python, pour téléverser un fichier rendu en temps réel, en utilisant tout ce que nous avons appris dans ce guide :
+
+```python title="Python"
+import math
+from datetime import datetime, timezone
+from typing import Callable
+
+# The minimum size, in bytes, for a single, non-final part upload.
+MINIMUM_PART_SIZE = 5_242_880
+# The maximum filesize in
+MAXIMUM_PART_COUNT = 10_000
+# The maximum size, in bytes, for an AWS upload.
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# The data rate at which every part is an equal size, and could not
+# be any uniformly larger without violating the maximum total file
+# size if 10_000 parts were to be uploaded. it works out to
+# ~549.8 MB per payload. By enforcing this we actually never need
+# to check if a part exceeds the maximum allowed part size, as our
+# parts will never exceed ~549.8 MB.
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+    ...
+
+def upload_render(data_stream: DataStream, channel: int = 0) -> None:
+    """
+    Uploads an asset for data_stream, which is a custom IO class that pulls remaining
+    upload data from an internal buffer or file, depending on how well the upload is
+    keeping pace with the render.
+
+    Uploads to `channel`
+    """
+
+    asset = c2c.asset_create(
+        extension=data_stream.extension, 
+        filetype=data_stream.mimetpye, 
+        channel=channel,
+        offset=datetime.now(timezone.utc) - data_stream.created_at()
+    )
+
+    calculate_part_size = create_part_size_calculator(data_stream.data_rate())
+    next_part_number = 0
+
+    while True:
+        next_payload_size = calculate_part_size(next_part_number)
+
+        # Waits until one or more chunks worth of data is ready for upload. Cache 
+        # whether our data stream has completed writing the file, and the current 
+        # number of bytes we have remaining to upload at this time.
+        available_bytes, stream_complete = data_stream.wait_for_available_data(
+            minimum_bytes=next_payload_size
+        )
+
+        # Build the list of parts to request based on our available data.
+        parts = []
+        while available_bytes > 0:
+            payload_size = calculate_part_size(next_part_number)
+
+            if available_bytes < payload_size and not stream_complete:
+                break
+
+            payload_size = min(payload_size, available_bytes)
+
+            parts.append(
+                c2c.RealtimeUploadPart(
+                    part_number=next_part_number,
+                    part_size=payload_size,
+                    is_final=False
+                )
+            )
+
+            available_bytes -= payload_size
+            next_part_number += 1
+
+        # If our stream is done writing, mark the last part as final.
+        if stream_complete:
+            parts[-1].is_final = True
+
+        # Create the part URLs using the C2C endpoint.
+        response = c2c.create_realtime_parts(
+            asset_id=asset.id,
+            asset_name=None if not stream_complete else data_stream.filename,
+            asset_filesize=None if not stream_complete else data_stream.size(),
+            parts=parts
+        )
+
+        # Upload each part to its URL.
+        for part, part_url in zip(parts, response.upload_urls):
+            part_data = data_stream.read(bytes=part.size)
+            c2c.upload_chunk(part_data, part_url, data_stream.mimetype)
+
+        if stream_complete:
+            break
+```
+
+<Warning>
+
+**Téléversement avancé**
+
+Le code ci-dessus ne fait que démontrer le flux de base du téléversement d’un fichier en temps réel. En pratique, cette logique devra être enrichie avec des techniques de [gestion des erreurs](/fr/camera-to-cloud/how-to-handle-errors) et de [téléversement avancé](/fr/camera-to-cloud/how-to-advanced-uploads).
+
+</Warning>
+
+## Pour la suite {#next-up}
+
+Les téléversements en temps réel permettent de rendre votre intégration aussi réactive que possible, les assets devenant lisibles dans Frame.io quelques secondes après la fin de leur enregistrement. [Un guide ultérieur](/fr/camera-to-cloud/how-to-advanced-uploads) couvrira les techniques et exigences du téléversement avancé. Bien qu’il soit rédigé en pensant aux téléversements de base, la majeure partie du guide reste applicable aux téléversements en temps réel.
+
+Si ce n’est pas déjà fait, nous vous encourageons à contacter notre équipe, puis à passer au guide suivant. Nous avons hâte d’échanger avec vous !

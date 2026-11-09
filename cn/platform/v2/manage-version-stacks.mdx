@@ -1,0 +1,171 @@
+---
+title: "管理 Version Stacks"
+---
+
+## 概述 {#overview}
+
+Version Stacks 是 Frame.io 中的一种组织方式，可以让 Assets 在不放入文件夹的情况下垂直“堆叠”。堆叠的版本让您在 Frame.io UI 中更轻松地在 Asset 之间导航，并支持并排审阅。
+
+我们目前不支持直接上传到 Stack 中，因此管理基本 Version Stack 工作流的 API 顺序与 Frame.io UI 中的顺序相同：
+
+1. 上传 Asset（可选：标记为私有）。
+2. 将 Asset 分配到 Stack 中。
+
+现有的 Version Stacks 可以重新排序，单个版本也可以从 stack 中移出。最后，删除 Version Stacks 时不会删除其中包含的任何 assets。
+
+<Info>
+
+**所有 Version Stacks 都有 cover_asset**
+
+Version Stacks 的顶层始终有一个名为 `cover_asset_id` 的属性。这是在 Frame.io Web UI 中显示其缩略图的 Asset 的 `id`，也就是 stack 中编号最高的版本。
+
+</Info>
+
+### 核心概念 {#core-concepts}
+
+**Version Stacks** 与 **Folders** 一样，是特殊 `types` 的 Assets。您可以使用相同的端点获取它们，并根据 API 响应中 `type` 键的值进行相应的解析和路由。这在实践中通常很简单，但在大规模管理 Stacks 时可能会遇到一些麻烦。
+
+使用 Version Stacks 的关键在于区分**四种最常见的场景**：
+
+1. 可以将一个 Asset 添加到另一个 Asset，这将创建一个具有新 `id` 的 Stack。
+2. 可以将一个 Asset 添加到现有 Stack。
+3. 可以对 Stack 重新排序。
+4. 可以移除单个版本。
+
+**前两种场景**使用相同的[端点调用](/cn/platform/v2/api-reference/assets/add-version-to-asset)，因此唯一真正的细微差别在于您要知道自己是在（由两个 Assets）创建新的 Stack，还是将 Asset 添加到现有 Stack。除此之外，限制条件都是可预测的：
+
+1. Stacks 必须匹配 `asset_type`（例如，您不能将 *image* 堆叠到 *stream* 上）。
+2. 执行操作的 User 必须同时拥有源 Asset 和目标 Asset 或 Stack 的权限。
+3. Asset 按顺序堆叠。
+4. 您不能将 Stack 堆叠到 Stack 上。
+5. Folders 完全不行。
+
+**后两种场景**也相当简单，但需要对 Stack 本身有更多了解。例如，要对 Stack 中的某个 Asset 重新排序，您需要知道目标位置两侧 Assets 的 `id`；这通常意味着您已经获取了整个 Stack。
+
+### 所需 scopes {#required-scopes}
+
+在开始本指南之前，您需要确保拥有包含以下 scopes 的 token：
+
+| Scope | 原因 |
+| --- | --- |
+| **Assets:** Read, Update | - 获取源 Assets 和目标 Assets。<br />- 将 Asset 添加到 Version Stack。<br />- 对 Stack 重新排序。<br />- 从 Stack 中移除 Asset。<br />- 删除 Stack。 |
+
+## 将 Assets 添加到 Version Stacks {#adding-assets-to-version-stacks}
+
+### 第 1 步：确定目标位置 {#step-1-locate-your-destination}
+
+第一步是确定您处于两种关键场景中的哪一种——将 Asset 添加到另一个 Asset 以创建 Stack，还是将 Asset 添加到 Stack 以扩展该 Stack。
+
+如果您知道自己正在处理的是未版本化的 Asset，或者您已经有了 Version Stack 的 `id`，可以直接进入第 2 步。
+
+如果不知道，确定目标 Asset 是否已属于某个 stack 的最简单方法是：
+
+1. 通过调用 `/v2/assets/:id​` 来 `GET` 您的目标 Asset
+2. 检查返回的 `type`。
+
+- 如果是 *version_stack*，那么您刚刚检查的 uuid 就是您的目标 uuid。进入第 2 步。
+
+3. 如果 `type` 是 *file*，获取 `parent_id`
+4. 通过相同的端点 GET 父级，并检查其 `type`。
+
+如果父级的 `type` 是 *version_stack*，请使用其 `id` 作为目标。
+
+如果 `type` 是其他任何值，说明您处理的是普通 Asset，可以使用原始 id 作为目标。
+
+### 第 2 步：准备 payload {#step-2-prepare-your-payload}
+
+现在您已经有了目标 uuid，还需要知道要添加到 Stack 中的 Asset 的 uuid。
+
+1. 如果您要上传新的 Asset，只需使用[创建 Asset](/cn/platform/v2/api-reference/assets/create-asset) 时成功响应中返回的 id。
+2. 如果您要堆叠现有的 Asset，应该已经通过上述过程获得了 `id`。
+
+添加到 Version Stack 时唯一需要的正文参数是 `next_asset_id`：
+
+```json
+{
+    "next_asset_id": "<source-asset-id>"
+}
+```
+
+### 第 3 步：将源 Asset 添加到目标位置 {#step-3-add-your-source-asset-to-the-destination}
+
+现在您已经有了两个 Asset `id` 参数，可以向 `/assets/:id/version` 发送 `POST` 请求了，其中 :id 是您的目标 Asset 或 Version Stack，而源（新）Asset 位于正文 payload 中。
+
+## 对 Version Stacks 重新排序 {#reordering-version-stacks}
+
+Version Stacks 依赖一个简单的序数概念：每个 asset 都有 `next_asset_id` 和 `prev_asset_id` 相邻项，这里的顺序指的不是版本编号，而是每个 Asset 的 `index` 属性。`index` 与版本号的方向相反，因此：
+
+- Stack 中第一个（编号最低的）版本有 `prev` Asset，但没有 `next` Asset
+- Stack 中最新的（编号最高的）版本有 `next` Asset，但没有 `prev` Asset
+- 所有“中间”版本都同时具有 `prev` 和 `next` Asset，它们分别是版本 ID 更高和更低的 Assets。
+
+这为我们带来了三种不同的场景，它们都依赖于相同的端点调用：
+
+**调用：**
+
+```
+PUT https://api.frame.io/v2/asset/:id/tween
+```
+
+**正文：**
+
+```json
+{
+  "prev_asset_id": "<asset_id>",
+  "next_asset_id": "<asset_id>"
+}
+```
+
+在所有情况下，URL 路径中的 `id` 都是您要移动的 Asset。
+
+| 场景 | `prev_asset_id` | `next_asset_id` |
+| --- | --- | --- |
+| 移到 Stack 顶部 | `null` | 原顶部 Asset（最高版本号）的 `id`。 |
+| 移到 Stack 底部 | 原底部 Asset（v1）的 `id`。 | `null` |
+| 在 stack 内移动版本 | 您希望移动 Asset 的目标位置正*上方*的 Asset 的 `id`。 | 您希望移动新 Asset 的目标位置正*下方*的 Asset 的 `id`。 |
+
+## 移除 Assets 和删除 Version Stacks {#removing-assets-and-deleting-version-stacks}
+
+### 移除 Assets {#removing-assets}
+
+当 Asset 被移入 Version Stack 时，它会成为该 Stack 的子项。要将 Asset 移出 Version Stack，您实际需要做的是将其重新设置父级，放回包含该 Stack 的文件夹中。
+
+1. 通过调用 `/v2/assets/:id` 来 `GET` Version Stack 本身
+2. 获取 Stack 本身的 `parent_id`（这将成为您新的目标文件夹 `id`）
+3. 按如下方式将目标 Asset 移入该文件夹：
+
+**调用**：
+
+```
+POST https://api.frame.io/v2/assets/:parent_id/move
+```
+
+**正文**：
+
+```json
+{
+    "id":"<asset_id>"
+}
+```
+
+### 删除 Version Stacks {#deleting-version-stacks}
+
+删除 Version Stack 非常简单：
+
+```
+DELETE https://api.frame.io/v2/assets/:version_stack_id/unversion
+```
+
+就是这样。删除 Stack 后，其包含的所有 Assets 都会返回到包含该 Stack 的文件夹中。
+
+<Info>
+
+**应删除只有 1 个元素的 Stacks**
+
+如果您从 Version Stack 中移除所有元素，最终会得到一个只包含单个元素的 Version Stack。这很容易发现——如果您通过 `id` `GET` 该 Version Stack，会看到它有一个 `"version": 1` 属性。
+
+</Info>
+
+从技术上讲，这一切都没有问题——单个版本可以正常加载和播放，也可以添加新版本，一切都会照常进行；但为了避免在 Frame.io 的 Web 及其他应用中给用户带来困惑，我们建议删除只有单个元素的 Stacks。
+
+有关 Version Stacking 端点的更多信息，请参阅 [Assets](/cn/platform/v2/api-reference/assets/library-search-get) 文档。

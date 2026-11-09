@@ -1,0 +1,71 @@
+---
+title: "将 Custom Actions 部署到 Zapier"
+---
+
+<Info>
+
+**第一次使用 Custom Actions？**
+
+请在 **[概述页面](/cn/platform/v2/custom-actions-overview)** 了解此功能。
+
+</Info>
+
+在你的媒体工作流中，你可能需要将 Frame.io 媒体传送到 YouTube 和 Wistia 等发布渠道，或 Google Drive、Amazon S3 归档等存储目标。
+
+虽然你可以使用 Zapier Triggers 来自动化工作流，但 Custom Actions 允许你在 Frame.io 内创建一个菜单选项，为简化向外部位置交付媒体提供额外一层控制；而且由于 Custom Actions 本质上就是按需触发的 webhook，你可以将它们作为自定义触发器连接到 Zapier。只需设置一次，你的团队成员和协作者就能在 Frame.io 中使用该自动化。
+
+**本指南将教你如何将 Frame.io Custom Actions 连接到 Zapier，并将媒体交付到第三方应用或服务。**
+
+**注意：** Webhooks 是 Zapier 的高级（Premium）功能。如果想以最低成本部署 Custom Actions，可以考虑 [编写你自己的无服务器函数](https://github.com/Frameio/custom-actions-example-app/tree/master/examples/custom-action-offload-to-s3)。
+
+## 架构 {#architecture}
+
+![Zapier Custom Action Architecture](/images/platform/v2/deploy-custom-actions-to-zapier/4d06dacec5ef8d46d822674d651ba96182732118bcc08b57770fec125f62b2f2.webp)
+
+## 设置 Zapier 并创建你的 Custom Action {#set-up-zapier-and-create-your-custom-action}
+
+在 Zapier 中创建一个新的 Zap。初始触发器选择 [Zap - Webhooks by Zapier](https://zapier.com/apps/webhook/integrations)。将 Action 设置为"Catch Hook"。在这种情况下无需任何自定义，直接点击进入下一阶段即可：
+
+![Frame.io Zapier Custom Action - Set up Webhook](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step1.gif "Frame.io Zapier Custom Action - Set up Webhook")
+
+### 测试 Action {#test-the-action}
+
+花一点时间在 Frame.io 中测试该 Custom Action。确认该 Action 生成的请求已被 Zapier 捕获：
+
+![Frame.io Zapier Custom Action - Test the action](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step2.gif "Frame.io Zapier Custom Action - Test the action")
+
+<Info>
+
+**提示**
+
+使用我们开发者网站上的 [日志](https://developer.frame.io/actions) 来查看 Custom Action 的 payload
+
+</Info>
+
+### 在 Zapier 中添加"Find Asset"步骤 {#add-a-‘find-asset’-step-to-zapier}
+
+Custom Action 的 payload 只是引用了你的 Asset，并不包含文件本身。因此需要额外一个步骤来告诉 Zapier 从哪里拉取文件。在 Zap 中添加一个"search"触发器：[Frame.io - Find Asset](https://zapier.com/apps/frameio/integrations#css-d28kn1-Button__buttonText)
+
+以下是 Find Asset 设置的实际操作演示：
+
+![Frame.io Zapier Custom Action - Add find asset step](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step3.gif "Frame.io Zapier Custom Action - Add find asset step")
+
+现在，你正在向 Zapier 传递有关该 Asset 的更多信息，包括其名称、原始文件，以及 Frame.io 对该文件执行的每个 [转码](https://support.frame.io/en/articles/13321-what-is-my-video-converted-to-when-it-s-uploaded)。
+
+### 将 Asset 发送到目标位置 {#send-the-asset-to-your-destination}
+
+为了演示，我们将文件交付到 Google Drive：
+
+![Frame.io Zapier Custom Action - send to Google Drive](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step4.gif "Frame.io Zapier Custom Action - send to Google Drive")
+
+## 后续步骤 {#where-to-go-from-here}
+
+虽然 Zapier 可以说是部署 Action 最简单的方式，但它也存在一些限制。最主要的是，你无法以 Custom Actions 所支持的 [完整请求-响应模式](https://docs.frame.io/docs/custom-actions#create-a-form-callback) 与用户进行沟通。用户只会收到一条默认的"Success!"消息，表示 Zapier 已处理该 webhook 并触发了 Zap 中的一系列操作：
+
+![Custom Action Success Message](/images/platform/v2/deploy-custom-actions-to-zapier/1076d6c89a745589e34e74c860113a5f213ecf1526c762471686febc9a61dcd0.webp)
+
+这可能会产生误导，因为"Success!"消息仅表示交接成功，即使 Zapier 工作流本身出现问题，该消息也会显示。有关排查 Zapier 本身问题的更多信息，请参阅其 [查看任务历史记录](https://zapier.com/learn/getting-started-guide/task-history/) 指南。
+
+### 构建你自己的应用 {#rolling-your-own-app}
+
+编写一个 [小型服务器应用](https://github.com/Frameio/custom-actions-app-python) 或使用 [lambda 函数](https://github.com/Frameio/custom-actions-example-app/tree/master/examples/custom-action-offload-to-s3)，可以让你处理用户输入并创建多条代码路径。这种方式非常便于将文件发送到多个目标位置、以不同方式处理不同文件类型，或在工作流自动化中利用有关 Frame.io 用户的信息。

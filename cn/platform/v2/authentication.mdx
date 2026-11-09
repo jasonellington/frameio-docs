@@ -1,0 +1,91 @@
+---
+title: "身份验证"
+---
+
+## 概览 {#overview}
+
+使用 Frame.io API 进行 API 调用需要身份验证。Frame.io API 提供两种身份验证方式：
+
+- **Developer tokens（开发者令牌）**：一种持久的 bearer 令牌，具有与生成它的用户相同的访问权限和权限。
+- **OAuth 2 授权码流程**：允许 Frame.io 用户使用自己的凭据登录，并授予外部应用程序代表其执行操作的权限。
+
+所有使用 API 的操作，无论采用哪种身份验证方式，最终都使用 bearer 令牌标头，并受 scopes 控制。
+
+### 哪种身份验证类型最适合我的项目？ {#which-authentication-type-is-best-for-my-project}
+
+刚开始时，您应该为项目使用 [Developer Token](https://developer.frame.io/authentication/developer-tokens)。
+
+**Developer Tokens** 与单个用户的账户相关联，具有与创建它们的用户相同的访问权限，并受 scopes 限制。
+
+它们非常适合：
+
+- 实验（因为您可以非常快速地创建和销毁它们）
+- 所有操作都可以通过单个账户/用户上下文执行的集成场景。
+
+**OAuth 授权码流程**适用于需要代表多个不同用户执行操作的外部托管应用程序。通过 OAuth 管理 bearer 令牌会带来更多开销，因此先使用 Developer Token 进行实验，之后再将工作重构为 OAuth 应用的情况并不少见。
+
+<Info>
+
+要继续操作，您需要一个 Frame.io 账户。如果您还没有 Frame.io 账户，可以前往 [Frame.io](https://frame.io) 并点击 [**Sign Up Free**](https://accounts.frame.io/welcome)，快速轻松地注册。
+
+</Info>
+
+## 开发者令牌 {#developer-tokens}
+
+1. 使用您的 Frame.io 用户凭据登录 Frame.io [Developer Portal](/cn/platform/v2)。
+2. 您应该会看到欢迎屏幕。要创建新的 Developer Token，请点击 **Create a Token** 按钮。
+3. 您将看到 Tokens 屏幕。点击 **New**。
+4. 在新令牌屏幕上，您需要为令牌提供描述和 scopes。对于 **DESCRIPTION**，我们建议填写有助于您记住该令牌用途的内容。在 **SCOPES** 下，您可以选择此令牌应具备的具体访问 scopes。在本演练中，只需点击 **Select all scopes**。之后您可以根据需要创建具有更具体权限和特权的令牌（有关更多信息，请参阅 [Scopes](/cn/platform/v2/key-concepts#scopes)）。
+5. 向下滚动并点击 **Create** 按钮。如果成功，您将看到一个汇总令牌信息的页面。
+6. 复制 **Token** 字段中显示的字符串。**这就是您的新令牌**。请将其存放在安全的地方——它代表对您账户的访问权限，一旦离开此页面，您将无法再次查看它。
+   此时，您应该会收到一封电子邮件，确认您已创建具有所选 scopes 的令牌。
+
+<Warning>
+
+Frame.io 令牌仅在初次创建时显示。如果您丢失了令牌，随时可以创建新令牌；但除了描述和 scopes 之外，您将永远无法再查看旧令牌。
+
+</Warning>
+
+### 测试您的新令牌 {#testing-your-new-token}
+
+现在您已经有了令牌，让我们尝试使用 bearer 身份验证发出请求。我们将发出一个获取您自身信息的基本请求：
+
+<CodeGroup>
+
+```bash title="cURL"
+curl -H "Authorization: Bearer <YOUR_TOKEN>" https://api.frame.io/v2/me
+```
+
+```python title="Python"
+import requests
+
+url = "https://api.frame.io/v2/me"
+headers = {
+ "Authorization": "Bearer <YOUR_TOKEN>"
+}
+
+requests.GET(url,headers=headers)
+```
+
+</CodeGroup>
+
+作为响应，您应该会看到您的用户记录的 JSON 表示。
+
+恭喜！您刚刚完成了对 Frame.io API 的首次调用。🎉
+
+## 什么是 OAuth 2？ {#what-is-oauth-2}
+
+OAuth2.0 是一种常见的身份验证协议，它使用户能够允许一个应用程序以受限方式与另一个应用程序交互，而无需直接共享凭据。此过程通常称为用户通过特殊登录屏幕"授予凭据"。
+
+### OAuth 2 授权码流程 {#oauth-2-authorization-code-flow}
+
+OAuth 2 授权码流程使用户能够向外部应用程序授予有限的访问权限。应用程序根据其初始配置请求特定权限——对于 Frame.io 而言，即该应用[在我们的 Developer Portal 上注册](https://developer.frame.io/app/oauth_apps)时的配置。用户批准请求后，外部应用即可代表该用户执行操作。
+
+在此了解如何开始使用 OAuth 2 授权码流程：[设置 OAuth 2 授权码流程](/cn/platform/v2/oauth-2-code-authorization-flow)
+
+### 关于 OAuth 2 的更多信息 {#more-about-oauth-2}
+
+如果您想进一步了解 OAuth 2，以下是一些优质资源：
+
+- [OAuth2](https://oauth.net/2/)
+- [The Authorization Code Flow](https://developer.okta.com/blog/2018/04/10/oauth-authorization-code-grant-type)

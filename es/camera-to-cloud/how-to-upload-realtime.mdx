@@ -1,0 +1,642 @@
+---
+title: "Cómo: subir (en tiempo real)"
+sidebarTitle: "Subir (en tiempo real)"
+---
+
+## Introducción {#introduction}
+
+Partiendo de lo que sabemos sobre la subida básica, exploremos cómo subir assets en tiempo real mientras se están creando. Este enfoque permite subir archivos durante la grabación, el renderizado o la transmisión, antes de conocer su tamaño final.
+
+La API de subidas en tiempo real permite que los assets se puedan reproducir en Frame.io apenas unos segundos después de que termine la grabación, lo que mejora considerablemente la eficiencia del flujo de trabajo.
+
+## Vídeo de demostración {#demo-video}
+
+Para ver un adelanto rápido de esta funcionalidad, mira nuestro [vídeo de demostración](https://f.io/qjwfGmTa). La demostración muestra un render que se sube desde Adobe Media Encoder en tiempo real, con el vídeo reproducible en Frame.io solo 5 segundos después de que finaliza el renderizado.
+
+## Requisitos previos {#prerequisites}
+
+Si aún no lo has hecho, revisa la guía [Implementar C2C: configuración](/es/camera-to-cloud/implementing-c2c-setting-up).
+
+Necesitarás el `access_token` obtenido durante el [proceso de autenticación y autorización](/es/camera-to-cloud/implementing-c2c-authentication-and-authorization).
+
+En nuestros ejemplos usaremos el mismo [asset de prueba](https://f.io/Rq1q5CzB) de la guía de subida básica.
+
+Se recomienda estar familiarizado con la [guía de subida básica](/es/camera-to-cloud/how-to-basic-upload), ya que partiremos de esos conceptos.
+
+## Crear un asset en tiempo real {#creating-a-real-time-asset}
+
+Las subidas en tiempo real comienzan con un proceso de creación de asset modificado. Al crear el asset, establece `is_realtime_upload` en `true` y omite el parámetro `filesize` (o establécelo en `null`), ya que el tamaño final no se conoce durante la creación:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "name": "C2C_TEST_CLIP.mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Especificación del endpoint de la API**
+
+La documentación de `/v2/devices/assets` está [disponible aquí](/es/camera-to-cloud/api-reference/device-asset-create).
+
+</Info>
+
+<Warning>
+
+**Extensión y nombre de archivo**
+
+Los assets en tiempo real requieren una extensión de archivo. Si no se conoce el nombre del archivo al crear el asset, puedes usar el campo `extension` en su lugar (formato: `'.mp4'`). Este enfoque es preferible cuando tienes previsto actualizar el nombre del asset más adelante.
+
+</Warning>
+
+La respuesta para los assets en tiempo real es más sencilla que la de la creación de assets estándar:
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "C2C_TEST_CLIP.mp4"
+}
+```
+
+Observa que `upload_urls` no aparece: en las subidas en tiempo real, generaremos las URL de subida bajo demanda a medida que se crea el archivo.
+
+## Solicitar URL de subida {#requesting-upload-urls}
+
+Solicitemos una URL para la primera mitad de nuestro archivo (10 568 125 bytes), utilizando el `asset_id` de la respuesta anterior:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "parts": [
+                {
+                    "number": 1,
+                    "size": 10568125,
+                    "is_final": false
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+<Info>
+
+**Especificación del endpoint de la API**
+
+La documentación de `/v2/devices/assets/{asset_id}/realtime_upload/parts` está [disponible aquí](/es/camera-to-cloud/api-reference/device-create-realtime-upload-parts).
+
+</Info>
+
+Los parámetros de la solicitud:
+
+- `parts`: una lista de partes de subida para las que necesitamos URL. Solicitar varias URL en una sola llamada mejora la eficiencia.
+
+  - `number`: el número secuencial de la parte, empezando por 1. Se pueden omitir números y subir las partes en cualquier orden, pero se ensamblarán de forma secuencial. No puede superar 10 000 (límite de AWS).
+  - `size`: tamaño de la parte en bytes. Debe cumplir las [restricciones de subida multiparte de AWS](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html).
+  - `is_final`: indica si esta es la parte final del archivo.
+
+La respuesta contiene las URL de subida solicitadas:
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path]"
+    ]
+}
+```
+
+La lista `upload_urls` se corresponde directamente con el orden de `parts` en la solicitud.
+
+Ahora sube el primer fragmento como en la guía de subida básica:
+
+```shell
+head -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_01_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+A continuación, solicita una URL para la segunda y última parte:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+Ten en cuenta estas adiciones importantes:
+
+- `is_final` se establece en `true` para la última parte, lo que indica que la subida finalizará después de este fragmento
+- `asset_filesize` proporciona el tamaño total del archivo, que es obligatorio cuando alguna parte tiene `is_final: true`
+
+Después de recibir la URL en la respuesta:
+
+```json
+{
+    "upload_urls": [
+        "https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path]"
+    ]
+}
+```
+
+Sube el fragmento final:
+
+```shell
+tail -c 10568125 ~/Downloads/C2C_TEST_CLIP.mp4 | \
+curl -X PUT https://frameio-uploads-production.s3-accelerate.amazonaws.com/parts/[part_02_path] \
+        --include \
+        --header 'content-type: video/mp4' \
+        --header 'x-amz-acl: private' \
+        --data-binary @-
+```
+
+<Warning>
+
+**Gestión de la parte final**
+
+Cuando se sube la parte final, Frame.io comienza a ensamblar el archivo completo. Este proceso incluye un periodo de gracia de 60 segundos para que se completen las partes restantes. Recomendamos subir la parte final solo después de que todas las demás partes se hayan subido correctamente.
+
+</Warning>
+
+¡Eso es todo! Ve a Frame.io para ver tu asset en tiempo real subido correctamente. 🎉
+
+## Gestionar los nombres de los assets {#managing-asset-names}
+
+Si no se conoce el nombre del archivo durante la creación del asset, puedes usar el campo `extension` sin `name`:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "extension": ".mp4", 
+            "filetype": "video/mp4", 
+            "is_realtime_upload": true
+        }
+__JSON__
+} | python -m json.tool
+```
+
+El sistema asignará un nombre predeterminado:
+
+```json
+{
+    "id": "{asset_id}",
+    "name": "[new file].mp4"
+}
+```
+
+Puedes actualizar este nombre incluyendo un campo `asset_name` al solicitar las URL de subida:
+
+```shell
+{
+curl -X POST https://api.frame.io/v2/devices/assets/{asset_id}/realtime_upload/parts \
+    --header 'Authorization: Bearer [access_token]' \
+    --header 'Content-Type: application/json' \
+    --header 'x-client-version: 2.0.0' \
+    --data-binary @- <<'__JSON__' 
+        {
+            "asset_name": "C2C_TEST_CLIP.mp4",
+            "asset_filesize": 21136250,
+            "parts": [
+                {
+                    "number": 2,
+                    "size": 10568125,
+                    "is_final": true
+                }
+            ]
+        }
+__JSON__
+} | python -m json.tool
+```
+
+El nombre solo se actualizará si el asset conserva su nombre predeterminado; si se ha cambiado el nombre en la interfaz de Frame.io o se ha actualizado previamente, la solicitud se ignorará.
+
+## Optimizar las solicitudes de URL {#optimizing-url-requests}
+
+Por eficiencia, solicita URL para tantas partes como datos tengas disponibles en ese momento, en lugar de hacerlo de una en una. Este enfoque resulta especialmente útil para archivos grandes, en los que la velocidad de subida puede quedarse por detrás de la generación de datos.
+
+## Gestionar las cabeceras de los archivos multimedia {#handling-media-file-headers}
+
+Algunos formatos multimedia requieren cabeceras al principio del archivo que no se escriben hasta que el archivo está completo. Esto supone un desafío cuando la cabecera es más pequeña que el tamaño mínimo de parte de AWS, de 5 MiB (5 242 880 bytes).
+
+Nuestra recomendación:
+
+1. Reserva los primeros 5 242 880 bytes de datos multimedia sin subirlos
+2. Empieza a subir partes a partir de `part_number=2`
+3. Cuando el archivo esté completo, antepón la cabecera a los datos reservados
+4. Solicita una URL para `part_number=1` y sube este fragmento combinado
+
+Este enfoque garantiza que tu primer fragmento cumpla el requisito de tamaño mínimo y, al mismo tiempo, conserve la estructura correcta del archivo.
+
+## Escalar el tamaño de las partes para un rendimiento óptimo {#scaling-part-size-for-optimal-performance}
+
+AWS impone límites que afectan a la estrategia de subida:
+
+- Tamaño máximo de archivo: 5 TiB (5 497 558 138 880 bytes)
+- Número máximo de partes: 10 000
+- Tamaño mínimo de parte: 5 MiB (5 242 880 bytes)
+
+Un tamaño de parte fijo implica compromisos:
+
+- Usar el tamaño mínimo (5 MiB) para las 10 000 partes limita el tamaño total del archivo a ~52,4 GB
+- Distribuir uniformemente el tamaño máximo de archivo requeriría fragmentos de ~550 MB, demasiado grandes para transmitir archivos más pequeños de forma eficiente
+
+Necesitamos una fórmula que equilibre estas restricciones, empezando con partes pequeñas para lograr subidas ágiles y garantizando al mismo tiempo que podamos gestionar archivos muy grandes si es necesario.
+
+### Fórmula recomendada para el tamaño de las partes {#recommended-part-size-formula}
+
+Este es el enfoque que sugerimos en Python:
+
+```python title="Python"
+import math
+from typing import Callable
+
+# Constants
+MINIMUM_PART_SIZE = 5_242_880
+MAXIMUM_PART_COUNT = 10_000
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# Maximum uniform data rate that allows for 10,000 parts
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def part_size(part_number: int, format_bytes_per_second: int) -> int:
+    """
+    Returns the payload size for a specific part number given the file's
+    expected data rate.
+    """
+    if part_number < 1:
+        raise ValueError("part_number must be greater than 0")
+
+    if part_number > 10_000:
+        raise ValueError("part_number must be less than 10,000")
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    # Calculate a scalar given our data rate. We will explain this step
+    # futher on in the guides.
+    scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+    part_size = math.floor(scalar * pow(part_number, 2)) + data_rate
+
+    return part_size
+```
+
+… donde `part_number` está entre `1` y `10_000`, ambos incluidos, y `format_bytes_per_second` es el número medio de bytes por segundo que se espera que consuma tu archivo. Explicaremos cómo llegamos a la fórmula [más adelante](/es/camera-to-cloud/how-to-upload-realtime#showing-our-work).
+
+<Info>
+
+**Valor escalar**
+
+La variable `scalar` y su cálculo pueden resultar algo desconcertantes a primera vista, pero son una herramienta matemática que garantiza que, sea cual sea el valor que usemos para `format_bytes_per_second`, si introducimos en la función todos los valores permitidos de `part_number` desde `1` hasta `10_0000`, obtendremos un conjunto de valores cuya suma es *exactamente* nuestro límite de tamaño de archivo de 5 TiB (o tan exacta como sea posible). [Mostramos nuestro razonamiento](/es/camera-to-cloud/how-to-upload-realtime#showing-our-work) más adelante sobre cómo llegamos a esta fórmula.
+
+</Info>
+
+<Info>
+
+**Redondeo hacia abajo**
+
+Al redondear hacia abajo, dejamos algunos bytes sin aprovechar, pero nos aseguramos de que el redondeo normal a lo largo de 10 000 partes no haga que superemos accidentalmente el tamaño máximo de archivo permitido. Como máximo, de esta forma quedarán sin aprovechar 10 000 bytes, o 10 KB, un compromiso aceptable.
+
+</Info>
+
+Las características importantes de esta fórmula son:
+
+- Al subir 10 000 partes, la cantidad total de datos subidos estará a menos de 10 KB de nuestro límite de tamaño de archivo de 5 TiB.
+- Optimiza para payloads más pequeños y eficientes al principio, con el fin de aumentar la agilidad en clips cortos y de duración media.
+- Los clips muy largos tendrán menos agilidad entre el momento en que se termina de escribir un archivo y el momento en que se puede reproducir en Frame.
+
+El compromiso entre el segundo y el tercer punto se ve mitigado por el hecho de que la mayoría de los clips no alcanzarán el tamaño en el que entra en juego el tercer punto. Estamos sacrificando la agilidad de muy pocos archivos a cambio de una mayor agilidad en *LA MAYORÍA* de ellos.
+
+Una versión más avanzada y eficiente de nuestra fórmula (que genera una función anónima `part_size_calculator` con nuestro escalar estático y la tasa de datos precalculados e incorporados) podría tener este aspecto:
+
+```python title="Python"
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+
+    # Make sure we never go above the maximum data rate or fall below the
+    # minimum part size, even if the data rate is lower.
+    data_rate = min(format_bytes_per_second, MAXIMUM_DATA_RATE)
+    data_rate = max(data_rate, MINIMUM_PART_SIZE)
+
+    static_scalar = -(2 * (125 * data_rate - 68_719_476_736)) / 8_334_583_375
+
+    def part_size_calculator(part_number: int) -> int:
+        """Calculates size in bytes of upload for `part_number`."""
+        if part_number < 1:
+            raise ValueError("part_number must be greater than 0")
+
+        if part_number > 10_000:
+            raise ValueError("part_number must be less than 10,000")
+
+        return math.floor(static_scalar * pow(part_number, 2) + data_rate)
+
+    return part_size_calculator
+```
+
+### Rendimiento de la fórmula {#how-the-formula-performs}
+
+Examinemos las características de salida de la fórmula anterior con varios tipos de archivo habituales.
+
+**Ejemplo 1**: formato web
+
+Para formatos reproducibles en la web con una tasa de ~5,3 MB/s o menos (la mayoría de los archivos H.264/H.265/HEVC), obtendremos una progresión del tamaño del payload como esta:
+
+| Total de partes | Bytes del payload | MB del payload | Bytes totales del archivo | GB totales del archivo |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 5,242,896 | 5.2 MB | 5,242,896 | 0.0 GB |
+| 1,000 | 21,575,817 | 21.6 MB | 10,695,361,357 | 10.7 GB |
+| 5,000 | 413,566,329 | 413.6 MB | 706,957,655,928 | 707.0 GB |
+| 10,000 | 1,638,536,679 | 1,638.5 MB | 5,497,558,133,921 | 5,497.6 GB |
+
+**Leyenda de las columnas de la tabla**
+
+- `Total Parts`: el número total de partes del archivo subidas a AWS.
+- `Payload Bytes`: el tamaño del payload PUT de AWS cuando `part_number` es igual a `Total Parts`.
+- `Payload MB`: igual que `Payload Bytes`, pero en megabytes.
+- `Total File Bytes`: el número total de bytes subidos del archivo una vez subidas `Total Parts` partes secuenciales.
+- `Total File GB`: igual que `Total File Bytes`, pero en GB.
+
+Estos valores están bien equilibrados para las subidas en tiempo real, especialmente de códecs de reproducción web como H.264; la mayoría ocuparán menos de 10,7 GB y, por tanto, se completarán en menos de 1000 partes. El tamaño del payload nunca superaría los 21,6 MB.
+
+Si hubiéramos consumido la mitad de nuestras partes, el tamaño del payload seguiría sin superar los 413,5 MB. La subida sumaría 707 GB, más que suficiente para la gran mayoría de los archivos web.
+
+Solo cuando nos acercamos al final del número de partes permitido el tamaño empieza a dispararse. Sin embargo, nunca supera los 1,7 GB, muy por debajo del límite de AWS de 5 GiB por parte.
+
+**Ejemplo 2**: Prores 422 LT
+
+Prores 422 LT [tiene una tasa de datos de 102 Mbps](https://www.wolframalpha.com/input?i=-%282+%28-68%2C719%2C476%2C736+%2B+125+12%2C750%2C000%29%29%2F8%2C334%2C583%2C375) y genera una tabla como esta:
+
+| Total de partes | Bytes del payload | MB del payload | Bytes totales del archivo | GB totales del archivo |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 12,750,016 | 12.8 MB | 12,750,016 | 0.0 GB |
+| 1,000 | 28,857,758 | 28.9 MB | 18,127,308,783 | 18.1 GB |
+| 5,000 | 415,443,954 | 415.4 MB | 735,107,948,432 | 735.1 GB |
+| 10,000 | 1,623,525,817 | 1,623.5 MB | 5,497,558,133,958 | 5,497.6 GB |
+
+Esta tabla revela propiedades útiles en comparación con nuestra fórmula optimizada para la web. En las primeras 1000 partes podemos subir 8 GB más de archivo. Unos payloads iniciales más grandes implican que no tendremos que solicitar URL con demasiada rapidez al principio, lo que hace que la subida sea más eficiente para la tasa de datos más alta. El tamaño del payload al final del proceso de subida sigue siendo grande.
+
+**Ejemplo 2**: Camera raw
+
+Por último, probemos un formato camera RAW con una tasa de datos de 280 MB/s. Con datos llegando a esta velocidad, intentar subir fragmentos de 5 MiB al principio simplemente no tiene sentido:
+
+| Total de partes | Bytes del payload | MB del payload | Bytes totales del archivo | GB totales del archivo |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 280,000,008 | 280.0 MB | 280,000,008 | 0.3 GB |
+| 1,000 | 288,091,460 | 288.1 MB | 282,701,200,139 | 282.7 GB |
+| 5,000 | 482,286,516 | 482.3 MB | 1,737,245,341,542 | 1,737.2 GB |
+| 10,000 | 1,089,146,065 | 1,089.1 MB | 5,497,558,133,870 | 5,497.6 GB |
+
+No solo los primeros payloads son más eficientes, sino que además ahorramos más de medio giga en el extremo superior, lo que hará que esas llamadas de red sean menos susceptibles a incidencias adversas de la red.
+
+### Mostrando nuestro razonamiento {#showing-our-work}
+
+Antes de reunirlo todo en un ejemplo de programa de subida, veamos cómo llegamos a nuestra fórmula.
+
+Lo que necesitábamos era una fórmula que cambiara payloads grandes y pesados al final de las partes permitidas (a las que la mayoría de las subidas nunca llegarán) por payloads ligeros y eficientes cerca del principio, que todas las subidas pueden aprovechar. Al mismo tiempo, queríamos asegurarnos de que nuestro algoritmo se acercara al límite de tamaño de archivo de 5 TiB *justo en* la parte número 10 000.
+
+Era el momento de recurrir al cálculo.
+
+Queremos que nuestra gráfica crezca exponencialmente, así que nuestra fórmula probablemente debería parecerse a esto:
+
+```text
+n^2
+```
+
+… donde `n` es el número de parte. También queremos asegurarnos de que cada parte tenga, como mínimo, la tasa de datos de nuestra fórmula, que llamaremos `r`:
+
+```text
+n^2 + r
+```
+
+Ahora necesitamos encontrar una fórmula que nos indique la suma de *esta* fórmula para los primeros 10 000 números naturales (1, 2, 3, …). El símbolo sigma `Σ` denota un sumatorio. Añadámoslo a nuestra fórmula:
+
+```text
+Σxn^2 + r
+```
+
+… y redefinamos `n` como la serie de números naturales entre 1 y 10 000, ambos incluidos.
+
+La ecuación todavía no nos resulta muy útil. Tiene la forma intuitiva correcta, pero si establecemos `n=10,000` y `r=5,242,880` como queremos, simplemente [devuelve un resultado](https://www.wolframalpha.com/input?i=%CE%A3n%5E2+%2B+r+where+n+%3D+1+to+10%2C000+and+r+%3D+5%2C242%2C880): `385,812,135,000` (385 GB). No solo el resultado queda muy por debajo de nuestro límite de tamaño de archivo de 5 TiB, sino que no hay forma de manipular la fórmula para que devuelva ese resultado.
+
+Démonos un parámetro que podamos ajustar:
+
+```text
+Σxn^2 + r
+```
+
+… donde `x` es un escalar que podemos despejar para obtener 5 TiB como resultado. Ahora podemos igualar la ecuación a nuestro límite de tamaño de archivo y despejar `x`:
+
+```text
+Σxn^2 + r = 5,497,558,138,880
+```
+
+A menudo, los sumatorios deben resolverse de forma iterativa, como en un bucle `for` o `while`. Pero resulta que existe una fórmula perfecta para nosotros: [una forma conocida](https://www.math-only-math.com/sum-of-the-squares-of-first-n-natural-numbers.html) de calcular de manera económica la suma de los cuadrados de los primeros `n` números naturales:
+
+```text
+Σn^2 = n(n+1)(2n+1)/6
+```
+
+Reorganizarla como un polinomio hace que sea más fácil de leer:
+
+```text
+Σn^2 = (2n^3 + 3n^2 + n)/6
+```
+
+Podemos añadir nuestras variables, `x` y `r`, a ambos lados:
+
+```text
+Σxn^2 + r = x(2n^3 + 3n^2 + n)/6 + rn
+```
+
+Y, por último, igualamos nuestra nueva fórmula a 5 TiB:
+
+```text
+x(2n^3 + 3n^2 + n)/6 + rn = 5,497,558,138,880
+```
+
+Ahora solo tenemos que despejar `x` estableciendo `n=10,000`, nuestro número total de partes. Esto nos dará una forma de calcular un escalar estático para una tasa de datos determinada.
+
+En lugar de hacerlo a mano, [introduzcámoslo en Wolfram Alpha](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000):
+
+```text
+x = -(2 (125 r - 68719476736)) / 8334583375
+```
+
+¡Ahora sí avanzamos! Si nuestra tasa de datos fuera el tamaño mínimo de parte (5 MiB), [obtendríamos](https://www.wolframalpha.com/input?i=x%282n%5E3+%2B+3n%5E2+%2B+n%29%2F6+%2B+r+*+n+%3D+5%2C497%2C558%2C138%2C880+solve+for+x+where+n+%3D+10%2C000+and+r+%3D+5%2C242%2C880) un escalar estático de:
+
+```text
+136,128,233,472 / 8,334,583,375
+```
+
+En el mundo informático, esto representa un valor float64 de `16.33293799427617`. Nuestra fórmula para determinar el tamaño de parte en este caso sería:
+
+```text
+s = 16.33293799427617n^2 + 5,242,880
+```
+
+Donde `s` es nuestro tamaño de parte.
+
+Todavía nos queda un problema. En el mundo real, no podemos tener un payload con bytes no enteros. Necesitamos redondear cada valor. Usaremos Python y redondearemos hacia abajo:
+
+```python title="Python"
+math.floor(16.33293799427617 * pow(part_number, 2)) + 5_242_880
+```
+
+Hemos llegado a un ejemplo concreto de la función original presentada en esta guía.
+
+## Crear un programa de subida básico {#building-a-basic-uploader}
+
+Veamos un pseudocódigo sencillo, similar a Python, para subir un archivo que se está renderizando en tiempo real, utilizando todo lo que hemos aprendido en esta guía:
+
+```python title="Python"
+import math
+from datetime import datetime, timezone
+from typing import Callable
+
+# The minimum size, in bytes, for a single, non-final part upload.
+MINIMUM_PART_SIZE = 5_242_880
+# The maximum filesize in
+MAXIMUM_PART_COUNT = 10_000
+# The maximum size, in bytes, for an AWS upload.
+MAXIMUM_FILE_SIZE = 5_497_558_138_880
+
+# The data rate at which every part is an equal size, and could not
+# be any uniformly larger without violating the maximum total file
+# size if 10_000 parts were to be uploaded. it works out to
+# ~549.8 MB per payload. By enforcing this we actually never need
+# to check if a part exceeds the maximum allowed part size, as our
+# parts will never exceed ~549.8 MB.
+MAXIMUM_DATA_RATE = MAXIMUM_FILE_SIZE // MAXIMUM_PART_COUNT
+
+def create_part_size_calculator(format_bytes_per_second: int) -> Callable[[int], int]:
+    """
+    Returns a function that takes in a `part_number` and returns a
+    `part_size` based on `data_rate`.
+    """
+    ...
+
+def upload_render(data_stream: DataStream, channel: int = 0) -> None:
+    """
+    Uploads an asset for data_stream, which is a custom IO class that pulls remaining
+    upload data from an internal buffer or file, depending on how well the upload is
+    keeping pace with the render.
+
+    Uploads to `channel`
+    """
+
+    asset = c2c.asset_create(
+        extension=data_stream.extension, 
+        filetype=data_stream.mimetpye, 
+        channel=channel,
+        offset=datetime.now(timezone.utc) - data_stream.created_at()
+    )
+
+    calculate_part_size = create_part_size_calculator(data_stream.data_rate())
+    next_part_number = 0
+
+    while True:
+        next_payload_size = calculate_part_size(next_part_number)
+
+        # Waits until one or more chunks worth of data is ready for upload. Cache 
+        # whether our data stream has completed writing the file, and the current 
+        # number of bytes we have remaining to upload at this time.
+        available_bytes, stream_complete = data_stream.wait_for_available_data(
+            minimum_bytes=next_payload_size
+        )
+
+        # Build the list of parts to request based on our available data.
+        parts = []
+        while available_bytes > 0:
+            payload_size = calculate_part_size(next_part_number)
+
+            if available_bytes < payload_size and not stream_complete:
+                break
+
+            payload_size = min(payload_size, available_bytes)
+
+            parts.append(
+                c2c.RealtimeUploadPart(
+                    part_number=next_part_number,
+                    part_size=payload_size,
+                    is_final=False
+                )
+            )
+
+            available_bytes -= payload_size
+            next_part_number += 1
+
+        # If our stream is done writing, mark the last part as final.
+        if stream_complete:
+            parts[-1].is_final = True
+
+        # Create the part URLs using the C2C endpoint.
+        response = c2c.create_realtime_parts(
+            asset_id=asset.id,
+            asset_name=None if not stream_complete else data_stream.filename,
+            asset_filesize=None if not stream_complete else data_stream.size(),
+            parts=parts
+        )
+
+        # Upload each part to its URL.
+        for part, part_url in zip(parts, response.upload_urls):
+            part_data = data_stream.read(bytes=part.size)
+            c2c.upload_chunk(part_data, part_url, data_stream.mimetype)
+
+        if stream_complete:
+            break
+```
+
+<Warning>
+
+**Subida avanzada**
+
+El código anterior solo muestra el flujo básico para subir un archivo en tiempo real. En la práctica, esta lógica deberá complementarse con técnicas de [gestión de errores](/es/camera-to-cloud/how-to-handle-errors) y de [subida avanzada](/es/camera-to-cloud/how-to-advanced-uploads).
+
+</Warning>
+
+## Siguientes pasos {#next-up}
+
+Las subidas en tiempo real ofrecen una forma de hacer que tu integración sea lo más ágil posible, con assets que se pueden reproducir en Frame.io segundos después de que termine su grabación. [Una guía posterior](/es/camera-to-cloud/how-to-advanced-uploads) tratará las técnicas y los requisitos de subida avanzada. Aunque está escrita pensando en las subidas básicas, la mayor parte de la guía también se aplica a las subidas en tiempo real.
+
+Si aún no lo has hecho, te animamos a ponerte en contacto con nuestro equipo y, a continuación, continuar con la siguiente guía. ¡Esperamos tener noticias tuyas!

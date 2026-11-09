@@ -1,0 +1,71 @@
+---
+title: "Custom Actions を Zapier にデプロイする"
+---
+
+<Info>
+
+**Custom Actions を初めて使用しますか?**
+
+この機能については **[概要ページ](/ja/platform/v2/custom-actions-overview)** をご覧ください。
+
+</Info>
+
+メディアワークフローの一環として、Frame.io のメディアを YouTube や Wistia などの公開チャネルや、Google Drive や Amazon S3 アーカイブなどのストレージに送る必要があるかもしれません。
+
+Zapier のトリガーを使用してワークフローを自動化することもできますが、Custom Actions を使用すると、Frame.io 内にメニューオプションを作成でき、外部へのメディア配信を効率化するためのより高度な制御が可能になります。また、Custom Actions はオンデマンドの Webhook にすぎないため、カスタムトリガーとして Zapier に接続できます。一度セットアップするだけで、チームメンバーとコラボレーターは Frame.io 内から自動化にアクセスできます。
+
+**このガイドでは、Frame.io の Custom Actions を Zapier に接続し、サードパーティのアプリやサービスにメディアを配信する方法を説明します。**
+
+**注:** Webhook は Zapier のプレミアム機能です。最小限のコストで Custom Actions をデプロイする方法として、[独自のサーバーレス関数を作成する](https://github.com/Frameio/custom-actions-example-app/tree/master/examples/custom-action-offload-to-s3)ことを検討してください。
+
+## アーキテクチャ {#architecture}
+
+![Zapier Custom Action Architecture](/images/platform/v2/deploy-custom-actions-to-zapier/4d06dacec5ef8d46d822674d651ba96182732118bcc08b57770fec125f62b2f2.webp)
+
+## Zapier をセットアップして Custom Action を作成する {#set-up-zapier-and-create-your-custom-action}
+
+Zapier で新しい Zap を作成します。最初のトリガーとして [Zap - Webhooks by Zapier](https://zapier.com/apps/webhook/integrations) を選択します。Action を「Catch Hook」に設定します。この場合、カスタマイズは不要なので、そのまま次のステージに進みます。
+
+![Frame.io Zapier Custom Action - Set up Webhook](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step1.gif "Frame.io Zapier Custom Action - Set up Webhook")
+
+### アクションをテストする {#test-the-action}
+
+少し時間をとって、Frame.io で Custom Action をテストします。アクションによってリクエストが生成され、Zapier で受信されることを確認してください。
+
+![Frame.io Zapier Custom Action - Test the action](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step2.gif "Frame.io Zapier Custom Action - Test the action")
+
+<Info>
+
+**ヒント**
+
+開発者サイトの[ログ](https://developer.frame.io/actions)を使用して、Custom Action のペイロードを確認できます
+
+</Info>
+
+### Zapier に「Find Asset」ステップを追加する {#add-a-‘find-asset’-step-to-zapier}
+
+Custom Action のペイロードは Asset を参照するだけで、ファイル自体は含まれていません。ファイルの取得元を Zapier に伝えるための追加ステップが必要です。Zap に「search」トリガー [Frame.io - Find Asset](https://zapier.com/apps/frameio/integrations#css-d28kn1-Button__buttonText) を追加します。
+
+Find Asset のセットアップの様子は次のとおりです。
+
+![Frame.io Zapier Custom Action - Add find asset step](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step3.gif "Frame.io Zapier Custom Action - Add find asset step")
+
+これで、Asset の名前、元のファイル、Frame.io がファイルに対して実行した各[トランスコード](https://support.frame.io/en/articles/13321-what-is-my-video-converted-to-when-it-s-uploaded)など、Asset に関するより多くの情報が Zapier に渡されるようになりました。
+
+### Asset を送信先に送る {#send-the-asset-to-your-destination}
+
+ここではデモとして、ファイルを Google Drive に配信します。
+
+![Frame.io Zapier Custom Action - send to Google Drive](/images/platform/v2/deploy-custom-actions-to-zapier/custom_action_zapier_step4.gif "Frame.io Zapier Custom Action - send to Google Drive")
+
+## 次のステップ {#where-to-go-from-here}
+
+Zapier はおそらくアクションをデプロイする最も簡単な方法ですが、いくつかの制限があります。主な制限は、Custom Actions がサポートする[完全なリクエスト/レスポンスのパターン](https://docs.frame.io/docs/custom-actions#create-a-form-callback)でユーザーとやり取りできないことです。ユーザーにはデフォルトの「Success!」メッセージのみが表示されます。これは、Zapier が Webhook を処理し、Zap 内の一連のアクションをトリガーしたことを意味します。
+
+![Custom Action Success Message](/images/platform/v2/deploy-custom-actions-to-zapier/1076d6c89a745589e34e74c860113a5f213ecf1526c762471686febc9a61dcd0.webp)
+
+「Success!」メッセージは引き渡しが成功したことを示すだけで、Zapier のワークフロー自体で何らかの問題が発生した場合でも表示されるため、誤解を招く可能性があります。Zapier 自体のトラブルシューティングの詳細については、[タスク履歴の確認](https://zapier.com/learn/getting-started-guide/task-history/)に関するガイドをご覧ください。
+
+### 独自のアプリを構築する {#rolling-your-own-app}
+
+[小規模なサーバーアプリ](https://github.com/Frameio/custom-actions-app-python)を作成したり、[Lambda 関数](https://github.com/Frameio/custom-actions-example-app/tree/master/examples/custom-action-offload-to-s3)を使用したりすると、ユーザー入力を処理し、複数のコードパスを作成できます。これは、ファイルを複数の送信先に送ったり、ファイルタイプごとに処理を変えたり、ワークフローの自動化で Frame.io ユーザーに関する情報を活用したりするのに便利な方法です。

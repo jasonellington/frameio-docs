@@ -1,0 +1,277 @@
+---
+title: "Frame.io Python SDK — アップロードガイド"
+sidebarTitle: "Python SDK アップロードガイド"
+---
+
+このガイドでは、**Frame.io Python SDK**(`frameio`)を使用して Frame.io にファイルをアップロードする方法を説明します。SDK は、署名付き URL を介した S3 へのチャンク分割マルチパートアップロードを、並列ワーカー、自動再試行、オプションの進捗状況の追跡とともに処理します。
+
+アップロード API の一般的な概念(アップロード URL、ヘッダー、チャンク分割)については、[ローカルアップロードとリモートアップロードの仕組み](/ja/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work)を参照してください。
+
+---
+
+## 前提条件 {#prerequisites}
+
+<Steps>
+
+<Step title="認証">
+
+動作する `Frameio` クライアントがあること。セットアップについては、[認証ガイド](/ja/platform/docs/guides/authentication/python-sdk)を参照してください。
+
+</Step>
+
+<Step title="SDK をインストールする">
+
+```bash
+pip install frameio
+```
+
+</Step>
+
+<Step title="アップロード先フォルダー">
+
+ファイルのアップロード先となる `account_id` と `folder_id` が必要です。SDK を使用して確認します。
+
+```python
+# List your accounts
+accounts = client.accounts.index()
+account_id = accounts.data[0].id
+
+# List workspaces in the account
+workspaces = client.workspaces.index(account_id=account_id)
+workspace_id = workspaces.data[0].id
+
+# List projects in the workspace
+projects = client.projects.index(account_id=account_id, workspace_id=workspace_id)
+project = projects.data[0]
+
+# The project's root folder is the top-level upload target
+folder_id = project.root_folder_id
+
+# Or list subfolders to upload into a specific one
+folders = client.folders.list(account_id=account_id, folder_id=folder_id)
+```
+
+</Step>
+
+</Steps>
+
+---
+
+## クイックスタート {#quick-start}
+
+```python
+import os
+from frameio import Frameio
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+client = Frameio(token="YOUR_TOKEN")
+
+file_path = "/path/to/video.mp4"
+file_size = os.path.getsize(file_path)
+
+# 1. Create the file resource and get pre-signed upload URLs
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name="video.mp4",
+        file_size=file_size,
+    ),
+)
+
+# 2. Upload the file to S3
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f).upload()
+```
+
+これだけです。SDK は API から返されたアップロード URL に基づいてファイルをチャンクに分割し、並列でアップロードし、再試行を自動的に処理します。
+
+---
+
+## 仕組み {#how-it-works}
+
+ローカルアップロードは 2 段階のプロセスです。
+
+<Steps>
+
+<Step title="ファイルリソースを作成する">
+
+ファイル名とサイズを指定して `client.files.create_local_upload()` を呼び出します。API はプレースホルダーのファイルを作成し、チャンクごとに 1 つずつ、署名付きの S3 PUT URL を返します。URL の数(つまりチャンクの数)はファイルサイズによって異なります。
+
+</Step>
+
+<Step title="S3 にアップロードする">
+
+`FrameioUploader` はレスポンスからアップロード URL を読み取り、ファイルを対応するチャンクに分割し、スレッドプールを使用して各チャンクをそれぞれの URL に並列で PUT します。各リクエストには、必須の `x-amz-acl: private` ヘッダーと `Content-Type` ヘッダーが含まれます。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+アップロードはアプリケーションから S3 へ直接行われ、Frame.io API サーバーは経由しません。これは、YouTube、Vimeo、Dropbox などのサービスが大きなファイルのアップロードに使用しているのと同じパターンです。
+
+</Note>
+
+---
+
+## `FrameioUploader` を使用する {#using-frameiouploader}
+
+`FrameioUploader` は、ファイルをアップロードするための推奨される方法です。下位レベルのチャンクアップローダーをラップし、API レスポンスからのアップロード URL の抽出、必須ヘッダーの設定、ファイルのチャンク分割、並列アップロードといった詳細をすべて処理します。
+
+### 進捗状況の追跡 {#progress-tracking}
+
+`on_progress` コールバックを使用して、アップロードの進捗状況を追跡します。
+
+```python
+def on_progress(bytes_uploaded: int, total_bytes: int) -> None:
+    pct = bytes_uploaded / total_bytes * 100
+    print(f"\r{pct:.1f}% ({bytes_uploaded:,} / {total_bytes:,} bytes)", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print("\nUpload complete!")
+```
+
+コールバックは各チャンクの完了後に 1 回呼び出され、それまでにアップロードされた累積バイト数とファイルの合計サイズが渡されます。
+
+#### Rich のプログレスバー {#rich-progress-bar}
+
+洗練されたターミナル表示にするには、[Rich](https://github.com/Textualize/rich) を使用します。
+
+```python
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+
+with Progress(
+    "[progress.description]{task.description}",
+    BarColumn(),
+    DownloadColumn(),
+    TransferSpeedColumn(),
+    TimeRemainingColumn(),
+) as progress:
+    task = progress.add_task("Uploading...", total=file_size)
+
+    with open(file_path, "rb") as f:
+        FrameioUploader(
+            response.data, f,
+            on_progress=lambda done, total: progress.update(task, completed=done),
+        ).upload()
+```
+
+### 設定 {#configuration}
+
+`FrameioUploader` は、いくつかのオプションパラメーターを受け付けます。
+
+| パラメーター | デフォルト | 説明 |
+| --- | --- | --- |
+| `max_workers` | `5` | 同時アップロードスレッドの数 |
+| `headers` | `{"x-amz-acl": "private"}` | すべての S3 PUT リクエストで送信されるヘッダー。カスタムヘッダーはデフォルトとマージされます。 |
+| `max_retries` | `3` | チャンクごとの再試行回数(指数バックオフ: 1 秒、2 秒、4 秒、…) |
+| `on_progress` | `None` | 各チャンクの完了後に呼び出されるコールバック `(bytes_uploaded, total_bytes)` |
+
+```python
+with open(file_path, "rb") as f:
+    FrameioUploader(
+        response.data,
+        f,
+        max_workers=10,       # more parallelism for high-bandwidth connections
+        max_retries=5,        # more resilient on flaky networks
+        on_progress=on_progress,
+    ).upload()
+```
+
+### 完全な例 {#full-example}
+
+認証、アップロード、進捗状況の追跡を含む完全な例です。
+
+```python
+import os
+from frameio import Frameio
+from frameio.auth import ServerToServerAuth
+from frameio.files import FileCreateLocalUploadParamsData
+from frameio.upload import FrameioUploader
+
+# Authenticate
+auth = ServerToServerAuth(
+    client_id="YOUR_CLIENT_ID",
+    client_secret="YOUR_CLIENT_SECRET",
+)
+client = Frameio(token=auth.get_token)
+
+# Prepare the file
+file_path = "/path/to/video.mp4"
+file_name = os.path.basename(file_path)
+file_size = os.path.getsize(file_path)
+
+# Create the file resource
+response = client.files.create_local_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateLocalUploadParamsData(
+        name=file_name,
+        file_size=file_size,
+    ),
+)
+
+print(f"Uploading {file_name} ({file_size:,} bytes) in {len(response.data.upload_urls)} chunks...")
+
+# Upload with progress
+def on_progress(uploaded: int, total: int) -> None:
+    print(f"\r{uploaded / total:.0%}", end="", flush=True)
+
+with open(file_path, "rb") as f:
+    FrameioUploader(response.data, f, on_progress=on_progress).upload()
+
+print(f"\nDone! View at: {response.data.view_url}")
+```
+
+---
+
+<Tip>
+
+チャンク分割を手動で処理したい、非同期パイプラインと統合したい、再試行ロジックをカスタマイズしたいなど、アップロードプロセスを完全に制御する必要がある場合は、未加工の API フローとスタンドアロンの Python スクリプト例について、[ローカルアップロードとリモートアップロードの仕組み](/ja/platform/docs/guides/uploading-to-frame-io/how-local-remote-uploads-work)を参照してください。
+
+</Tip>
+
+---
+
+## リモートアップロード {#remote-upload}
+
+ファイルが公開 URL 経由ですでにアクセス可能な場合は、代わりにリモートアップロードを使用します。チャンク分割は不要で、Frame.io がファイルを直接取得します。
+
+```python
+from frameio.files import FileCreateRemoteUploadParamsData
+
+response = client.files.create_remote_upload(
+    account_id="YOUR_ACCOUNT_ID",
+    folder_id="YOUR_FOLDER_ID",
+    data=FileCreateRemoteUploadParamsData(
+        name="video.mp4",
+        source_url="https://example.com/video.mp4",
+    ),
+)
+print(f"File created: {response.data.id}")
+```
+
+<Warning>
+
+リモートアップロードには現在 **50 GB のファイルサイズ制限**があります。50 GB を超えるファイルの場合は、代わりに[ローカルアップロード](#quick-start)を使用してください。
+
+</Warning>
+
+---
+
+## アップロードステータスの確認 {#checking-upload-status}
+
+アップロード後、ファイルが受信されたことを確認できます。
+
+```python
+status = client.files.show_file_upload_status(
+    account_id="YOUR_ACCOUNT_ID",
+    file_id=response.data.id,
+)
+print(f"Upload complete: {status.data.upload_complete}")
+```

@@ -1,0 +1,195 @@
+---
+title: "身份验证"
+---
+
+Frame.io V4 API 使用 [Adobe Identity Management Service (IMS)](https://developer.adobe.com/developer-console/docs/guides/authentication/)，即 Adobe 基于 OAuth 2.0 的身份平台。身份验证分为两类：
+
+<CardGroup cols={2}>
+
+<Card title="服务器到服务器身份验证" icon="server" iconType="solid">
+
+允许技术账户或服务账户用户在无需用户交互的情况下执行操作。仅适用于通过 [Adobe Admin Console](https://adminconsole.adobe.com) 管理的 Frame.io V4 账户。
+
+</Card>
+
+<Card title="用户身份验证" icon="user" iconType="solid">
+
+以令牌所属用户的身份执行操作。适用于所有通过 Adobe Admin Console 管理的 Frame.io V4 账户，以及已[切换到 Adobe 身份验证](https://help.frame.io/en/articles/11758018-connecting-to-adobe-authentication)的 Frame 管理账户。
+
+</Card>
+
+</CardGroup>
+
+---
+
+## SDK 身份验证指南 {#sdk-authentication-guides}
+
+Frame.io SDK 会为您处理完整的 OAuth 生命周期——授权 URL、令牌交换、自动刷新和撤销。选择您的语言开始使用：
+
+<CardGroup cols={2}>
+
+<Card title="Python SDK" icon="python" iconType="brands" href="/cn/platform/docs/guides/authentication/python-sdk">
+
+`ServerToServerAuth`、`WebAppAuth` 和 `SPAAuth`，支持同步和异步。
+
+</Card>
+
+<Card title="TypeScript SDK" icon="js" iconType="brands" href="/cn/platform/docs/guides/authentication/typescript-sdk">
+
+适用于 Node.js 和浏览器环境的 `ServerToServerAuth`、`WebAppAuth`、`SPAAuth` 和 `NativeApp` 身份验证。
+
+</Card>
+
+</CardGroup>
+
+<Tip>
+
+如果您正在构建后端服务或自动化，请从**服务器到服务器**开始。如果您的应用有需要登录的用户，请选择 **Web App**（如果您可以存储 client secret）或 **SPA**（如果无法存储）。
+
+</Tip>
+
+---
+
+## 用户身份验证 {#user-authentication}
+
+用户身份验证凭据在 [Adobe Developer Console](https://developer.adobe.com/console) 中创建。Adobe 支持三种凭据类型——请选择与您的应用架构相匹配的类型：
+
+<CardGroup cols={3}>
+
+<Card title="OAuth Web App" icon="globe" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-web-app-credential">
+
+适用于可以安全存储 client secret 的服务器端应用（Flask、Django、FastAPI、Express 等）。
+
+</Card>
+
+<Card title="OAuth Single Page App" icon="window" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-single-page-app-credential">
+
+适用于无法存储 client secret 的基于浏览器的应用、CLI 或桌面应用。使用 PKCE。
+
+</Card>
+
+<Card title="OAuth Native App" icon="mobile" iconType="solid" href="https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/implementation/#oauth-native-app-credential">
+
+适用于使用自定义 URI scheme 重定向的原生移动应用或桌面应用。
+
+</Card>
+
+</CardGroup>
+
+<Note>
+
+Frame.io Python SDK 不包含 Native App 凭据类，因为 Python 没有注册自定义 URI scheme 处理程序的标准方法。请改用 **Web App** 并搭配本地回调服务器。TypeScript SDK 支持全部三种凭据类型。
+
+</Note>
+
+---
+
+## 服务器到服务器身份验证 {#server-to-server-authentication}
+
+服务器到服务器身份验证允许您的应用以**服务账户用户**的身份执行操作——无需人工参与。您的应用使用客户端凭据进行身份验证，并直接获取访问令牌。服务账户执行的操作会以该服务账户的名称显示在 Frame.io 中。
+
+服务账户访问权限通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 和 [Developer Console](https://developer.adobe.com/console) 进行管理。服务账户名称目前无法调整。有关实现细节，请参阅上方各 SDK 的专属指南。
+
+<Info>
+
+有关服务账户设置的更多信息，请参阅[使用 Frame.io 服务器到服务器支持自动化您的设置](https://helpx.adobe.com/enterprise/using/automate-using-frame-io.html)。
+
+</Info>
+
+---
+
+## Adobe IMS 身份验证的工作原理 {#how-adobe-ims-authentication-works}
+
+Adobe Identity Management Service (IMS) 是 Adobe 基于 OAuth 2.0 的身份管理功能，支持身份验证。生成访问令牌需要两个步骤：
+
+<Steps>
+
+<Step title="用户授权">
+
+首先，在生成令牌之前，用户需要对应用进行授权。详细信息请参见[此处](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims/#authorize-request)。
+
+</Step>
+
+<Step title="令牌交换">
+
+接下来，获取访问令牌。上一步会在响应体中返回一个此步骤所需的代码。有关需要访问的确切端点以及要使用的参数，请参见[此处](https://developer.adobe.com/developer-console/docs/guides/authentication/UserAuthentication/ims/#fetching-access-tokens)。
+
+</Step>
+
+</Steps>
+
+<Note>
+
+上述步骤对全部三种应用凭据类型都是必需的。不同类型在访问 IMS 端点 `/authorize/v2` 和 `/token/v3` 以获取令牌的方式上有所不同。获得访问令牌后，您就可以使用它与 Frame.io V4 API 进行交互。
+
+</Note>
+
+对于**服务器到服务器**身份验证，不存在用户授权步骤——应用直接使用客户端凭据，通过 `client_credentials` 授权类型获取访问令牌。
+
+### 使用访问令牌 {#using-the-access-token}
+
+获得访问令牌后，请在每个 API 请求的 `Authorization` 标头中包含该令牌：
+
+```
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+Frame.io SDK 会为您处理这一点——只需在创建客户端时传入令牌（或提供令牌的可调用对象）即可。
+
+### 令牌 TTL {#token-ttl}
+
+访问令牌是**短期有效**的——通常在 1 小时后过期。对于用户身份验证流程（Web App、SPA、Native App），Adobe IMS 还会返回一个**刷新令牌**，可用于获取新的访问令牌，而无需用户重新登录。刷新令牌的有效期较长，但最终也会过期。
+
+对于服务器到服务器身份验证，没有刷新令牌。客户端凭据本身永不过期（除非手动轮换），因此应用始终可以请求新的访问令牌。
+
+Frame.io SDK 会自动处理令牌刷新——有关详细信息，请参阅 [SDK 专属指南](#sdk-authentication-guides)。
+
+### Scope {#scopes}
+
+在 [Adobe Developer Console](https://developer.adobe.com/console) 中创建凭据时，您需要配置 OAuth scope，以决定您的应用可以访问哪些内容。Frame.io SDK 使用以下默认 scope：
+
+| 流程 | 默认 scope |
+| --- | --- |
+| **服务器到服务器** | `openid AdobeID frame.s2s.all` |
+| **用户身份验证**（Web App、SPA、Native App） | `openid email profile offline_access additional_info.roles` |
+
+<Note>
+
+用户身份验证流程需要 `offline_access` scope 才能获得刷新令牌。如果没有该 scope，您将只能获得访问令牌，并且在其过期时用户需要重新进行身份验证。
+
+</Note>
+
+---
+
+## 旧版开发者令牌 {#legacy-developer-tokens}
+
+对于已迁移到 V4 但**尚未通过 [Adobe Admin Console](https://adminconsole.adobe.com/) 管理**的账户，您可以继续使用在 [Frame.io 开发者网站](https://developer.frame.io/app/tokens)中管理的旧版开发者令牌（Legacy Developer Token）。将令牌直接传递给 SDK：
+
+```python
+from frameio import Frameio
+
+client = Frameio(
+    token="YOUR_LEGACY_DEVELOPER_TOKEN",
+    headers={"x-frameio-legacy-token-auth": "true"},
+)
+```
+
+<Warning>
+
+在 V4 API 中使用旧版开发者令牌时，必须在所有 API 请求中添加值为 `true` 的 `x-frameio-legacy-token-auth` 标头。如果您使用的是 SDK，请通过客户端的请求选项进行设置。
+
+</Warning>
+
+旧版开发者令牌不会过期，但它们只是一种过渡机制。对于新的集成和生产工作负载，我们建议使用下方介绍的某种 OAuth 2.0 流程。有关详细信息，请参阅[迁移指南](/cn/platform/docs/resources/migration#authentication)。
+
+<Note>
+
+如果您是正在从 Frame.io Legacy 迁移到 V4 的企业客户，请联系您的客户成功经理（CSM），获取设置旧版开发者令牌和 V4 方面的帮助。
+
+</Note>
+
+<Tip>
+
+有关从旧版令牌过渡到 Adobe IMS 身份验证的详细信息，请参阅[迁移指南](/cn/platform/docs/resources/migration#authentication)。
+
+</Tip>
